@@ -496,9 +496,7 @@ main := fn(): uint {
     arr := uint.[1, 2, 3, 4]
     i := 0
     sum := 0
-    $loop $if i == arr.len {
-        break
-    } else {
+    $loop $if i == arr.len break else {
         sum += arr[i]
         i += 1
     }
@@ -773,7 +771,7 @@ main := fn(): uint {
 ```hb
 main := fn(): uint {
     val := uint.[1, 0]
-    return (val.ptr + 1).*
+    return (val.ptr + 1 + (val.ptr - val.ptr)).*
 }
 ```
 
@@ -1437,7 +1435,7 @@ main := fn(): uint {
         defer str.* += 1
     }
 
-    v := 0
+    v := #0
     ret_defer(&v)
     if v != 1 return 4
 

@@ -8,6 +8,7 @@ entries: std.MultiArrayList(Entry),
 sub_scopes: std.MultiArrayList(Child),
 imports: std.MultiArrayList(Import),
 fields: std.MultiArrayList(Field),
+start: u32,
 end: u32,
 
 const DeclIndex = @This();
@@ -194,7 +195,7 @@ pub const Loader = struct {
 
 pub fn build(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) !DeclIndex {
     var bl = Builder{ .lexer = .init(source, 0), .loader = loader };
-    const res = try buildLow(&bl, scratch);
+    const res = try buildLow(&bl, 0, scratch);
     std.debug.assert(bl.depth == 0);
     return res;
 }
@@ -205,6 +206,7 @@ pub fn build(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) !Decl
 // struct align(enum{}) {}) which is just prohibited for simplicity reasons
 pub fn buildLow(
     bl: *Builder,
+    start: u32,
     scratch: *utils.Arena,
 ) error{StupidNesting}!DeclIndex {
     var tmp = utils.Arena.scrath(scratch);
@@ -249,7 +251,7 @@ pub fn buildLow(
                 // parentheses
                 if (subscope.depth == bl.depth - 1) {
                     const prev_depth = bl.depth;
-                    const sub = try buildLow(bl, scratch);
+                    const sub = try buildLow(bl, subscope.start, scratch);
                     sub_scopes.append(
                         tmp.arena.allocator(),
                         .{ .index = sub, .offset = subscope.start },
@@ -431,6 +433,7 @@ pub fn buildLow(
         .sub_scopes = sub_scopes_arr,
         .imports = import_arr,
         .fields = field_arr,
+        .start = start,
         .end = bl.lexer.cursor,
     };
 }

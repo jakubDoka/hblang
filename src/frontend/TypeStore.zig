@@ -15,33 +15,35 @@ const isa = hb.hbvm.isa;
 arena: utils.Arena,
 tmp: utils.Arena,
 tmp_depth: usize = 0,
-structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .{},
-struct_index: Interner(StructId) = .{},
-funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .{},
-func_index: Interner(FuncId) = .{},
-globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .{},
-global_index: Interner(GlobalId) = .{},
-func_tys: utils.SegmentedList(FuncTy, FuncTyId, 1024, 1024 * 1024) = .{},
-func_ty_index: Interner(FuncTyId) = .{},
-templates: utils.SegmentedList(Template, TemplateId, 1024, 1024 * 1024) = .{},
-template_index: Interner(TemplateId) = .{},
-pointers: utils.SegmentedList(Pointer, PointerId, 1024, 1024 * 1024) = .{},
-pointer_index: Interner(PointerId) = .{},
-arrays: utils.SegmentedList(Array, ArrayId, 1024, 1024 * 1024) = .{},
-array_index: Interner(ArrayId) = .{},
-slices: utils.SegmentedList(Slice, SliceId, 1024, 1024 * 1024) = .{},
-slice_index: Interner(SliceId) = .{},
+
+structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .empty,
+struct_index: Interner(StructId) = .empty,
+funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .empty,
+func_index: Interner(FuncId) = .empty,
+globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .empty,
+global_index: Interner(GlobalId) = .empty,
+func_tys: utils.SegmentedList(FuncTy, FuncTyId, 1024, 1024 * 1024) = .empty,
+func_ty_index: Interner(FuncTyId) = .empty,
+templates: utils.SegmentedList(Template, TemplateId, 1024, 1024 * 1024) = .empty,
+template_index: Interner(TemplateId) = .empty,
+pointers: utils.SegmentedList(Pointer, PointerId, 1024, 1024 * 1024) = .empty,
+pointer_index: Interner(PointerId) = .empty,
+arrays: utils.SegmentedList(Array, ArrayId, 1024, 1024 * 1024) = .empty,
+array_index: Interner(ArrayId) = .empty,
+slices: utils.SegmentedList(Slice, SliceId, 1024, 1024 * 1024) = .empty,
+slice_index: Interner(SliceId) = .empty,
 
 files: []File,
 line_indexes: []const hb.LineIndex,
 loader: *Loader,
 backend: *Machine,
-ct_backend: HbvmGen,
 vm: hb.hbvm.Vm = .{},
 abi: Abi = .systemv,
 func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
     .initFill(.empty),
 errored: usize = 0,
+
+ct_backend: HbvmGen,
 
 pub const TmpCheckpoint = struct {
     types: *Types,
@@ -79,8 +81,9 @@ pub fn EntId(comptime T: type, comptime field: []const u8) type {
 
 pub fn Interner(comptime I: type) type {
     return struct {
-        map: Map = .empty,
+        map: Map,
 
+        pub const empty = @This(){ .map = .empty };
         pub const interner = {};
 
         pub const Map = std.HashMapUnmanaged(I, void, Ctx, std.hash_map.default_max_load_percentage);
@@ -336,7 +339,8 @@ pub const Data = union(enum(u8)) {
     FuncTy: FuncTyId,
     Struct: StructId,
 
-    const scope_start = 5;
+    pub const scope_start = 5;
+    pub const index_start = 1;
 
     pub const pack = Id.Conv.pack;
     pub const downcast = generic.downcast;
@@ -489,7 +493,7 @@ pub const Id = enum(u32) {
             },
             .Array => |a| {
                 try writer.writeByte('[');
-                try writer.print("{}", .{a.get(types).len});
+                try writer.print("{}", .{a.get(types).len.s});
                 try writer.writeByte(']');
                 try a.get(types).elem.format_(types, writer);
             },
@@ -709,6 +713,14 @@ pub const Scope = extern struct {
         empty,
         _,
 
+        pub fn sourcePos(self: NamePos) u32 {
+            return switch (self) {
+                .file => 0,
+                .empty => 0,
+                _ => |v| @intFromEnum(v),
+            };
+        }
+
         pub fn get(self: NamePos, file: File.Id, types: *Types) []const u8 {
             return switch (self) {
                 .file => file.get(types).path,
@@ -841,6 +853,22 @@ pub const Struct = struct {
 
         _ = gen.bl.begin(.systemv, &.{}, &.{});
 
+        var hard_align: ?Size = null;
+        haling: {
+            if (self.decls.start == 0) break :haling;
+
+            var lex = Lexer.init(file.source, self.decls.start);
+            _ = lex.slit(.@"struct"); // maybe shift this after the keyword?
+
+            if (lex.eatMatch(.@"align")) {
+                _ = gen.expect(&lex, .@"(", "to open align definition") catch break :haling;
+                const alignv = gen.typedExpr(.uint, .{}, &lex) catch break :haling;
+                const alignc = gen.peval(lex.cursor, alignv, Size) catch break :haling;
+                _ = gen.expect(&lex, .@")", "to close align definition") catch break :haling;
+                hard_align = alignc;
+            }
+        }
+
         for (@as([]u32, self.decls.fields.items(.offset)), 0..) |o, i| {
             const slot = &layout.fields[i];
             var lex = Lexer.init(file.source, o);
@@ -850,7 +878,6 @@ pub const Struct = struct {
 
             slot.ty = gen.typ(&lex) catch .never;
             slot.default = .invalid;
-            slot.offset = layout.spec.size;
 
             if (lex.eatMatch(.@"=")) {
                 slot.default = types.globals.push(&types.arena, .{
@@ -876,13 +903,29 @@ pub const Struct = struct {
                 layout.spec.alignment,
                 slot.ty.alignmentPow(types),
             );
-            layout.spec.size += slot.ty.size(types);
             layout.spec.size = std.mem.alignForward(
                 u58,
                 layout.spec.size,
-                slot.ty.alignment(types),
+                @min(
+                    slot.ty.alignment(types),
+                    hard_align orelse layout.spec.alignmentBytes(),
+                ),
             );
+
+            slot.offset = layout.spec.size;
+
+            layout.spec.size += slot.ty.size(types);
         }
+
+        if (hard_align) |alignm| {
+            layout.spec.alignment = std.math.log2_int(u64, alignm);
+        }
+
+        layout.spec.size = std.mem.alignForward(
+            u58,
+            layout.spec.size,
+            layout.spec.alignmentBytes(),
+        );
 
         return layout;
     }
@@ -1129,8 +1172,14 @@ pub fn deinit(self: *Types) void {
             else
                 f.type;
 
-            if (@typeInfo(@TypeOf(base.deinit)).@"fn".params.len == 2) {
-                @field(self, f.name).deinit(self);
+            const args = @typeInfo(@TypeOf(base.deinit)).@"fn".params;
+
+            if (args.len == 2) {
+                if (args[1].type == *Types) {
+                    @field(self, f.name).deinit(self);
+                } else if (args[1].type == std.mem.Allocator) {
+                    @field(self, f.name).deinit(self.allocator());
+                }
             } else {
                 @field(self, f.name).deinit();
             }
@@ -1147,7 +1196,7 @@ pub fn reportSloc(self: *Types, slc: graph.Sloc, fmt: []const u8, args: anytype)
 pub fn report(
     self: *Types,
     file: File.Id,
-    pos: anytype,
+    pos: u32,
     fmt: []const u8,
     args: anytype,
 ) void {
@@ -1234,4 +1283,130 @@ pub fn collectAnalError(types: *anyopaque, err: hb.backend.static_anal.Error) vo
             self.reportSloc(loc.loc, "reading from an uninitialized memory location", .{});
         },
     }
+}
+
+pub fn collectGlobalRelocs(self: *Types, id: GlobalId, relocs: *std.ArrayList(Machine.DataOptions.Reloc), scratch: *utils.Arena) void {
+    const bytes = id.get(self).data.get(self);
+
+    self.collectGlobalRelocsRecur(id.get(self), id.get(self).ty, 0, bytes, relocs, scratch);
+}
+
+pub fn collectGlobalRelocsRecur(
+    self: *Types,
+    global: *Global,
+    ty: Id,
+    offset: u32,
+    bytes: []const u8,
+    relocs: *std.ArrayList(Machine.DataOptions.Reloc),
+    scratch: *utils.Arena,
+) void {
+    switch (ty.data()) {
+        .Builtin => {},
+        .FuncTy => {},
+        .Pointer => |p| {
+            if (self.collectPointer(
+                global,
+                p.get(self).ty,
+                offset,
+                p.get(self).ty.size(self),
+                bytes,
+            )) |reloc| {
+                relocs.append(scratch.allocator(), reloc) catch unreachable;
+            } else |_| {}
+        },
+        .Slice => |s| {
+            const len: u64 = @bitCast(bytes[offset + Slice.len_offset ..][0..8].*);
+            if (self.collectPointer(
+                global,
+                s.get(self).elem,
+                offset,
+                len * s.get(self).elem.size(self),
+                bytes,
+            )) |reloc| {
+                relocs.append(scratch.allocator(), reloc) catch unreachable;
+            } else |_| {}
+        },
+        .Array => |a| {
+            const elem_size = a.get(self).elem.size(self);
+            for (0..a.get(self).len.s) |i| {
+                const elem_offset = offset + elem_size * i;
+                self.collectGlobalRelocsRecur(
+                    global,
+                    a.get(self).elem,
+                    @intCast(elem_offset),
+                    bytes,
+                    relocs,
+                    scratch,
+                );
+            }
+        },
+        .Struct => |s| {
+            for (s.get(self).getLayout(self).fields) |f| {
+                self.collectGlobalRelocsRecur(
+                    global,
+                    f.ty,
+                    @intCast(offset + f.offset),
+                    bytes,
+                    relocs,
+                    scratch,
+                );
+            }
+        },
+    }
+}
+
+pub fn collectPointer(self: *Types, global: *Global, ty: Id, offset: u64, size: u64, bytes: []const u8) !Machine.DataOptions.Reloc {
+    // TODO: if this becomes a bottleneck, optimize it
+    const value: u64 = @bitCast(bytes[offset..][0..8].*);
+    if (ty.data() == .FuncTy) {
+        for (0..self.funcs.meta.len) |i| {
+            const sim = self.ct_backend.mach.out.getFuncSym(@intCast(i));
+            if (sim.offset == value) {
+                std.debug.assert(size == 0);
+                return .{
+                    .target = @intCast(i),
+                    .offset = @intCast(offset),
+                    .is_func = true,
+                };
+            }
+        } else {
+            self.report(
+                global.scope.file,
+                global.scope.name_pos.sourcePos(),
+                "global contains an invlaid function pointer",
+                .{},
+            );
+        }
+    } else {
+        for (0..self.globals.meta.len) |i| {
+            const sim = self.ct_backend.mach.out.getGlobalSym(@intCast(i));
+            if (sim.offset == value) {
+                if (size > sim.size) {
+                    self.report(
+                        global.scope.file,
+                        global.scope.name_pos.sourcePos(),
+                        "global contains an invlaid pointer (size overflow)",
+                        .{},
+                    );
+
+                    break;
+                }
+
+                return .{
+                    .target = @intCast(i),
+                    .offset = @intCast(offset),
+                    .is_func = false,
+                };
+            }
+        } else {
+            self.report(
+                global.scope.file,
+                global.scope.name_pos.sourcePos(),
+                "global contains an invlaid pointer",
+                .{},
+            );
+        }
+    }
+
+    return error.InvalidPointer;
 }

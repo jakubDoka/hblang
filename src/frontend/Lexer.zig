@@ -702,7 +702,7 @@ pub fn next(self: *Lexer) Token {
 
 pub fn expect(self: *Lexer, kind: Lexeme) !Token {
     const res = self.peekNext();
-    if (res.kind != kind) return error.UnexpectedToken;
+    if (res.kind != kind) return error.SyntaxError;
     self.cursor = res.end;
     return res;
 }
@@ -827,4 +827,130 @@ pub fn eatMatch(self: *Lexer, kind: Lexeme) bool {
         return false;
     }
     return true;
+}
+
+pub const SkipError = error{SyntaxError};
+
+pub fn skipExpr(lex: *Lexer) SkipError!void {
+    return lex.skipExprPrec(254);
+}
+
+pub fn skipLabel(lex: *Lexer) SkipError!void {
+    if (lex.eatMatch(.@":")) {
+        _ = try lex.expect(.Ident);
+    }
+}
+
+pub fn skipExprPrec(lex: *Lexer, prevPrec: u8) SkipError!void {
+    try lex.skipUnitExpr();
+
+    while (true) {
+        const top = lex.peekNext();
+
+        const prec = top.kind.precedence(false);
+        if (prec >= prevPrec) break;
+
+        lex.cursor = top.end;
+
+        try lex.skipSuffix(top, prec);
+    }
+}
+
+pub fn skipSuffix(lex: *Lexer, top: Lexer.Token, prevPrec: u8) SkipError!void {
+    switch (top.kind) {
+        .@"." => {
+            _ = try lex.expect(.Ident);
+
+            if (lex.eatMatch(.@"(")) {
+                lex.eatUntilClosingDelimeter();
+            }
+        },
+        .@".*" => {},
+        .@".{", .@".[", .@"[", .@".(", .@"(" => {
+            lex.eatUntilClosingDelimeter();
+        },
+        else => {
+            try lex.skipExprPrec(prevPrec);
+        },
+    }
+}
+
+pub fn skipUnitExpr(lex: *Lexer) SkipError!void {
+    const tok = lex.next();
+    return switch (tok.kind.expand()) {
+        .true,
+        .false,
+        .DecInteger,
+        .BinInteger,
+        .OctInteger,
+        .HexInteger,
+        .Float,
+        .Comment,
+        .@"\"",
+        .@"'",
+        .Type,
+        .Ident,
+        .@"$",
+        ._,
+        => {},
+
+        .@"(", .@"{" => {
+            lex.eatUntilClosingDelimeter();
+        },
+        .@"[" => {
+            lex.eatUntilClosingDelimeter();
+            try lex.skipExprPrec(1);
+        },
+        .@"~", .@"-", .@"!", .@"&", .@"#", .@"^" => lex.skipExprPrec(1),
+        .@"struct" => {
+            if (lex.eatMatch(.@"align")) {
+                _ = try lex.expect(.@"(");
+                lex.eatUntilClosingDelimeter();
+            }
+
+            _ = try lex.expect(.@"{");
+            lex.eatUntilClosingDelimeter();
+        },
+        .@"fn" => {
+            _ = try lex.expect(.@"(");
+            lex.eatUntilClosingDelimeter();
+
+            _ = try lex.expect(.@":");
+            try lex.skipExpr();
+            try lex.skipExpr();
+        },
+        .@"if", .@"$if" => {
+            try lex.skipExpr();
+            try lex.skipExpr();
+
+            if (lex.eatMatch(.@"else")) {
+                try lex.skipExpr();
+            }
+        },
+        .@"while", .@"$while" => {
+            _ = try lex.skipLabel();
+            try lex.skipExpr();
+            try lex.skipExpr();
+        },
+        .loop, .@"$loop" => {
+            _ = try lex.skipLabel();
+            try lex.skipExpr();
+        },
+        .@"break", .@"continue" => _ = try lex.skipLabel(),
+        .@"return" => {
+            try lex.skipExpr();
+        },
+        .Directive => {
+            _ = try lex.expect(.@"(");
+            lex.eatUntilClosingDelimeter();
+        },
+        .@"." => {
+            _ = try lex.expect(.Ident);
+
+            if (lex.eatMatch(.@"(")) {
+                lex.eatUntilClosingDelimeter();
+            }
+        },
+        else => return error.SyntaxError,
+    };
 }

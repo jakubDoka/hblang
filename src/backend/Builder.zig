@@ -507,7 +507,7 @@ pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If 
 
 pub const Loop = struct {
     scope: BuildNode.Lock,
-    control: std.EnumArray(Control, ?SpecificNode(.Scope)) = .{ .values = .{ null, null } },
+    control: std.EnumArray(Control, ?SpecificNode(.Scope)) = .initFill(null),
 
     pub const Control = enum { @"break", @"continue" };
 

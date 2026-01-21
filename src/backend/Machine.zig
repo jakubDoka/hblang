@@ -373,10 +373,6 @@ pub const Data = struct {
         func_addend: u32,
         opts: DataOptions,
     ) !void {
-        // this is there to support N(1) reverse lookup form a memory offset
-        // to global id
-        try self.code.appendSlice(gpa, std.mem.asBytes(&opts.id));
-
         _ = try self.startDefineSym(
             gpa,
             try ensureSlot(&self.globals, gpa, opts.id),
@@ -390,20 +386,7 @@ pub const Data = struct {
 
         if (opts.value == .init) {
             try self.code.appendSlice(gpa, opts.value.init);
-            for (opts.relocs) |rel| {
-                if (rel.is_func) {
-                    try self.addFuncReloc(
-                        gpa,
-                        rel.target,
-                        .@"8",
-                        @intCast(func_addend),
-                        @intCast(opts.value.init.len - rel.offset),
-                    );
-                } else {
-                    try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(opts.value.init.len - rel.offset));
-                }
-                std.debug.assert(rel.target != opts.id);
-            }
+            try self.initGlobalRelocs(gpa, opts.relocs, opts.value.init.len, opts.id, func_addend);
         } else {
             if (push_uninit) {
                 try self.code.appendNTimes(gpa, 0, opts.value.uninit);
@@ -413,6 +396,48 @@ pub const Data = struct {
         self.endDefineSym(self.globals.items[opts.id]);
         self.syms.items[@intFromEnum(self.globals.items[opts.id])].size =
             if (opts.value == .init) @intCast(opts.value.init.len) else @intCast(opts.value.uninit);
+    }
+
+    pub fn lateInitGlobalRelocs(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        relocs: []const DataOptions.Reloc,
+        id: u32,
+        func_addend: u32,
+        make_global: bool,
+    ) !void {
+        const sym = self.getGlobalSym(id);
+        sym.offset = @intCast(self.code.items.len);
+        sym.reloc_count = @intCast(relocs.len);
+        try self.initGlobalRelocs(gpa, relocs, sym.size, id, func_addend);
+
+        if (make_global) {
+            self.makeRelocOffsetsGlobal(self.globals.items[id]);
+        }
+    }
+
+    pub fn initGlobalRelocs(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        relocs: []const DataOptions.Reloc,
+        size: usize,
+        id: u32,
+        func_addend: u32,
+    ) !void {
+        for (relocs) |rel| {
+            if (rel.is_func) {
+                try self.addFuncReloc(
+                    gpa,
+                    rel.target,
+                    .@"8",
+                    @intCast(func_addend),
+                    @intCast(size - rel.offset),
+                );
+            } else {
+                try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(size - rel.offset));
+            }
+            std.debug.assert(rel.target != id);
+        }
     }
 
     pub fn getFuncSym(self: *Data, id: u32) *Sym {

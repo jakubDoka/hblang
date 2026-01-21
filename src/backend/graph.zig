@@ -1705,6 +1705,7 @@ pub fn Func(comptime Backend: type) type {
                 };
 
                 pub fn unlock(slf: @This()) void {
+                    std.debug.assert(slf.node.id == Node.lock_id);
                     slf.node.id = slf.prev_id;
                 }
             };
@@ -2661,6 +2662,12 @@ pub fn Func(comptime Backend: type) type {
             const lock = this.lock();
             defer lock.unlock();
 
+            const tlock = target.lock();
+            defer {
+                tlock.unlock();
+                if (target.outputs().len == 0) self.kill(target);
+            }
+
             self.ensureOutputCapacity(this, target.outputs().len);
 
             var tmp = utils.Arena.scrath(null);
@@ -2701,7 +2708,7 @@ pub fn Func(comptime Backend: type) type {
             ) orelse {
                 utils.panic(
                     "removeUse: not found {f} {any} {f}",
-                    .{ use, def.outputs(), def },
+                    .{ use, outs, def },
                 );
             };
 
