@@ -151,7 +151,7 @@ expectations := .{
 opaque := false
 
 main := fn(): uint {
-    vl := 0
+    vl := #0
 
     if opaque {
         vl = 1
@@ -170,8 +170,8 @@ expectations := .{
 opaque := false
 
 main := fn(): uint {
-    vl := 0
-    ovl := 0
+    vl := #0
+    ovl := #0
 
     if opaque {
         vl = 1
@@ -189,7 +189,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    vl := 0
+    vl := #0
 
     while vl < 1 while vl < 1 vl += 1
 
@@ -200,8 +200,8 @@ main := fn(): uint {
 #### comptime edge cases 4
 ```hb
 main := fn(): uint {
-    vl := 1
-    ovl := 0
+    vl := #1
+    ovl := #0
 
     while ovl < 1 while ovl < 1 ovl += vl
 
@@ -258,13 +258,9 @@ fun := fn(): void {}
 
 #### comptime edge cases 7
 ```hb
-expectations := .{
-    should_error: true,
-}
-
 main := fn(): uint {
-    vl := 0
-    v := 0
+    vl := #0
+    v := #0
 
     while v < 1 while v < 1 v += 1
 
@@ -277,7 +273,7 @@ main := fn(): uint {
 #### comptime edge cases 8
 ```hb
 main := fn(): uint {
-    $var := 0
+    var := #0
 
     modify := fn(vl: ^uint): void vl.* += 1
 
@@ -303,13 +299,36 @@ main := fn(): uint {
 
     _ = fun(vl)
 
-    _ = fun(&vl)
+    _ = fun_ref(&vl)
 
     return @eval(vl[0] - 1)
 }
 
+fun_ref := fn(vl: @Any()): uint {
+    return vl.*[0] - 1
+}
+
 fun := fn(vl: @Any()): uint {
     return vl[0] - 1
+}
+```
+
+#### comptime edge cases 9
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    vl := #0
+
+    while vl < 1 {
+        while vl < 1 if vl < 2 {
+            while vl < 1 vl += 1
+        }
+    }
+
+    return @eval(vl)
 }
 ```
 

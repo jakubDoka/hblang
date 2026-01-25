@@ -322,10 +322,11 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     const allocs = opts.optimizations.apply(HbvmGen, func, self, opts.id) orelse {
-        //func.fmtScheduledLog();
         //func.fmtUnscheduledLog();
         return;
     };
+
+    //func.fmtScheduledLog();
 
     const sym = self.mach.out.getFuncSym(opts.id);
 

@@ -316,14 +316,14 @@ pub const DataType = enum(u16) {
 
     // TODO: derive this from DataType
     pub const Kind = enum(u3) {
-        top,
+        bot,
         i8,
         i16,
         i32,
         i64,
         f32,
         f64,
-        bot,
+        top,
 
         pub fn isFloat(self: Kind) bool {
             return switch (self) {
@@ -1694,9 +1694,16 @@ pub fn Func(comptime Backend: type) type {
                     (self.inputs()[2] == null or self.inputs()[1] == null);
             }
 
-            pub const lock_id = std.math.maxInt(u16) - 1;
+            pub fn isLocked(self: *Node) bool {
+                return self.id & 0x8000 != 0;
+            }
+
+            pub fn idWithoutLock(self: *Node) u16 {
+                return self.id & ~@as(u16, 0x8000);
+            }
 
             pub const Lock = struct {
+                // TODO: we can inline the tag in the pointer
                 node: *Node,
                 prev_id: u16,
 
@@ -1705,7 +1712,7 @@ pub fn Func(comptime Backend: type) type {
                 };
 
                 pub fn unlock(slf: @This()) void {
-                    std.debug.assert(slf.node.id == Node.lock_id);
+                    std.debug.assert(slf.node.isLocked());
                     slf.node.id = slf.prev_id;
                 }
             };
@@ -1725,7 +1732,7 @@ pub fn Func(comptime Backend: type) type {
                     std.debug.captureStackTrace(@returnAddress(), &self.lock_at.trace);
                 }
 
-                defer self.id = lock_id;
+                defer self.id |= 0x8000;
                 return .{ .prev_id = self.id, .node = self };
             }
 
@@ -2601,7 +2608,9 @@ pub fn Func(comptime Backend: type) type {
             self.assertAlive();
 
             if (self.kind == .Syms) return;
-            if (self.id == Node.lock_id) return;
+            if (self.isLocked()) return;
+
+            func.uninternNode(self);
 
             if (is_debug) {
                 var tmp = utils.Arena.scrath(null);
@@ -2649,6 +2658,9 @@ pub fn Func(comptime Backend: type) type {
             target: *Node,
             comptime mode: ModMode,
         ) void {
+            const lock = this.lock();
+            defer lock.unlock();
+
             if (target.outputs().len == 0) {
                 self.kill(target);
                 return;
@@ -2658,9 +2670,6 @@ pub fn Func(comptime Backend: type) type {
                 utils.panic("{f} {f}\n", .{ this, target });
             }
             errdefer unreachable;
-
-            const lock = this.lock();
-            defer lock.unlock();
 
             const tlock = target.lock();
             defer {

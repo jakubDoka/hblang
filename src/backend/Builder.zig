@@ -109,7 +109,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
             std.debug.assert(node.kind != .Scope);
             std.debug.assert(node.kind != .Pin);
             std.debug.assert(node.kind != .Stub);
-            if (node.id == BuildNode.lock_id) {
+            if (node.isLocked()) {
                 std.debug.dumpStackTrace(node.lock_at.trace);
                 utils.panic("{f}\n", .{node});
             }
@@ -187,6 +187,8 @@ pub fn addSpill(self: *Builder, sloc: graph.Sloc, value: *BuildNode, debug_ty: u
 }
 
 pub fn addFixedMemCpy(self: *Builder, sloc: graph.Sloc, dst: *BuildNode, src: *BuildNode, size: u64) void {
+    if (src == dst) return;
+
     const mem = self.memory();
     const ctrl = self.control();
     const siz = self.addIntImm(sloc, .i64, @bitCast(size));
@@ -557,8 +559,9 @@ pub const Loop = struct {
         if (builder.scope) |backedge| {
             const update_values = getScopeValues(backedge);
             for (init_values[start..], update_values[start..]) |ini, update| {
+                // NOTE: first value is the cfg
                 if (ini.isLazyPhi(init_values[0])) {
-                    if (update.kind == .Scope) {
+                    if (update.kind == .Scope or update == ini) {
                         builder.func.subsume(ini.inputs()[1].?, ini, .intern);
                     } else {
                         builder.func.setInputNoIntern(ini, 2, update);
@@ -624,7 +627,7 @@ pub const CallArgs = struct {
     hint: enum { @"construst this with Builder.allocCallArgs()" },
 };
 
-const arg_prefix_len: usize = 3;
+pub const arg_prefix_len: usize = 3;
 
 pub fn allocCallArgs(
     _: *Builder,

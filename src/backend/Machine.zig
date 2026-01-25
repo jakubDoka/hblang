@@ -467,7 +467,9 @@ pub const Data = struct {
         const slot = &self.syms.items[@intFromEnum(sym.*)];
 
         const needs_name = slot.kind == .invalid;
-        std.debug.assert(needs_name or slot.kind == kind);
+        if (!(needs_name or slot.kind == kind)) {
+            utils.panic("{} != {}", .{ slot.kind, kind });
+        }
 
         slot.* = .{
             .name = if (needs_name) @intCast(self.names.items.len) else @intCast(slot.name),

@@ -831,6 +831,10 @@ pub fn eatMatch(self: *Lexer, kind: Lexeme) bool {
 
 pub const SkipError = error{SyntaxError};
 
+pub fn skipExprDropErr(lex: *Lexer) void {
+    lex.skipExpr() catch {};
+}
+
 pub fn skipExpr(lex: *Lexer) SkipError!void {
     return lex.skipExprPrec(254);
 }

@@ -84,6 +84,7 @@ pub fn computeSignature(
 pub fn categorizeAssumeReg(self: Abi, ty: Id, types: *Types) graph.DataType {
     var buf = Buf{};
     const params = categorize(self, ty, types, &buf) orelse unreachable;
+    std.debug.assert(params.len == 1);
     return params[0].Reg;
 }
 
@@ -161,6 +162,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                 },
                 .FuncTy => .int,
                 .Pointer => .int,
+                .Enum => .int,
                 .Slice => {
                     try classify(.uint, ts, offset + 0, catas);
                     try classify(.uint, ts, offset + 8, catas);

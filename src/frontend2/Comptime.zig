@@ -1295,7 +1295,9 @@ pub fn jitExprLow(
     return .{ .{ .func = id }, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until: usize, root_abi: Types.Abi) !void {
+pub fn compileDependencies(self: *Codegen, pop_until: usize, root_abi: Types.Abi) !void {
+    const prev_reloc_count = self.types.ct.gen.mach.out.relocs.items.len;
+
     while (self.types.nextTask(self.target, pop_until)) |func| {
         if (!self.types.canPop(self.target, pop_until)) {
             self.abi = root_abi;
@@ -1325,7 +1327,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
         emit_func_met.end();
     }
 
-    root.hbvm.object.jitLink(self.types.ct.gen.mach.out, new_syms_pop_until);
+    root.hbvm.object.jitLink(self.types.ct.gen.mach.out, prev_reloc_count);
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {

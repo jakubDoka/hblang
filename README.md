@@ -909,7 +909,7 @@ nvec := fn($E: type, v: uint): Vec(E) {
     return .(v, v)
 }
 
-Vec := fn(E: type): type return struct {
+Vec := fn($E: type): type return struct {
     .x: E;
     .y: E
 
@@ -926,8 +926,8 @@ main := fn(): uint {
     return vl.sub()
 }
 
-Foo := fn(F: type): type return struct {
-    Bar := fn(B: type): type return struct {
+Foo := fn($F: type): type return struct {
+    Bar := fn($B: type): type return struct {
         .foo: F;
         .bar: B
 
@@ -951,7 +951,7 @@ main := fn(): uint {
     return vl.sub().sub()
 }
 
-Foo := fn(F: type): type return struct {
+Foo := fn($F: type): type return struct {
     .foo: F
 
     sub := fn(self: @CurrentScope()): F {
@@ -971,15 +971,14 @@ main := fn(): uint {
     return val.get(0) + val.get(1) + val.get(2)
 }
 
-Array := fn(E: type, len: uint): type if len == 0 {
+Array := fn($E: type, $len: u32): type if len == 0 {
     return struct {
         get := fn(self: @CurrentScope(), i: uint): E die
     }
 } else {
-    Next := Array(E, len - 1)
     return struct {
         .elem: E;
-        .next: Next
+        .next: Array(E, len - 1)
 
         get := fn(self: @CurrentScope(), i: uint): E {
             if i == 0 return self.elem
@@ -1007,7 +1006,7 @@ main := fn(): uint {
         }
     }
 
-    Chain := fn(A: type, B: type): type return struct {
+    Chain := fn($A: type, $B: type): type return struct {
         .state: enum{.a; .b; .done};
         .a: A;
         .b: B

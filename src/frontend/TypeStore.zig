@@ -18,6 +18,8 @@ tmp_depth: usize = 0,
 
 structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .empty,
 struct_index: Interner(StructId) = .empty,
+enums: utils.SegmentedList(Enum, EnumId, 1024, 1024 * 1024) = .empty,
+enum_index: Interner(EnumId) = .empty,
 funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .empty,
 func_index: Interner(FuncId) = .empty,
 globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .empty,
@@ -44,6 +46,11 @@ func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
 errored: usize = 0,
 
 ct_backend: HbvmGen,
+
+pub const ComptimeValue = extern union {
+    spilled: GlobalId,
+    @"inline": u32,
+};
 
 pub const TmpCheckpoint = struct {
     types: *Types,
@@ -138,6 +145,7 @@ pub const Target = enum {
 
 pub const UnorderedScope = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
+    Enum: EnumId,
 
     pub const upcast = generic.upcast;
     pub const downcast = generic.downcast;
@@ -160,6 +168,7 @@ pub const ParentRef = enum(u32) {
 
 pub const Parent = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
+    Enum: EnumId,
     Func: FuncId,
     Template: TemplateId,
     Tail: enum(u32) { end },
@@ -182,6 +191,7 @@ pub const AnyScopeRef = enum(u32) {
 
 pub const AnyScope = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
+    Enum: EnumId,
     Func: FuncId,
     Template: TemplateId,
 
@@ -224,6 +234,12 @@ pub const generic = struct {
         return switch (self.*) {
             inline else => |t| t.get(types).format_(types, writer),
         };
+    }
+
+    pub fn lookupField(self: anytype, types: *Types, name: []const u8) ?usize {
+        const field = self.decls
+            .lookupField(self.scope.file.get(types).source, name) orelse return null;
+        return utils.indexOfPtr(u32, self.decls.fields.items(.offset), field);
     }
 
     pub fn hashScope(self: anytype, _: *Types) u64 {
@@ -338,6 +354,7 @@ pub const Data = union(enum(u8)) {
     Array: ArrayId,
     FuncTy: FuncTyId,
     Struct: StructId,
+    Enum: EnumId,
 
     pub const scope_start = 5;
     pub const index_start = 1;
@@ -351,7 +368,9 @@ pub const Data = union(enum(u8)) {
             .FuncTy => 4,
             .Pointer => 8,
             .Slice => 16,
-            inline .Array, .Struct => |s| s.get(types).size(types),
+            .Enum => |e| e.get(types).getLayout(types).spec.size,
+            .Array => |a| a.get(types).elem.size(types) * a.get(types).len.s,
+            .Struct => |s| s.get(types).getLayout(types).spec.size,
         };
     }
 
@@ -361,7 +380,9 @@ pub const Data = union(enum(u8)) {
             .FuncTy => 4,
             .Pointer => 8,
             .Slice => 16,
-            inline .Array, .Struct => |s| s.get(types).alignment(types),
+            .Enum => |e| e.get(types).getLayout(types).spec.alignmentBytes(),
+            .Array => |a| a.get(types).elem.alignment(types),
+            .Struct => |s| s.get(types).getLayout(types).spec.alignmentBytes(),
         };
     }
 };
@@ -470,7 +491,7 @@ pub const Id = enum(u32) {
 
     pub fn isScalar(ty: Types.Id, types: *Types) bool {
         return switch (ty.data()) {
-            .Builtin, .Pointer, .FuncTy => true,
+            .Builtin, .Pointer, .FuncTy, .Enum => true,
             .Slice => false,
             .Array => |a| {
                 if (a.get(types).len.s != 1) return false;
@@ -510,7 +531,7 @@ pub const Id = enum(u32) {
                 try writer.writeAll("[]");
                 try s.get(types).elem.format_(types, writer);
             },
-            .Struct => |s| try s.get(types).format_(types, writer),
+            inline .Enum, .Struct => |s| try s.get(types).format_(types, writer),
         }
     }
 
@@ -634,7 +655,7 @@ pub const Captures = struct {
     variables: []const Variable,
     /// packed values for each comptime variable, index is comptuted when
     /// searching
-    values: []const i64,
+    values: []const ComptimeValue,
 
     pub const empty = Captures{
         .values = &.{},
@@ -667,7 +688,7 @@ pub const Captures = struct {
             };
         }
 
-        const values = scratch.alloc(i64, scope.cmptime_values.items.len);
+        const values = scratch.alloc(ComptimeValue, scope.cmptime_values.items.len);
         for (scope.cmptime_values.items, values) |v, *slot| slot.* = v;
 
         return .{
@@ -677,13 +698,13 @@ pub const Captures = struct {
         };
     }
 
-    pub fn lookup(self: Captures, source: [:0]const u8, name: []const u8) ?struct { Id, ?i64 } {
+    pub fn lookup(self: Captures, source: [:0]const u8, name: []const u8) ?struct { u32, Id, ?ComptimeValue } {
         // TODO: we can vectorize this
 
         var value_index: usize = 0;
         for (self.prefixes, self.variables) |prefix, variable| {
             if (prefix == name[0] and Lexer.compareIdent(source, variable.meta.offset, name)) {
-                return .{ variable.ty, if (variable.meta.is_cmptime)
+                return .{ variable.meta.offset, variable.ty, if (variable.meta.is_cmptime)
                     self.values[value_index]
                 else
                     null };
@@ -709,6 +730,7 @@ pub const Scope = extern struct {
     }
 
     pub const NamePos = enum(u32) {
+        tuple = std.math.maxInt(u32) - 2,
         file = std.math.maxInt(u32) - 1,
         empty,
         _,
@@ -717,6 +739,7 @@ pub const Scope = extern struct {
             return switch (self) {
                 .file => 0,
                 .empty => 0,
+                .tuple => 0,
                 _ => |v| @intFromEnum(v),
             };
         }
@@ -725,6 +748,7 @@ pub const Scope = extern struct {
             return switch (self) {
                 .file => file.get(types).path,
                 .empty => "",
+                .tuple => "tuple",
                 _ => |v| file.get(types).tokenStr(@intFromEnum(v)),
             };
         }
@@ -759,7 +783,7 @@ pub const Slice = extern struct {
     pub const ptr_offset = 0;
 
     pub fn hash(self: Slice, _: *Types) u64 {
-        return std.hash.Wyhash.hash(0, std.mem.asBytes(&self));
+        return std.hash.int(@intFromEnum(self.elem));
     }
 
     pub fn eql(self: *Slice, other: *Slice, _: *Types) bool {
@@ -784,13 +808,95 @@ pub const Array = extern struct {
         return std.meta.eql(self.elem, other.elem) and
             std.meta.eql(self.len, other.len);
     }
+};
 
-    pub fn size(self: Array, types: *Types) Size {
-        return self.len.s * self.elem.size(types);
+pub const EnumId = EntId(Enum, "enums");
+pub const Enum = struct {
+    scope: Scope,
+    captures: Captures,
+    decls: *DeclIndex,
+    layout: ?Layout = null,
+
+    pub const Layout = struct {
+        spec: graph.AbiParam.StackSpec,
+        fields: []Field,
+
+        pub const Field = struct {
+            value: i64,
+        };
+    };
+
+    pub fn format_(
+        self: *@This(),
+        types: *Types,
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
+        try self.scope.format_(types.enums.ptrToIndex(self), types, writer);
     }
 
-    pub fn alignment(self: Array, types: *Types) Size {
-        return self.elem.alignment(types);
+    pub const lookupField = generic.lookupField;
+
+    pub fn getLayout(self: *Enum, types: *Types) *Layout {
+        if (self.layout) |*l| return l;
+
+        const file = self.scope.file.get(types);
+
+        self.layout = Layout{
+            .spec = .{ .size = 0, .alignment = 1 },
+            .fields = types.arena.alloc(Layout.Field, self.decls.fields.len),
+        };
+        const layout = &self.layout.?;
+
+        var lex = Lexer.init(file.source, self.decls.start);
+        if (lex.eatMatch(.@"(")) tag: {
+            var gen: Codegen = undefined;
+            gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, types.tmp.allocator());
+
+            const vl = gen.typ(&lex) catch break :tag;
+            layout.spec = vl.stackSpec(types);
+        }
+
+        var tmp = types.tmpCheckpoint();
+        defer tmp.deinit();
+
+        var max_value: i64 = 0;
+        var value: i64 = 0;
+        for (self.decls.fields.items(.offset), layout.fields) |f, *slt| {
+            var flex = Lexer.init(file.source, f);
+
+            if (flex.eatMatch(.@":=")) vl: {
+                var gen: Codegen = undefined;
+                gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, tmp.allocator());
+
+                const vl = gen.typedExpr(.i64, .{}, &flex) catch break :vl;
+                value = gen.peval(flex.cursor, vl, i64) catch break :vl;
+            }
+
+            if (layout.spec.size != 0) {
+                if ((@as(u64, 1) <<| layout.spec.size * 8) < value) {
+                    types.report(
+                        self.scope.file,
+                        flex.cursor,
+                        "enum value too large, does not fit in {} bits",
+                        .{layout.spec.size * 8},
+                    );
+                }
+            }
+
+            slt.* = .{ .value = value };
+            max_value = @max(max_value, value);
+            value +%= 1;
+        }
+
+        if (layout.spec.size == 0) {
+            layout.spec.size = if (max_value == 0) 0 else (std.math.ceilPowerOfTwo(
+                Size,
+                64 - @clz(max_value),
+            ) catch unreachable) / 8;
+            layout.spec.alignment = std.math.log2_int(u64, @max(1, layout.spec.size));
+        }
+
+        return layout;
     }
 };
 
@@ -812,7 +918,19 @@ pub const Struct = struct {
         };
     };
 
-    pub fn format_(self: *Struct, types: *Types, writer: *std.Io.Writer) !void {
+    pub fn format_(self: *Struct, types: *Types, writer: *std.Io.Writer) error{WriteFailed}!void {
+        if (self.scope.name_pos == .tuple) {
+            try writer.writeAll(".(");
+
+            for (self.layout.?.fields, 0..) |f, i| {
+                if (i != 0) try writer.writeAll(", ");
+                try f.ty.format_(types, writer);
+            }
+            try writer.writeByte(')');
+
+            return;
+        }
+
         try self.scope.format_(types.structs.ptrToIndex(self), types, writer);
     }
 
@@ -823,11 +941,7 @@ pub const Struct = struct {
         );
     }
 
-    pub fn lookupField(self: *Struct, types: *Types, name: []const u8) ?usize {
-        const field = self.decls
-            .lookupField(self.scope.file.get(types).source, name) orelse return null;
-        return utils.indexOfPtr(u32, self.decls.fields.items(.offset), field);
-    }
+    pub const lookupField = generic.lookupField;
 
     pub fn getLayout(self: *Struct, types: *Types) *Layout {
         if (self.layout) |*l| return l;
@@ -883,7 +997,6 @@ pub const Struct = struct {
                 slot.default = types.globals.push(&types.arena, .{
                     .scope = gen.gatherScope(),
                     .ty = slot.ty,
-                    .data = .empty,
                     .readonly = true,
                 });
 
@@ -928,14 +1041,6 @@ pub const Struct = struct {
         );
 
         return layout;
-    }
-
-    pub fn size(self: *Struct, types: *Types) Size {
-        return self.getLayout(types).spec.size;
-    }
-
-    pub fn alignment(self: *Struct, types: *Types) Size {
-        return self.getLayout(types).spec.alignmentBytes();
     }
 };
 
@@ -993,13 +1098,7 @@ pub const Func = struct {
             _padd: u31 = 0,
         },
         ty: Id,
-        value: i64,
-
-        comptime {
-            if (!std.meta.hasUniqueRepresentation(Param)) {
-                @compileError("nah");
-            }
-        }
+        value: ComptimeValue,
     };
 
     pub fn sig(self: *Func) FuncTy {
@@ -1007,8 +1106,6 @@ pub const Func = struct {
     }
 
     pub fn queue(self: *Func, target: Target, types: *Types) void {
-        if (self.compiled.contains(target)) return;
-        self.compiled.insert(target);
         types.func_queue.getPtr(target).append(
             types.arena.allocator(),
             types.funcs.ptrToIndex(self),
@@ -1046,7 +1143,7 @@ pub const Func = struct {
                 if (p.ty != .type) {
                     try writer.print("{f}(TODO)", .{p.ty.fmt(types)});
                 } else {
-                    const ty: Id = @enumFromInt(p.value);
+                    const ty: Id = @enumFromInt(p.value.@"inline");
                     try ty.format_(types, writer);
                 }
             }
@@ -1076,15 +1173,16 @@ pub const Global = struct {
     ty: Id,
     // NOTE: points to the vm memory
     data: struct {
-        pos: u32,
-        len: u32,
-
-        pub const empty = @This(){ .pos = 0, .len = 0 };
-
-        pub fn get(self: @This(), types: *Types) []u8 {
-            return types.ct_backend.mach.out.code.items[self.pos..][0..self.len];
+        pub fn get(self: *@This(), types: *Types) []u8 {
+            const sm = self.sym(types);
+            return types.ct_backend.mach.out.code.items[sm.offset..][0..sm.size];
         }
-    },
+
+        pub fn sym(self: *@This(), types: *Types) *Machine.Data.Sym {
+            const parent: *Global = @alignCast(@fieldParentPtr("data", self));
+            return types.ct_backend.mach.out.getGlobalSym(@intFromEnum(types.globals.ptrToIndex(parent)));
+        }
+    } = .{},
     readonly: bool,
     runtime_emmited: bool = false,
     linkage: Machine.Data.Linkage = .local,
@@ -1190,6 +1288,7 @@ pub fn deinit(self: *Types) void {
 }
 
 pub fn reportSloc(self: *Types, slc: graph.Sloc, fmt: []const u8, args: anytype) void {
+    if (slc == graph.Sloc.none) return;
     self.report(@enumFromInt(slc.namespace), slc.index, fmt, args);
 }
 
@@ -1203,6 +1302,8 @@ pub fn report(
     const fl = file.get(self);
     Codegen.reportGeneric(fl.path, fl.source, self, pos, fmt, args);
     self.errored += 1;
+
+    //std.debug.dumpCurrentStackTrace(@returnAddress());
 }
 
 pub fn allocator(self: *Types) std.mem.Allocator {
@@ -1285,80 +1386,110 @@ pub fn collectAnalError(types: *anyopaque, err: hb.backend.static_anal.Error) vo
     }
 }
 
-pub fn collectGlobalRelocs(self: *Types, id: GlobalId, relocs: *std.ArrayList(Machine.DataOptions.Reloc), scratch: *utils.Arena) void {
-    const bytes = id.get(self).data.get(self);
-
-    self.collectGlobalRelocsRecur(id.get(self), id.get(self).ty, 0, bytes, relocs, scratch);
-}
-
-pub fn collectGlobalRelocsRecur(
-    self: *Types,
-    global: *Global,
-    ty: Id,
-    offset: u32,
+pub const CollectRelocCtx = struct {
+    sloc: graph.Sloc,
     bytes: []const u8,
     relocs: *std.ArrayList(Machine.DataOptions.Reloc),
     scratch: *utils.Arena,
+    allow_null: bool,
+};
+
+pub fn collectGlobalRelocs(
+    self: *Types,
+    id: GlobalId,
+    relocs: *std.ArrayList(Machine.DataOptions.Reloc),
+    scratch: *utils.Arena,
+    allow_null: bool,
+) void {
+    self.collectRelocsRecur(.{
+        .sloc = .{
+            .index = id.get(self).scope.name_pos.sourcePos(),
+            .namespace = id.get(self).scope.file.index(),
+        },
+        .bytes = id.get(self).data.get(self),
+        .relocs = relocs,
+        .scratch = scratch,
+        .allow_null = allow_null,
+    }, id.get(self).ty, 0);
+}
+
+pub fn collectRelocsRecur(
+    self: *Types,
+    ctx: CollectRelocCtx,
+    ty: Id,
+    offset: u32,
 ) void {
     switch (ty.data()) {
         .Builtin => {},
+        .Enum => {},
         .FuncTy => {},
         .Pointer => |p| {
             if (self.collectPointer(
-                global,
-                p.get(self).ty,
+                ctx.sloc,
+                p.get(self).ty.data() == .FuncTy,
                 offset,
                 p.get(self).ty.size(self),
-                bytes,
+                ctx.bytes,
+                ctx.allow_null,
             )) |reloc| {
-                relocs.append(scratch.allocator(), reloc) catch unreachable;
+                ctx.relocs.append(ctx.scratch.allocator(), reloc) catch unreachable;
             } else |_| {}
         },
         .Slice => |s| {
-            const len: u64 = @bitCast(bytes[offset + Slice.len_offset ..][0..8].*);
+            const len: u64 = @bitCast(ctx.bytes[offset + Slice.len_offset ..][0..8].*);
             if (self.collectPointer(
-                global,
-                s.get(self).elem,
+                ctx.sloc,
+                false,
                 offset,
                 len * s.get(self).elem.size(self),
-                bytes,
+                ctx.bytes,
+                ctx.allow_null,
             )) |reloc| {
-                relocs.append(scratch.allocator(), reloc) catch unreachable;
+                ctx.relocs.append(ctx.scratch.allocator(), reloc) catch unreachable;
             } else |_| {}
         },
         .Array => |a| {
             const elem_size = a.get(self).elem.size(self);
             for (0..a.get(self).len.s) |i| {
                 const elem_offset = offset + elem_size * i;
-                self.collectGlobalRelocsRecur(
-                    global,
+                self.collectRelocsRecur(
+                    ctx,
                     a.get(self).elem,
                     @intCast(elem_offset),
-                    bytes,
-                    relocs,
-                    scratch,
                 );
             }
         },
         .Struct => |s| {
             for (s.get(self).getLayout(self).fields) |f| {
-                self.collectGlobalRelocsRecur(
-                    global,
+                self.collectRelocsRecur(
+                    ctx,
                     f.ty,
                     @intCast(offset + f.offset),
-                    bytes,
-                    relocs,
-                    scratch,
                 );
             }
         },
     }
 }
 
-pub fn collectPointer(self: *Types, global: *Global, ty: Id, offset: u64, size: u64, bytes: []const u8) !Machine.DataOptions.Reloc {
+pub fn collectPointer(
+    self: *Types,
+    sloc: graph.Sloc,
+    is_func: bool,
+    offset: u64,
+    size: u64,
+    bytes: []const u8,
+    allow_null: bool,
+) !Machine.DataOptions.Reloc {
     // TODO: if this becomes a bottleneck, optimize it
     const value: u64 = @bitCast(bytes[offset..][0..8].*);
-    if (ty.data() == .FuncTy) {
+
+    if (allow_null and value == 0) return .{
+        .target = std.math.maxInt(u32),
+        .offset = @intCast(offset),
+        .is_func = is_func,
+    };
+
+    if (is_func) {
         for (0..self.funcs.meta.len) |i| {
             const sim = self.ct_backend.mach.out.getFuncSym(@intCast(i));
             if (sim.offset == value) {
@@ -1370,9 +1501,8 @@ pub fn collectPointer(self: *Types, global: *Global, ty: Id, offset: u64, size: 
                 };
             }
         } else {
-            self.report(
-                global.scope.file,
-                global.scope.name_pos.sourcePos(),
+            self.reportSloc(
+                sloc,
                 "global contains an invlaid function pointer",
                 .{},
             );
@@ -1382,9 +1512,8 @@ pub fn collectPointer(self: *Types, global: *Global, ty: Id, offset: u64, size: 
             const sim = self.ct_backend.mach.out.getGlobalSym(@intCast(i));
             if (sim.offset == value) {
                 if (size > sim.size) {
-                    self.report(
-                        global.scope.file,
-                        global.scope.name_pos.sourcePos(),
+                    self.reportSloc(
+                        sloc,
                         "global contains an invlaid pointer (size overflow)",
                         .{},
                     );
@@ -1399,9 +1528,8 @@ pub fn collectPointer(self: *Types, global: *Global, ty: Id, offset: u64, size: 
                 };
             }
         } else {
-            self.report(
-                global.scope.file,
-                global.scope.name_pos.sourcePos(),
+            self.reportSloc(
+                sloc,
                 "global contains an invlaid pointer",
                 .{},
             );
@@ -1409,4 +1537,17 @@ pub fn collectPointer(self: *Types, global: *Global, ty: Id, offset: u64, size: 
     }
 
     return error.InvalidPointer;
+}
+
+pub fn nextFunc(self: *Types, target: Target, pop_until: usize) ?FuncId {
+    const queue = self.func_queue.getPtr(target);
+    while (queue.items.len > pop_until) {
+        const func = queue.pop().?;
+        if (!func.get(self).compiled.contains(target)) {
+            func.get(self).compiled.insert(target);
+            return func;
+        }
+    }
+
+    return null;
 }

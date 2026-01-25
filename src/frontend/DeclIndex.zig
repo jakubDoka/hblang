@@ -239,7 +239,13 @@ pub fn buildLow(
             .@"." => {
                 if (bl.depth != init_depth) continue;
                 const ident = bl.lexer.next();
-                if (ident.kind == .Ident and bl.lexer.eatMatch(.@":")) {
+                const peek = bl.lexer.peekNext();
+                if (ident.kind == .Ident and
+                    (peek.kind == .@"}" or
+                        peek.kind == .@";" or
+                        peek.kind == .@":=" or
+                        peek.kind == .@":"))
+                {
                     fields.append(tmp.arena.allocator(), ident.pos) catch unreachable;
                 }
             },
