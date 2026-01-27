@@ -618,6 +618,31 @@ pub fn addLoopAndBeginBody(self: *Builder, sloc: graph.Sloc) Loop {
     return .{ .scope = pscope.lock() };
 }
 
+pub const Block = struct {
+    prev_scope: ?BuildNode.Lock = null,
+
+    pub fn addBreak(self: *Block, bl: *Builder) void {
+        if (self.prev_scope) |ps| {
+            ps.unlock();
+            self.prev_scope = mergeScopes(&bl.func, bl.scope.?, ps.node).lock();
+        } else {
+            self.prev_scope = if (bl.scope) |s| s.lock() else null;
+        }
+        bl.scope = null;
+    }
+
+    pub fn end(self: *Block, bl: *Builder) void {
+        if (self.prev_scope) |s| {
+            s.unlock();
+            bl.scope = s.node;
+        }
+    }
+};
+
+pub fn addBlock(_: *Builder) Block {
+    return .{};
+}
+
 pub const CallArgs = struct {
     params: []const graph.AbiParam,
     arg_slots: []*BuildNode,

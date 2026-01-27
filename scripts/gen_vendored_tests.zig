@@ -27,7 +27,7 @@ pub fn main() !void {
     var vendored = try std.fs.cwd().openDir(vendored_tests, .{ .iterate = true });
     var walker = vendored.iterate();
     while (try walker.next()) |node| {
-        if (node.kind != .directory) std.debug.panic("vendored dir can only contain directories {s}", .{node.name});
+        if (node.kind != .directory) (std.debug).panic("vendored dir can only contain directories {s}", .{node.name});
 
         var test_args = std.ArrayList(u8).empty;
         const pwriter = test_args.writer(arena);

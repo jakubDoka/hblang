@@ -111,6 +111,24 @@ pub fn categorize(self: Abi, ty: Id, types: *Types, buf: *Buf) ?[]graph.AbiParam
     return buf.slots[0..buf.len];
 }
 
+pub const Category = union(enum) {
+    Impossible,
+    Imaginary,
+    Scalar: graph.DataType,
+    Stack,
+
+    pub fn fromSpec(spec: ?[]graph.AbiParam) Category {
+        if (spec) |s| return switch (s.len) {
+            0 => .Imaginary,
+            1 => if (s[0] == .Reg) .{ .Scalar = s[0].Reg } else .Stack,
+            2 => .Stack,
+            else => unreachable,
+        };
+
+        return .Impossible;
+    }
+};
+
 pub fn categorizeBuiltinUnwrapped(b: Types.Builtin) graph.DataType {
     return (categorizeBuiltin(b) catch unreachable).?;
 }
@@ -135,23 +153,23 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
     const max_vector_size = 512;
     const max_eight_bytes = max_vector_size / 64;
 
-    const Category = enum {
+    const Cata = enum {
         int,
         sse,
         sseup,
 
-        const Category = @This();
+        const Cata = @This();
 
-        pub fn max(lhs: Category, rhs: Category) Category {
+        pub fn max(lhs: Cata, rhs: Cata) Cata {
             return @enumFromInt(@max(@intFromEnum(lhs), @intFromEnum(rhs)));
         }
 
         const Error = error{ ByRef, Impossible };
 
-        pub fn classify(t: Id, ts: *Types, offset: u64, catas: []?Category) Error!void {
+        pub fn classify(t: Id, ts: *Types, offset: u64, catas: []?Cata) Error!void {
             if (offset & (t.alignment(ts) - 1) != 0) return error.ByRef;
 
-            var class: Category = switch (t.data()) {
+            var class: Cata = switch (t.data()) {
                 .Builtin => |b| switch (b) {
                     .any => unreachable,
                     .never => return error.Impossible,
@@ -163,6 +181,20 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                 .FuncTy => .int,
                 .Pointer => .int,
                 .Enum => .int,
+                .Option => |o| {
+                    try classify(o.get(ts).inner, ts, offset, catas);
+                    const layout = o.get(ts).getLayout(ts);
+                    if (!layout.compact) {
+                        try classify(
+                            layout.inner.storage.ty(),
+                            ts,
+                            offset + layout.inner.offset,
+                            catas,
+                        );
+                    }
+
+                    return;
+                },
                 .Slice => {
                     try classify(.uint, ts, offset + 0, catas);
                     try classify(.uint, ts, offset + 8, catas);
@@ -195,7 +227,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
         }
 
         pub fn regComp(
-            cls: []const ?Category,
+            cls: []const ?Cata,
             i: *usize,
             size: u64,
         ) graph.DataType {
@@ -240,10 +272,10 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
 
     const eight_bytes = (ty.size(types) + 7) / 8;
 
-    var categories_mem: [max_eight_bytes]?Category = @splat(null);
+    var categories_mem: [max_eight_bytes]?Cata = @splat(null);
     const categories = categories_mem[0..@intCast(eight_bytes)];
 
-    try Category.classify(ty, types, 0, categories);
+    try Cata.classify(ty, types, 0, categories);
 
     // NOTE: we do this after classify sinc classify catches impossible
     if (eight_bytes == 0) {
@@ -270,8 +302,8 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
     }
 
     var i: usize = 0;
-    bufr.push(.{ .Reg = Category.regComp(categories, &i, ty.size(types)) });
+    bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types)) });
     if (i * 8 < ty.size(types)) {
-        bufr.push(.{ .Reg = Category.regComp(categories, &i, ty.size(types)) });
+        bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types)) });
     }
 }

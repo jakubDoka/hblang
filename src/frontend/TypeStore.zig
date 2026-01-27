@@ -34,6 +34,8 @@ arrays: utils.SegmentedList(Array, ArrayId, 1024, 1024 * 1024) = .empty,
 array_index: Interner(ArrayId) = .empty,
 slices: utils.SegmentedList(Slice, SliceId, 1024, 1024 * 1024) = .empty,
 slice_index: Interner(SliceId) = .empty,
+options: utils.SegmentedList(Option, OptionId, 1024, 1024 * 1024) = .empty,
+option_index: Interner(OptionId) = .empty,
 
 files: []File,
 line_indexes: []const hb.LineIndex,
@@ -349,6 +351,7 @@ pub const generic = struct {
 
 pub const Data = union(enum(u8)) {
     Builtin: Builtin,
+    Option: OptionId,
     Pointer: PointerId,
     Slice: SliceId,
     Array: ArrayId,
@@ -356,8 +359,8 @@ pub const Data = union(enum(u8)) {
     Struct: StructId,
     Enum: EnumId,
 
-    pub const scope_start = 5;
-    pub const index_start = 1;
+    pub const scope_start = 6;
+    pub const index_start = 2;
 
     pub const pack = Id.Conv.pack;
     pub const downcast = generic.downcast;
@@ -365,6 +368,7 @@ pub const Data = union(enum(u8)) {
     pub fn size(self: Data, types: *Types) Size {
         return switch (self) {
             .Builtin => |b| b.size(types),
+            .Option => |o| o.get(types).getLayout(types).spec.size,
             .FuncTy => 4,
             .Pointer => 8,
             .Slice => 16,
@@ -377,6 +381,7 @@ pub const Data = union(enum(u8)) {
     pub fn alignment(self: Data, types: *Types) Size {
         return switch (self) {
             .Builtin => |b| b.alignment(types),
+            .Option => |o| o.get(types).getLayout(types).spec.alignmentBytes(),
             .FuncTy => 4,
             .Pointer => 8,
             .Slice => 16,
@@ -491,6 +496,9 @@ pub const Id = enum(u32) {
 
     pub fn isScalar(ty: Types.Id, types: *Types) bool {
         return switch (ty.data()) {
+            .Option => |o| ty.size(types) == 0 or
+                (ty.size(types) == o.get(types).inner.size(types) and
+                    o.get(types).inner.isScalar(types)),
             .Builtin, .Pointer, .FuncTy, .Enum => true,
             .Slice => false,
             .Array => |a| {
@@ -508,6 +516,10 @@ pub const Id = enum(u32) {
     pub fn format_(self: Id, types: *Types, writer: *std.io.Writer) !void {
         switch (self.data()) {
             .Builtin => |b| try writer.print("{s}", .{@tagName(b)}),
+            .Option => |o| {
+                try writer.writeByte('?');
+                try o.get(types).inner.format_(types, writer);
+            },
             .Pointer => |p| {
                 try writer.writeByte('^');
                 try p.get(types).ty.format_(types, writer);
@@ -775,6 +787,98 @@ pub const Scope = extern struct {
     }
 };
 
+pub const OptionId = EntId(Option, "options");
+pub const Option = struct {
+    inner: Id,
+    layout: Layout = .not_computed,
+
+    pub const Layout = packed struct {
+        storage: enum(u1) {
+            bool,
+            ptr,
+
+            pub fn dataType(self: @This()) graph.DataType {
+                return switch (self) {
+                    .bool => .i8,
+                    .ptr => .i64,
+                };
+            }
+
+            pub fn ty(self: @This()) Id {
+                return switch (self) {
+                    .bool => .u8,
+                    .ptr => .uint,
+                };
+            }
+        },
+        offset: u31,
+
+        pub const not_computed = Layout{
+            .storage = .ptr,
+            .offset = std.math.maxInt(u31),
+        };
+    };
+
+    pub const ExpLayout = struct {
+        spec: graph.AbiParam.StackSpec,
+        inner: Layout,
+        compact: bool,
+    };
+
+    pub fn hash(self: *Option, _: *Types) u64 {
+        return std.hash.int(@intFromEnum(self.inner));
+    }
+
+    pub fn eql(self: *Option, other: *Option, _: *Types) bool {
+        return self.inner == other.inner;
+    }
+
+    pub fn getLayout(self: *Option, types: *Types) ExpLayout {
+        if (self.layout == Layout.not_computed) {
+            self.layout = findNieche(types, self.inner, 0);
+
+            if (self.layout == Layout.not_computed) {
+                self.layout.offset = @intCast(self.inner.size(types));
+                self.layout.storage = .bool;
+            }
+        }
+
+        std.debug.assert(self.layout != Layout.not_computed);
+
+        const min_size = self.layout.offset + self.inner.alignment(types);
+        const inner_size = self.inner.size(types);
+
+        return .{
+            .spec = .fromByteUnits(
+                @max(min_size, inner_size),
+                self.inner.alignment(types),
+            ),
+            .inner = self.layout,
+            .compact = min_size == inner_size,
+        };
+    }
+
+    pub fn findNieche(types: *Types, ty: Id, offset: Size) Layout {
+        switch (ty.data()) {
+            .Builtin, .FuncTy, .Enum, .Option => return .not_computed,
+            .Pointer => return .{ .offset = @intCast(offset), .storage = .ptr },
+            .Slice => return .{ .offset = @intCast(offset + Slice.ptr_offset), .storage = .ptr },
+            .Array => |a| if (a.get(types).len.s == 0)
+                return .not_computed
+            else
+                return findNieche(types, a.get(types).elem, offset),
+            .Struct => |s| {
+                for (s.get(types).getLayout(types).fields) |f| {
+                    const nich = findNieche(types, f.ty, offset + f.offset);
+                    if (nich != Layout.not_computed) return nich;
+                }
+
+                return .not_computed;
+            },
+        }
+    }
+};
+
 pub const SliceId = EntId(Slice, "slices");
 pub const Slice = extern struct {
     elem: Id,
@@ -819,11 +923,7 @@ pub const Enum = struct {
 
     pub const Layout = struct {
         spec: graph.AbiParam.StackSpec,
-        fields: []Field,
-
-        pub const Field = struct {
-            value: i64,
-        };
+        fields: []i64,
     };
 
     pub fn format_(
@@ -843,7 +943,7 @@ pub const Enum = struct {
 
         self.layout = Layout{
             .spec = .{ .size = 0, .alignment = 1 },
-            .fields = types.arena.alloc(Layout.Field, self.decls.fields.len),
+            .fields = types.arena.alloc(i64, self.decls.fields.len),
         };
         const layout = &self.layout.?;
 
@@ -883,13 +983,13 @@ pub const Enum = struct {
                 }
             }
 
-            slt.* = .{ .value = value };
+            slt.* = value;
             max_value = @max(max_value, value);
             value +%= 1;
         }
 
         if (layout.spec.size == 0) {
-            layout.spec.size = if (max_value == 0) 0 else (std.math.ceilPowerOfTwo(
+            layout.spec.size = if (max_value == 0) 0 else @max(8, std.math.ceilPowerOfTwo(
                 Size,
                 64 - @clz(max_value),
             ) catch unreachable) / 8;
@@ -1075,7 +1175,7 @@ pub const FuncTy = struct {
     }
 
     pub fn eql(self: *FuncTy, other: *FuncTy, _: *Types) bool {
-        return std.meta.eql(self.args, other.args) and
+        return std.mem.eql(Id, self.args, other.args) and
             std.meta.eql(self.ret, other.ret);
     }
 };
@@ -1360,6 +1460,15 @@ pub fn sliceOf(self: *Types, elem: Id) Id {
     return .nany(slot.key_ptr.*);
 }
 
+pub fn optionOf(self: *Types, inner: Id) Id {
+    var option = Option{ .inner = inner };
+    const slot = self.option_index.intern(self, &option);
+    if (!slot.found_existing) {
+        slot.key_ptr.* = self.options.push(&self.arena, option);
+    }
+    return .nany(slot.key_ptr.*);
+}
+
 pub fn collectAnalError(types: *anyopaque, err: hb.backend.static_anal.Error) void {
     const self: *Types = @ptrCast(@alignCast(types));
 
@@ -1423,6 +1532,22 @@ pub fn collectRelocsRecur(
         .Builtin => {},
         .Enum => {},
         .FuncTy => {},
+        .Option => |o| {
+            const layout = o.get(self).getLayout(self);
+
+            if (!std.mem.allEqual(
+                u8,
+                ctx.bytes[offset + layout.inner.offset ..][0..layout
+                    .inner.storage.dataType().size()],
+                0,
+            )) {
+                self.collectRelocsRecur(
+                    ctx,
+                    o.get(self).inner,
+                    offset,
+                );
+            }
+        },
         .Pointer => |p| {
             if (self.collectPointer(
                 ctx.sloc,

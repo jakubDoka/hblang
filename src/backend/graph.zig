@@ -1176,6 +1176,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub const Node = extern struct {
             kind: Kind,
+            // TODO: merge these 2 fields
             id: u16,
             schedule: u16 = std.math.maxInt(u16),
             data_type: mod.DataType = .top,
