@@ -1718,7 +1718,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                     field.view(lex.source),
                 ) orelse return self.report(field.pos, "{} does not have this declaration", .{ty});
 
-                break :inferred_field self.emitCall2(field.end, ctx, null, item, lex);
+                break :inferred_field self.emitCall(field.end, ctx, null, item, lex);
             } else {
                 const scope = ty.data().downcast(Types.UnorderedScope) orelse {
                     return self.report(tok.pos, "{} does not have an unordered scope so it does not support inferred access", .{ty});
@@ -2031,8 +2031,9 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     return self.report(top.pos, "{} does not define this", .{scope});
                 };
 
-                const llres = LLValue.init(tok.pos, res);
-                res = try self.emitCall2(field.pos, ctx, llres, value, lex);
+                var llres = LLValue.init(tok.pos, res);
+                defer llres.deinit(self);
+                res = try self.emitCall(field.pos, ctx, llres, value, lex);
             } else {
                 if (res.ty.data() == .Pointer) {
                     res = .ptr(
@@ -2440,7 +2441,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            res = try self.emitCall2(top.pos, ctx, null, res, lex);
+            res = try self.emitCall(top.pos, ctx, null, res, lex);
         },
         .@"=" => {
             var dst = LLValue.init(tok.pos, res);
@@ -2520,6 +2521,8 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                             }
 
                             if (o.get().kind == .Store and o.pos() == 2) return true;
+                            if (o.get().kind == .MemCpy and o.pos() == 2) return true;
+                            if (o.get().kind == .Call) return true;
 
                             return false;
                         }
@@ -3146,9 +3149,8 @@ pub fn passArg(
             .to_compute => |tc| {
                 if (tc.inferred) |t| {
                     vl = try self.typedExpr(t, .{ .loc = slot.Stack }, tc.lex);
-                } else {
-                    self.emitGenericStore(pos, slot.Stack, vl);
                 }
+                self.emitGenericStore(pos, slot.Stack, vl);
             },
         }
         call.commitArgSlot(&self.bl, slot);
@@ -3157,7 +3159,7 @@ pub fn passArg(
     return vl.ty;
 }
 
-pub fn emitCall2(
+pub fn emitCall(
     self: *Codegen,
     pos: u32,
     ctx: Ctx,
@@ -3241,9 +3243,10 @@ pub fn emitTemplateCall(
         var ty = try template_gen.typ(&param_lex);
         const is_any = ty == .any;
 
-        const ps = lex.cursor;
+        var ps = lex.cursor;
         var value: Value = if (caller_vl) |*vl| b: {
             if (!is_any) self.normalizeCaller(vl, ty) catch {};
+            ps = vl.pos;
             break :b vl.value;
         } else if (is_any or cmptime) self.expr(
             .{ .ty = if (is_any) null else ty },
@@ -3295,7 +3298,9 @@ pub fn emitTemplateCall(
                     ident,
                     .ptr(ty, template_gen.bl.addStub(self.sloc(ps), .i64)),
                 );
+            }
 
+            if (caller != null or is_any) {
                 _ = try self.passArg(&call, .{ .computed = .{ .value = value, .pos = ps } });
             }
 
@@ -4923,7 +4928,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
         });
     }
 
-    if (0 == 1 or @import("options").dont_simulate) backend.disasm(.{
+    if (0 == 0 or @import("options").dont_simulate) backend.disasm(.{
         .name = name,
         .bin = exe.items,
         .out = &writer.interface,
