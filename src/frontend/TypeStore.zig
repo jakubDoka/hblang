@@ -482,6 +482,11 @@ pub const Id = enum(u32) {
         };
     }
 
+    pub fn category(self: Id, types: *Types) Abi.Category {
+        var buf = Abi.Buf{};
+        return .fromSpec(types.abi.categorize(self, types, &buf));
+    }
+
     pub fn alignment(self: Id, types: *Types) Size {
         return self.data().alignment(types);
     }
@@ -495,22 +500,7 @@ pub const Id = enum(u32) {
     }
 
     pub fn isScalar(ty: Types.Id, types: *Types) bool {
-        return switch (ty.data()) {
-            .Option => |o| ty.size(types) == 0 or
-                (ty.size(types) == o.get(types).inner.size(types) and
-                    o.get(types).inner.isScalar(types)),
-            .Builtin, .Pointer, .FuncTy, .Enum => true,
-            .Slice => false,
-            .Array => |a| {
-                if (a.get(types).len.s != 1) return false;
-                return a.get(types).elem.isScalar(types);
-            },
-            .Struct => |s| {
-                const fields = s.get(types).getLayout(types).fields;
-                if (fields.len != 1) return false;
-                return fields[0].ty.isScalar(types);
-            },
-        };
+        return ty.category(types) == .Scalar;
     }
 
     pub fn format_(self: Id, types: *Types, writer: *std.io.Writer) !void {
@@ -813,6 +803,11 @@ pub const Option = struct {
         },
         offset: u31,
 
+        pub const empty = Layout{
+            .storage = .bool,
+            .offset = std.math.maxInt(u31),
+        };
+
         pub const not_computed = Layout{
             .storage = .ptr,
             .offset = std.math.maxInt(u31),
@@ -850,7 +845,7 @@ pub const Option = struct {
 
         return .{
             .spec = .fromByteUnits(
-                @max(min_size, inner_size),
+                if (self.layout == Layout.empty) 0 else @max(min_size, inner_size),
                 self.inner.alignment(types),
             ),
             .inner = self.layout,
@@ -860,7 +855,15 @@ pub const Option = struct {
 
     pub fn findNieche(types: *Types, ty: Id, offset: Size) Layout {
         switch (ty.data()) {
-            .Builtin, .FuncTy, .Enum, .Option => return .not_computed,
+            .Builtin => |b| switch (b) {
+                .never => return .empty,
+                else => return .not_computed,
+            },
+            .Enum => |e| return if (e.get(types).decls.fields.len == 0)
+                .empty
+            else
+                .not_computed,
+            .FuncTy, .Option => return .not_computed,
             .Pointer => return .{ .offset = @intCast(offset), .storage = .ptr },
             .Slice => return .{ .offset = @intCast(offset + Slice.ptr_offset), .storage = .ptr },
             .Array => |a| if (a.get(types).len.s == 0)
@@ -948,6 +951,7 @@ pub const Enum = struct {
         const layout = &self.layout.?;
 
         var lex = Lexer.init(file.source, self.decls.start);
+        _ = lex.slit(.@"enum");
         if (lex.eatMatch(.@"(")) tag: {
             var gen: Codegen = undefined;
             gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, types.tmp.allocator());
@@ -964,6 +968,7 @@ pub const Enum = struct {
         for (self.decls.fields.items(.offset), layout.fields) |f, *slt| {
             var flex = Lexer.init(file.source, f);
 
+            _ = flex.slit(.Ident);
             if (flex.eatMatch(.@":=")) vl: {
                 var gen: Codegen = undefined;
                 gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, tmp.allocator());
@@ -989,9 +994,9 @@ pub const Enum = struct {
         }
 
         if (layout.spec.size == 0) {
-            layout.spec.size = if (max_value == 0) 0 else @max(8, std.math.ceilPowerOfTwo(
+            layout.spec.size = @max(8, std.math.ceilPowerOfTwo(
                 Size,
-                64 - @clz(max_value),
+                @max(64 - @clz(max_value), 1),
             ) catch unreachable) / 8;
             layout.spec.alignment = std.math.log2_int(u64, @max(1, layout.spec.size));
         }

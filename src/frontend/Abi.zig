@@ -31,7 +31,7 @@ pub const Buf = struct {
     }
 };
 
-pub fn isByRefRet(abi: Abi, self: Spec) bool {
+pub fn isRetByRef(abi: Abi, self: Spec) bool {
     const pr = self orelse return false;
     return switch (abi.cc) {
         .systemv => pr.len > 1 or (pr.len != 0 and pr[0] != .Reg),
@@ -40,7 +40,7 @@ pub fn isByRefRet(abi: Abi, self: Spec) bool {
     };
 }
 
-pub fn computeSignature(
+pub fn categorizeSignature(
     abi: Abi,
     args: []const Types.Id,
     ret: Types.Id,
@@ -64,7 +64,7 @@ pub fn computeSignature(
     var ret_by_ref = false;
 
     if (ret_abi) |r| {
-        if (abi.isByRefRet(r)) {
+        if (abi.isRetByRef(r)) {
             params.appendAssumeCapacity(.{ .Reg = .i64 });
             cursor += 1;
             ret_abi = &.{};
@@ -78,14 +78,29 @@ pub fn computeSignature(
         params.appendSliceAssumeCapacity(arg_abi);
     }
 
+    var ccbl = graph.CcBuilder{};
+
+    for (params.items) |*par| {
+        if (par.* == .Reg) {
+            par.* = ccbl.handleReg(abi.cc, par.Reg);
+        }
+    }
+
     return .{ params.items, ret_abi, ret_by_ref };
 }
 
-pub fn categorizeAssumeReg(self: Abi, ty: Id, types: *Types) graph.DataType {
+pub fn tryCategorizeReg(self: Abi, ty: Id, types: *Types) ?graph.DataType {
     var buf = Buf{};
     const params = categorize(self, ty, types, &buf) orelse unreachable;
-    std.debug.assert(params.len == 1);
+    if (params.len != 1) {
+        std.debug.assert(params.len == 0);
+        return null;
+    }
     return params[0].Reg;
+}
+
+pub fn categorizeAssumeReg(self: Abi, ty: Id, types: *Types) graph.DataType {
+    return tryCategorizeReg(self, ty, types).?;
 }
 
 pub fn categorize(self: Abi, ty: Id, types: *Types, buf: *Buf) ?[]graph.AbiParam {
@@ -180,9 +195,15 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                 },
                 .FuncTy => .int,
                 .Pointer => .int,
-                .Enum => .int,
+                .Enum => |e| if (e.get(ts).decls.fields.len == 0)
+                    return error.Impossible
+                else
+                    .int,
                 .Option => |o| {
-                    try classify(o.get(ts).inner, ts, offset, catas);
+                    classify(o.get(ts).inner, ts, offset, catas) catch |err| switch (err) {
+                        error.Impossible => return,
+                        else => |e| return e,
+                    };
                     const layout = o.get(ts).getLayout(ts);
                     if (!layout.compact) {
                         try classify(

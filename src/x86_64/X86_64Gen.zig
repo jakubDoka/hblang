@@ -101,9 +101,9 @@ pub const Reg = enum(u8) {
     xmm15,
     _, // spills
 
-    const system_v = struct {
-        const syscall_args: []const Reg = &.{ .rax, .rdi, .rsi, .rdx, .r10, .r8, .r9 };
-        const float_args: []const Reg = &.{ .xmm0, .xmm1, .xmm2, .xmm3, .xmm4, .xmm5, .xmm6, .xmm7 };
+    pub const system_v = struct {
+        pub const syscall_args: []const Reg = &.{ .rax, .rdi, .rsi, .rdx, .r10, .r8, .r9 };
+        pub const float_args: []const Reg = &.{ .xmm0, .xmm1, .xmm2, .xmm3, .xmm4, .xmm5, .xmm6, .xmm7 };
         const args: []const Reg = &.{ .rdi, .rsi, .rdx, .rcx, .r8, .r9 };
         const caller_saved: []const Reg = &.{ .rax, .rcx, .rdx, .rsi, .rdi, .r8, .r9, .r10, .r11 };
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
@@ -351,6 +351,9 @@ pub const classes = enum {
         op: graph.BinOp,
         imm: i32,
     };
+
+    // TODO: have a constant version of this
+    // TODO: when you are at it make it monotonic
     pub const CondJump = extern struct {
         base: graph.If,
         op: graph.BinOp,
@@ -2230,7 +2233,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *X86_64Gen, env: Mach.RunEnv) Mach.RunError!usize {
-    const cleanup = true;
+    const cleanup = 0 == 0;
     const res = b: {
         errdefer unreachable;
 

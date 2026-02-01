@@ -86,12 +86,24 @@ pub fn arena(self: *Builder) std.mem.Allocator {
 
 pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize, debug_ty: u32) SpecificNode(.Arg) {
     return switch (self.func.signature.params()[idx]) {
-        .Reg => |ty| self.func.addNode(.Arg, sloc, ty, &.{self.func.start}, .{ .index = idx }),
-        .Stack => |spec| self.func.addNode(.StructArg, sloc, .i64, &.{self.func.start}, .{
-            .base = .{ .index = idx },
-            .spec = spec,
-            .debug_ty = debug_ty,
-        }),
+        .Reg => |ty| self.func.addNode(
+            .Arg,
+            sloc,
+            ty,
+            &.{self.func.start},
+            .{ .index = idx },
+        ),
+        .Stack => |spec| self.func.addNode(
+            .StructArg,
+            sloc,
+            .i64,
+            &.{self.func.start},
+            .{
+                .base = .{ .index = idx },
+                .spec = spec,
+                .debug_ty = debug_ty,
+            },
+        ),
     };
 }
 
@@ -155,6 +167,22 @@ pub fn addLoad(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType)
 
 pub fn addFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
     return self.addLoad(sloc, self.addFieldOffset(sloc, base, offset), ty);
+}
+
+pub fn addBitFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
+    std.debug.assert(base.data_type.isInt());
+    std.debug.assert(ty.isInt());
+
+    if (base.data_type == ty) {
+        std.debug.assert(offset == 0);
+        return base;
+    }
+
+    const shift_amount = self.addIntImm(sloc, base.data_type, offset * 8);
+    const shift = self.addBinOp(sloc, .ushr, base.data_type, base, shift_amount);
+    const red = self.addUnOp(sloc, .ired, ty, shift);
+
+    return red;
 }
 
 pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType, value: *BuildNode) void {
@@ -643,99 +671,195 @@ pub fn addBlock(_: *Builder) Block {
     return .{};
 }
 
-pub const CallArgs = struct {
-    params: []const graph.AbiParam,
-    arg_slots: []*BuildNode,
-    returns: ?[]const graph.AbiParam,
-    return_slots: ?[]*BuildNode,
-    fptr: ?*BuildNode,
-    hint: enum { @"construst this with Builder.allocCallArgs()" },
-};
-
 pub const arg_prefix_len: usize = 3;
 
-pub fn allocCallArgs(
-    _: *Builder,
+pub const Call = struct {
+    call: *BuildNode,
     scratch: *utils.Arena,
-    params: []const graph.AbiParam,
-    return_values: ?[]const graph.AbiParam,
-    fptr: ?*BuildNode,
-) CallArgs {
-    const prefix_len = arg_prefix_len + @intFromBool(fptr != null);
-    const args = scratch.alloc(*BuildNode, prefix_len + params.len +
-        (if (return_values) |r| r.len else 0));
-    return .{
-        .params = params,
-        .returns = return_values,
-        .arg_slots = args[prefix_len..][0..params.len],
-        .return_slots = if (return_values != null) args[prefix_len + params.len ..] else null,
-        .hint = @enumFromInt(0),
-        .fptr = fptr,
+    cc: graph.CallConv,
+    abi_params: std.ArrayList(graph.AbiParam) = .empty,
+    stack_size: u64 = 0,
+    ccbl: graph.CcBuilder = .{},
+
+    pub const Slot = union(enum) {
+        Scalar: union { unfilled: void, filled: *BuildNode },
+        Stack: *BuildNode,
     };
-}
+
+    pub fn pushArg(
+        self: *Call,
+        bl: *Builder,
+        sloc: graph.Sloc,
+        param: graph.AbiParam,
+        value: *BuildNode,
+    ) void {
+        var slot = self.allocArgSlot(bl, sloc, param);
+        switch (slot) {
+            .Stack => |s| {
+                switch (param) {
+                    .Stack => |sp| bl.addFixedMemCpy(sloc, s, value, sp.size),
+                    .Reg => |r| {
+                        bl.addStore(sloc, s, r, value);
+                    },
+                }
+            },
+            .Scalar => |*s| s.* = .{ .filled = value },
+        }
+        self.commitArgSlot(bl, slot);
+    }
+
+    pub fn allocArgSlot(
+        self: *Call,
+        bl: *Builder,
+        sloc: graph.Sloc,
+        param: graph.AbiParam,
+    ) Slot {
+        switch (param) {
+            .Stack => |s| {
+                self.abi_params.append(
+                    self.scratch.allocator(),
+                    param,
+                ) catch unreachable;
+                self.stack_size = std.mem.alignForward(
+                    u64,
+                    self.stack_size,
+                    s.alignmentBytes(),
+                );
+                const location = bl.func.addNode(
+                    .StackArgOffset,
+                    sloc,
+                    .i64,
+                    &.{null},
+                    .{ .offset = self.stack_size },
+                );
+                self.stack_size += s.size;
+                return .{ .Stack = location };
+            },
+            .Reg => |r| {
+                const pr = self.ccbl.handleReg(self.cc, r);
+
+                if (pr == .Stack) {
+                    return self.allocArgSlot(bl, sloc, pr);
+                }
+
+                self.abi_params.append(
+                    self.scratch.allocator(),
+                    pr,
+                ) catch unreachable;
+
+                return .{ .Scalar = .{ .unfilled = {} } };
+            },
+        }
+    }
+
+    pub fn commitArgSlot(self: *Call, bl: *Builder, slot: Slot) void {
+        switch (slot) {
+            .Scalar => |s| {
+                _ = pushToScope(bl, self.call, s.filled);
+            },
+            .Stack => |s| {
+                std.debug.assert(s.kind == .StackArgOffset);
+                _ = pushToScope(bl, self.call, s);
+            },
+        }
+    }
+
+    pub fn lateInitSym(self: *Call, sym: u32) void {
+        self.call.extra(.Call).id = sym;
+    }
+
+    pub fn prependRefRet(self: *Call, bl: *Builder, addr: *BuildNode) void {
+        self.abi_params.insert(
+            self.scratch.allocator(),
+            0,
+            .{ .Reg = .i64 },
+        ) catch unreachable;
+
+        _ = bl.pushToScope(self.call, addr);
+
+        const apl = arg_prefix_len +
+            @intFromBool(self.call.extra(.Call).id == graph.indirect_call);
+
+        const ord = self.call.ordInps()[apl..];
+
+        std.mem.rotate(?*BuildNode, ord, ord.len - 1);
+
+        // we need to rewire all positions, sadly
+        for (ord, 0..) |i, j| {
+            const prev_idx = if (j == 0) ord.len - 1 else j - 1;
+            const inp = i.?;
+
+            for (inp.outputs()) |*o| {
+                if (o.get() == self.call and o.pos() == apl + prev_idx) {
+                    o.* = .init(self.call, apl + j, inp);
+                    break;
+                }
+            } else unreachable;
+        }
+    }
+
+    pub fn end(
+        self: *Call,
+        bl: *Builder,
+        sloc: graph.Sloc,
+        return_params: ?[]const graph.AbiParam,
+        ret_buf: *[2]*BuildNode,
+    ) []*BuildNode {
+        bl.func.setInputNoIntern(self.call, 1, bl.memory());
+        const call_end = bl.func.addNode(.CallEnd, sloc, .top, &.{self.call}, .{});
+        bl.func.setInputNoIntern(bl.scope.?, 0, call_end);
+        const call_mem = bl.func.addNode(.Mem, sloc, .top, &.{call_end}, .{});
+        bl.func.setInputNoIntern(bl.scope.?, 1, call_mem);
+
+        self.call.extra(.Call).signature =
+            .init(self.cc, self.abi_params.items, return_params, bl.arena());
+
+        if (return_params) |rp| {
+            if (rp.len == 1 and rp[0] == .Stack) return &.{};
+
+            for (rp, ret_buf[0..rp.len], 0..) |v, *slt, i| {
+                slt.* = bl.func.addNode(.Ret, sloc, v.Reg, &.{call_end}, .{ .index = i });
+            }
+            return ret_buf[0..rp.len];
+        } else {
+            bl.addTrap(.none, graph.unreachable_func_trap);
+            return undefined;
+        }
+    }
+};
 
 pub fn addCall(
     self: *Builder,
+    scratch: *utils.Arena,
     sloc: graph.Sloc,
     call_conv: graph.CallConv,
-    arbitrary_call_id: u32,
-    is_sym: enum { is_sym, is_special },
-    args_with_initialized_arg_slots: CallArgs,
-) ?[]const *BuildNode {
-    errdefer unreachable;
+    id: union(enum) { fptr: *BuildNode, sym: u32, special: u32 },
+) Call {
+    var buf: [4]?*BuildNode = undefined;
+    var inps = std.ArrayList(?*BuildNode).initBuffer(&buf);
 
-    const args = args_with_initialized_arg_slots;
-    for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr.getReg())) {
-        utils.panic("{f} != {f}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
-    };
-    const prefix_len = arg_prefix_len + @intFromBool(args.fptr != null);
-    const full_args: []?*BuildNode = @ptrCast((args.arg_slots.ptr - prefix_len)[0 .. prefix_len + args.params.len]);
-    var stack_offset: u64 = 0;
-    for (args.params, args.arg_slots) |par, *arg| {
-        if (par == .Stack) {
-            stack_offset = std.mem.alignForward(
-                u64,
-                stack_offset,
-                par.Stack.alignmentBytes(),
-            );
-            const location = self.func.addNode(
-                .StackArgOffset,
-                sloc,
-                .i64,
-                &.{null},
-                .{ .offset = stack_offset },
-            );
-            self.addFixedMemCpy(sloc, location, arg.*, par.Stack.size);
-            stack_offset += par.Stack.size;
-            arg.* = location;
-        }
-    }
-
-    full_args[0] = self.control();
-    full_args[1] = self.memory();
-    full_args[2] = if (is_sym == .is_sym) self.func.getSyms() else null;
-    if (args.fptr) |fptr| {
-        full_args[3] = fptr;
-    }
-
-    const call = self.func.addNode(.Call, sloc, .top, full_args, .{
-        .id = arbitrary_call_id,
-        .signature = .init(call_conv, args.params, args.returns, self.func.arena.allocator()),
+    inps.appendAssumeCapacity(self.control());
+    inps.appendAssumeCapacity(null);
+    inps.appendAssumeCapacity(switch (id) {
+        .special, .fptr => null,
+        .sym => self.func.getSyms(),
     });
-    const call_end = self.func.addNode(.CallEnd, sloc, .top, &.{call}, .{});
-    self.func.setInputNoIntern(self.scope.?, 0, call_end);
-    const call_mem = self.func.addNode(.Mem, sloc, .top, &.{call_end}, .{});
-    self.func.setInputNoIntern(self.scope.?, 1, call_mem);
-
-    if (args.return_slots) |rslots| {
-        for (rslots, args.returns.?, 0..) |*slt, rty, i| {
-            slt.* = self.func.addNode(.Ret, sloc, rty.getReg(), &.{call_end}, .{ .index = i });
-        }
-    } else {
-        self.addTrap(.none, graph.unreachable_func_trap);
+    switch (id) {
+        .fptr => |f| inps.appendAssumeCapacity(f),
+        .sym, .special => {},
     }
 
-    return args.return_slots;
+    return .{
+        .scratch = scratch,
+        .cc = call_conv,
+        .call = self.func.addNode(.Call, sloc, .top, inps.items, .{
+            .id = switch (id) {
+                .fptr => graph.indirect_call,
+                .special, .sym => |i| i,
+            },
+            .signature = undefined,
+        }),
+    };
 }
 
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {

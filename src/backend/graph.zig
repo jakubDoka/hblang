@@ -498,6 +498,29 @@ pub const CallConv = enum(u8) {
     @"inline",
 };
 
+pub const CcBuilder = struct {
+    int_reg_count: usize = 0,
+    float_reg_count: usize = 0,
+
+    pub fn handleReg(self: *CcBuilder, cc: CallConv, r: DataType) AbiParam {
+        self.int_reg_count += @intFromBool(r.isInt());
+        self.float_reg_count += @intFromBool(r.isFloat());
+
+        var spilled = false;
+        switch (cc) {
+            .systemv => {
+                spilled =
+                    (self.int_reg_count > 6 and r.isInt()) or
+                    (self.float_reg_count > 8 and r.isFloat());
+            },
+            else => utils.panic("{}", .{cc}),
+        }
+
+        if (spilled) return .{ .Stack = .reg(r) };
+        return .{ .Reg = r };
+    }
+};
+
 pub const Signature = extern struct {
     par_base: [*]AbiParam = undefined,
     ret_base: ?[*]AbiParam = undefined,
@@ -923,10 +946,8 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn add(self: *WorkList, node: *Node) void {
                 errdefer unreachable;
+                node.assertAlive();
 
-                if (node.isDead()) {
-                    utils.panic("{f} {any}\n", .{ node, node.inputs() });
-                }
                 if (self.in_list.bit_length <= node.id) {
                     try self.in_list.resize(
                         self.allocator,
@@ -2586,10 +2607,6 @@ pub fn Func(comptime Backend: type) type {
                 .data_type = ty,
             };
 
-            if (self.next_id == 149 and node.kind == .Load) {
-                std.debug.dumpCurrentStackTrace(@returnAddress());
-            }
-
             self.next_id += 1;
 
             @memcpy(@as([*]u64, @ptrCast(&node.edata)), extra);
@@ -3044,7 +3061,6 @@ pub fn Func(comptime Backend: type) type {
                 for (node.inputs(), 0..) |*inp, i| {
                     if (inp.* != null and isDead(inp.*)) {
                         self.removeUse(inp.*.?, i, node);
-                        work.add(inp.*.?);
                         inp.* = null;
                     }
                     is_dead = is_dead and isDead(inp.*);
@@ -3068,8 +3084,6 @@ pub fn Func(comptime Backend: type) type {
                     } else true);
 
                     self.setInputNoIntern(self.end, 2, null);
-
-                    work.add(node);
                 }
 
                 return null;

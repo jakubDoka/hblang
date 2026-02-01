@@ -104,7 +104,7 @@ pub const Value = struct {
 
                 const ty = gen.types.abi
                     .categorizeAssumeReg(self.ty, gen.types);
-                return gen.bl.addLoad(gen.sloc(pos), p, ty);
+                return gen.bl.peep(gen.bl.addLoad(gen.sloc(pos), p, ty));
             },
         };
     }
@@ -177,17 +177,6 @@ pub const Value = struct {
         }
     }
 
-    pub fn normalized2(self: Value, pos: u32, gen: *Codegen) NormalizedNode2 {
-        return switch (self.normalized(pos, gen)) {
-            .empty => .empty,
-            .value => |v| if (self.ty.isScalar(gen.types))
-                .{ .value = v }
-            else
-                .{ .compound_value = v },
-            .ptr => |p| .{ .ptr = p },
-        };
-    }
-
     pub fn normalized(self: Value, pos: u32, gen: *Codegen) NormalizedNode {
         return switch (self.node()) {
             .empty => .empty,
@@ -202,7 +191,7 @@ pub const Value = struct {
                     ) catch return gen.emitUninit(pos, self.ty);
                 }
 
-                const cata = gen.categoryOf(self.ty);
+                const cata = self.ty.category(gen.types);
 
                 return switch (slot.meta.kind) {
                     .empty => .empty,
@@ -314,7 +303,7 @@ pub fn emitUninitValue(self: *Codegen, pos: u32, ty: Types.Id) Value {
 pub fn emitUninit(self: *Codegen, pos: u32, ty: Types.Id) NormalizedNode {
     const slc = self.sloc(pos);
 
-    return switch (self.categoryOf(ty)) {
+    return switch (ty.category(self.types)) {
         .Imaginary, .Impossible => .empty,
         .Scalar => |s| .{ .value = self.bl.addUninit(slc, s) },
         .Stack => .{ .ptr = self.bl.addUninit(slc, .i64) },
@@ -448,7 +437,7 @@ pub fn lookupIdent(
             if (value) |vl| {
                 return self.ctValueToValue(pos, ty, vl);
             } else {
-                return switch (self.categoryOf(ty)) {
+                return switch (ty.category(self.types)) {
                     .Impossible => .never,
                     .Imaginary => .unit(ty),
                     .Scalar => .value(ty, self.bl.addStub(self.sloc(pos), .i64)),
@@ -628,7 +617,7 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
     self.ret_ty = func.ret;
 
     const args, const returns, const ret_by_ref =
-        stypes.abi.computeSignature(
+        stypes.abi.categorizeSignature(
             func.args,
             func.ret,
             stypes,
@@ -687,11 +676,11 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
             var buf = Abi.Buf{};
             const splits = self.types.abi.categorize(ty, self.types, &buf).?;
 
-            if (splits.len == 0) continue;
-
             const slc = self.sloc(name.pos);
 
-            const value: Value = if (splits.len == 2) b: {
+            const value: Value = if (splits.len == 0)
+                .unit(ty)
+            else if (splits.len == 2) b: {
                 const stack_slot = self.bl.addLocal(
                     self.sloc(name.pos),
                     ty.size(self.types),
@@ -707,10 +696,10 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
                 );
 
                 break :b .ptr(ty, stack_slot);
-            } else if (splits[0] == .Stack)
-                .ptr(ty, self.bl.addParam(slc, i, ty.raw()))
-            else
-                .value(ty, self.bl.addParam(slc, i, ty.raw()));
+            } else b: {
+                const param = self.bl.addParam(slc, i, ty.raw());
+                break :b if (param.kind == .Arg) .value(ty, param) else .ptr(ty, param);
+            };
 
             _ = self.pushVariable(name, value) catch unreachable;
 
@@ -920,7 +909,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 return self.report(tok.pos, "cant infer the type of the uninitialized value, use @as(<ty>, idk)", .{});
             };
 
-            break :ik switch (self.categoryOf(ty)) {
+            break :ik switch (ty.category(self.types)) {
                 .Impossible => return self.report(tok.pos, "{} is uninhabited, can not be uninitialized", .{ty}),
                 .Imaginary => .unit(ty),
                 .Scalar => |t| .value(ty, self.bl.addUninit(self.sloc(tok.pos), t)),
@@ -936,7 +925,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 return self.report(tok.pos, "this type can not be null", .{});
             }
 
-            switch (self.categoryOf(ty)) {
+            switch (ty.category(self.types)) {
                 .Impossible => break :nl .unit(ty),
                 .Imaginary => break :nl .value(ty, self.bl.addIntImm(self.sloc(tok.pos), .i8, 0)),
                 .Scalar, .Stack => {
@@ -1351,7 +1340,13 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             return .voidv;
         },
         .@"if" => {
-            var cond = self.typedExpr(.bool, .{ .in_if_or_while = true }, lex) catch |err| switch (err) {
+            const frame = self.vars.len;
+
+            var cond = self.typedExpr(
+                .bool,
+                .{ .in_if_or_while = true },
+                lex,
+            ) catch |err| switch (err) {
                 error.Unreachable => return error.Unreachable,
                 error.Report => self.emitUninitValue(tok.pos, .bool),
             };
@@ -1366,6 +1361,8 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             _ = self.expr(.{ .ty = .void }, lex) catch |err| {
                 unreachable_count += @intFromBool(err == error.Unreachable);
             };
+
+            self.popScope(frame);
 
             const tk = if_bl.beginElse(&self.bl);
 
@@ -1467,7 +1464,9 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             self.loops = &loop;
             defer self.loops = loop.prev;
 
-            const cond = try self.expr(.{ .ty = .void }, lex);
+            const frame = self.vars.len;
+
+            const cond = try self.typedExpr(.bool, .{ .in_if_or_while = true }, lex);
             var bl = self.bl.addIfAndBeginThen(
                 self.sloc(tok.pos),
                 cond.load(tok.pos, self),
@@ -1478,6 +1477,8 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             const tk = bl.beginElse(&self.bl);
             loop.state.runtime.bl.addControl(&self.bl, .@"break");
             bl.end(&self.bl, tk);
+
+            self.popScope(frame);
 
             loop.state.runtime.bl.end(&self.bl);
 
@@ -1562,6 +1563,48 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             const inner = try self.expr(ctx, lex);
             _ = try self.expect(lex, .@")", "to close the parenthesis");
             break :par inner;
+        },
+        .@".{" => ctor: {
+            const ty = ctx.ty orelse {
+                lex.eatUntilClosingDelimeter();
+                return self.report(tok.pos, "can't infer the constructor type, use <ty>.{..}", .{});
+            };
+
+            break :ctor self.ctor(tok.pos, ctx, ty, lex);
+        },
+        .@".[" => {
+            const ity = ctx.ty orelse {
+                return self.report(tok.pos, "TODO: infer type form the element", .{});
+            };
+
+            const ty, const slot = self.emitLocHandleOpt(tok.pos, ity, ctx);
+
+            if (ty.data() != .Array) {
+                return self.report(tok.pos, "{} can not be initialized as array", .{ty});
+            }
+
+            const arry = ty.data().Array.get(self.types);
+
+            var iter = lex.list(.@",", .@"]");
+            var len: Types.Size = 0;
+            while (iter.next()) {
+                if (len >= arry.len.s) {
+                    self.report(lex.cursor, "extra value, array has {} elements", .{arry.len.s}) catch {};
+                }
+
+                const loc = self.bl.addFieldOffset(self.sloc(lex.cursor), slot, len * arry.elem.size(self.types));
+                const vl = self.typedExpr(arry.elem, .{ .loc = loc }, lex) catch |err| switch (err) {
+                    error.Unreachable => return error.Unreachable,
+                    error.Report => continue,
+                };
+                self.emitGenericStore(lex.cursor, loc, vl);
+
+                len += 1;
+            }
+
+            var res = Value.ptr(ity, slot);
+            res.normalize(self);
+            return res;
         },
         .@".(" => {
             const ty = ctx.ty orelse {
@@ -1675,28 +1718,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                     field.view(lex.source),
                 ) orelse return self.report(field.pos, "{} does not have this declaration", .{ty});
 
-                var tmp = utils.Arena.scrath(null);
-                defer tmp.deinit();
-
-                const prev_errs = self.types.errored;
-
-                const func, const args = try self.resolveFunction(
-                    field.end,
-                    ctx,
-                    null,
-                    item,
-                    lex,
-                    tmp.arena,
-                );
-
-                break :inferred_field try self.emitCall(
-                    ctx,
-                    tok.pos,
-                    func.get(self.types).sig(),
-                    .{ .func = func },
-                    args,
-                    prev_errs,
-                );
+                break :inferred_field self.emitCall2(field.end, ctx, null, item, lex);
             } else {
                 const scope = ty.data().downcast(Types.UnorderedScope) orelse {
                     return self.report(tok.pos, "{} does not have an unordered scope so it does not support inferred access", .{ty});
@@ -1923,6 +1945,18 @@ pub fn directive(
                     .ptr(res, p),
             };
         },
+        .size_of => {
+            var res = ctx.ty orelse .uint;
+            if (!res.isBuiltin(.isInteger)) res = .uint;
+
+            const ty = try self.typ(lex);
+
+            break :d .value(res, self.bl.addIntImm(
+                self.sloc(tok.pos),
+                Abi.categorizeBuiltinUnwrapped(res.data().Builtin),
+                ty.size(self.types),
+            ));
+        },
         .as => {
             const ty = try self.typ(lex);
             try self.expectNext(iter);
@@ -1949,7 +1983,7 @@ pub fn ctValueToValue(self: *Codegen, pos: u32, ty: Types.Id, ct: Types.Comptime
     if (ty.size(self.types) <= @sizeOf(Types.ComptimeValue)) {
         return .value(ty, self.bl.addIntImm(
             self.sloc(pos),
-            self.types.abi.categorizeAssumeReg(ty, self.types),
+            self.types.abi.tryCategorizeReg(ty, self.types) orelse return .unit(ty),
             ct.@"inline",
         ));
     } else {
@@ -1997,26 +2031,8 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     return self.report(top.pos, "{} does not define this", .{scope});
                 };
 
-                const prev_error_count = self.types.errored;
-
                 const llres = LLValue.init(tok.pos, res);
-                const fnid, const args = try self.resolveFunction(
-                    field.pos,
-                    ctx,
-                    llres,
-                    value,
-                    lex,
-                    tmp.arena,
-                );
-
-                res = try self.emitCall(
-                    ctx,
-                    field.end,
-                    fnid.get(self.types).sig(),
-                    .{ .func = fnid },
-                    args,
-                    prev_error_count,
-                );
+                res = try self.emitCall2(field.pos, ctx, llres, value, lex);
             } else {
                 if (res.ty.data() == .Pointer) {
                     res = .ptr(
@@ -2087,20 +2103,28 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                         };
                         const lfield = s.get(self.types).getLayout(self.types).fields[index];
 
-                        res = switch (res.normalized(field.pos, self)) {
-                            .empty => .unit(lfield.ty),
-                            .value => |v| b: {
-                                if (lfield.ty.size(self.types) == 0) {
-                                    return .unit(lfield.ty);
-                                }
-
-                                std.debug.assert(lfield.offset == 0);
-                                break :b .value(lfield.ty, v);
+                        res = switch (lfield.ty.category(self.types)) {
+                            .Impossible => unreachable,
+                            .Imaginary => .unit(lfield.ty),
+                            .Scalar, .Stack => switch (res.normalized(field.pos, self)) {
+                                .empty => unreachable,
+                                .value => |v| if (self.types.abi.tryCategorizeReg(lfield.ty, self.types)) |r|
+                                    .value(
+                                        lfield.ty,
+                                        self.bl.addBitFieldLoad(
+                                            self.sloc(field.pos),
+                                            v,
+                                            lfield.offset,
+                                            r,
+                                        ),
+                                    )
+                                else
+                                    .unit(lfield.ty),
+                                .ptr => |p| .ptr(
+                                    lfield.ty,
+                                    self.bl.addFieldOffset(self.sloc(field.pos), p, lfield.offset),
+                                ),
                             },
-                            .ptr => |p| .ptr(
-                                lfield.ty,
-                                self.bl.addFieldOffset(self.sloc(field.pos), p, lfield.offset),
-                            ),
                         };
 
                         res.normalize(self);
@@ -2113,19 +2137,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 return self.report(top.pos, "{} is not optional", .{res.ty});
             }
 
-            const ty = res.ty.data().Option.get(self.types).inner;
-
-            res = switch (res.normalized2(top.pos, self)) {
-                .empty => return self.report(top.pos, "unwrapping null, {} is uninhabited", .{ty}),
-                .value => .unit(ty),
-                .compound_value => |v| .value(ty, self.bl.addUnOp(
-                    self.sloc(top.pos),
-                    .ired,
-                    self.types.abi.categorizeAssumeReg(ty, self.types),
-                    v,
-                )),
-                .ptr => |p| .ptr(ty, p),
-            };
+            res = try self.emitOptionUnwrap(top.pos, res);
         },
         .@".*" => {
             if (res.ty.data() != .Pointer) {
@@ -2180,21 +2192,8 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
         },
         .@".{" => {
             errdefer lex.eatUntilClosingDelimeter();
-
             const ty = try self.peval(tok.pos, res, Types.Id);
-
-            const inner, const slot = self.emitLocHandleOpt(top.pos, ty, ctx);
-
-            switch (inner.data()) {
-                .Option, .Builtin, .FuncTy, .Pointer, .Array, .Slice, .Enum => return self.report(
-                    top.pos,
-                    "{} can not be initialized this way",
-                    .{ty},
-                ),
-                .Struct => |s| try self.structCtor(top, s, lex, slot),
-            }
-
-            res = .ptr(ty, slot);
+            res = try self.ctor(top.pos, ctx, ty, lex);
         },
         .@"[" => {
             var base = LLValue.init(tok.pos, res);
@@ -2266,7 +2265,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 if (index) |vl| {
                     ptr = self.bl.addIndexOffset(
                         self.sloc(top.pos),
-                        vl.load(self),
+                        ptr,
                         .iadd,
                         elem.size(self.types),
                         vl.load(self),
@@ -2284,10 +2283,11 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                         "pointer slice requires an end index",
                         .{},
                     ),
-                    .Slice => self.bl.addFieldOffset(
+                    .Slice => self.bl.addFieldLoad(
                         self.sloc(top.pos),
                         base.value.normalized(top.pos, self).ptr,
                         Types.Slice.len_offset,
+                        .i64,
                     ),
                     .Array => |a| self.bl.addIntImm(
                         self.sloc(top.pos),
@@ -2440,20 +2440,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            const prev_error_count = self.types.errored;
-
-            const fid, const args =
-                try self.resolveFunction(top.pos, ctx, null, res, lex, tmp.arena);
-            const func = fid.get(self.types);
-
-            res = try self.emitCall(
-                ctx,
-                top.pos,
-                func.sig(),
-                .{ .func = fid },
-                args,
-                prev_error_count,
-            );
+            res = try self.emitCall2(top.pos, ctx, null, res, lex);
         },
         .@"=" => {
             var dst = LLValue.init(tok.pos, res);
@@ -2479,9 +2466,6 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 eq = try self.expect(lex, .@"=", " to assign a value");
             }
 
-            var value = try self.exprPrec(.{ .ty = ty }, lex, prevPrec);
-            if (ty) |t| try self.typeCheck(eq.pos, .{}, &value, t);
-
             const index = switch (res.node()) {
                 .variable => |i| i,
                 .value, .ptr, .empty => return self.report(tok.pos, "" ++
@@ -2499,11 +2483,22 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
 
             self.name = @enumFromInt(slot.meta.pos);
 
+            var value = try self.exprPrec(.{ .ty = ty }, lex, prevPrec);
+            if (ty) |t| try self.typeCheck(eq.pos, .{}, &value, t);
+
+            res = .voidv;
+            if (ctx.in_if_or_while) unwrap: {
+                if (value.ty.data() != .Option) {
+                    self.report(top.pos, "{} is not optional", .{value.ty}) catch break :unwrap;
+                }
+
+                res = .value(.bool, self.emitOptionCheck(top.pos, .@"!=", value));
+                value = try self.emitOptionUnwrap(top.pos, value);
+            }
+
             switch (value.normalized(tok.pos, self)) {
                 .value, .empty => {},
-                .ptr => |p| if (value.ty.isScalar(self.types)) {
-                    value = .value(value.ty, value.load(eq.pos, self));
-                } else {
+                .ptr => |p| {
                     const isUniqueLocal = opaque {
                         pub fn f(ptr: *BNode) bool {
                             if (ptr.kind != .Local) return false;
@@ -2521,6 +2516,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                                 for (o.get().outputs()) |oo| {
                                     if (!isOkayOp(oo)) return false;
                                 }
+                                return true;
                             }
 
                             if (o.get().kind == .Store and o.pos() == 2) return true;
@@ -2530,13 +2526,19 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     }.f;
 
                     if (!isUniqueLocal(p)) {
-                        const loc = self.bl.addLocal(
-                            self.sloc(top.pos),
-                            value.ty.size(self.types),
-                            @intFromEnum(value.ty),
-                        );
-                        self.emitGenericStore(eq.pos, loc, value);
-                        value = .ptr(value.ty, loc);
+                        if (value.ty.size(self.types) == 0) {
+                            value = .unit(value.ty);
+                        } else if (value.ty.isScalar(self.types)) {
+                            value = .value(value.ty, value.load(eq.pos, self));
+                        } else {
+                            const loc = self.bl.addLocal(
+                                self.sloc(top.pos),
+                                value.ty.size(self.types),
+                                @intFromEnum(value.ty),
+                            );
+                            self.emitGenericStore(eq.pos, loc, value);
+                            value = .ptr(value.ty, loc);
+                        }
                     }
                 },
             }
@@ -2545,8 +2547,6 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             if (slot.value == std.math.maxInt(u32)) {
                 self.declareVariable(eq.pos, index, value) catch {};
             }
-
-            res = .voidv;
         },
         .@"&&" => and_: {
             var lhs = LLValue.init(tok.pos, res);
@@ -2594,35 +2594,67 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             ));
         },
         .@"||" => or_: {
-            if (res.ty != .bool) {
-                return self.report(top.pos, "TODO: || on non-bool", .{});
-            }
-
             var lhs = LLValue.init(tok.pos, res);
             errdefer lhs.deinit(self);
 
-            try self.typeCheckLL(.{}, &lhs, .bool);
+            ass_lhs.* = lhs;
+
+            if (lhs.value.ty != .bool and lhs.value.ty.data() != .Option) {
+                return self.report(top.pos, "{} is not a bool nor an optional", .{lhs.value.ty});
+            }
+
+            const is_unwrap = lhs.value.ty != .bool;
+            var res_ty = lhs.value.ty;
+            if (is_unwrap) res_ty = res_ty.data().Option.get(self.types).inner;
+
+            if (is_ass_op and is_unwrap) {
+                return self.report(top.pos, "compound assignment is not allowed here", .{});
+            }
+
+            if (lhs.value.ty.size(self.types) == 0) {
+                res = try self.exprPrec(.{ .ty = res_ty }, lex, prevPrec);
+                break :or_;
+            }
 
             var if_bl = self.bl.addIfAndBeginThen(
                 self.sloc(top.pos),
-                lhs.load(self),
+                if (is_unwrap)
+                    self.emitOptionCheck(top.pos, .@"!=", lhs.value)
+                else
+                    lhs.load(self),
             );
+
+            var unwrapped = LLValue.init(top.pos, lhs.value);
+            defer unwrapped.deinitKeep();
+
+            if (is_unwrap) {
+                unwrapped.set(try self.emitOptionUnwrap(top.pos, unwrapped.value));
+                if (res_ty.category(self.types) == .Scalar) {
+                    unwrapped.set(.value(unwrapped.value.ty, unwrapped.load(self)));
+                }
+            }
 
             const tk = if_bl.beginElse(&self.bl);
 
             var alt = LLValue.init(
                 lex.cursor,
-                self.exprPrec(.{
-                    .ty = .bool,
-                }, lex, prevPrec) catch |err| switch (err) {
+                self.exprPrec(
+                    .{ .ty = res_ty },
+                    lex,
+                    prevPrec,
+                ) catch |err| switch (err) {
                     error.Unreachable => {
                         if_bl.end(&self.bl, tk);
 
-                        res = .value(.bool, self.bl.addIntImm(
-                            self.sloc(top.pos),
-                            .i8,
-                            0,
-                        ));
+                        if (is_unwrap) {
+                            res = unwrapped.value;
+                        } else {
+                            res = .value(.bool, self.bl.addIntImm(
+                                self.sloc(top.pos),
+                                .i8,
+                                0,
+                            ));
+                        }
 
                         break :or_;
                     },
@@ -2630,17 +2662,47 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 },
             );
             defer alt.deinit(self);
-            alt.set(.value(.bool, alt.load(self)));
 
-            if_bl.end(&self.bl, tk);
+            if (is_unwrap) b: {
+                if (alt.value.ty == lhs.value.ty) {
+                    // we discard the unwrap, should be fine since it has no
+                    // side effects
+                    unwrapped.set(lhs.value);
+                } else {
+                    if (res_ty.isScalar(self.types)) {
+                        alt.set(.value(res_ty, alt.load(self)));
+                    }
+                }
 
-            ass_lhs.* = lhs;
+                if_bl.end(&self.bl, tk);
 
-            res = .value(.bool, self.bl.addPhi(
-                self.sloc(top.pos),
-                self.bl.addIntImm(self.sloc(top.pos), .i8, 0),
-                alt.load(self),
-            ));
+                const rhs_n = alt.value.normalized(top.pos, self);
+                const lhs_vl, const rhs_vl = switch (unwrapped.value.normalized(top.pos, self)) {
+                    .empty => {
+                        std.debug.assert(rhs_n == .empty);
+                        break :b;
+                    },
+                    .value => |v| .{ v, rhs_n.value },
+                    .ptr => |p| .{ p, rhs_n.ptr },
+                };
+
+                const phi = self.bl.addPhi(self.sloc(top.pos), lhs_vl, rhs_vl);
+
+                res = switch (rhs_n) {
+                    .empty => unreachable,
+                    .value => .value(alt.value.ty, phi),
+                    .ptr => .ptr(alt.value.ty, phi),
+                };
+            } else {
+                alt.set(.value(.bool, alt.load(self)));
+                if_bl.end(&self.bl, tk);
+
+                res = .value(.bool, self.bl.addPhi(
+                    self.sloc(top.pos),
+                    self.bl.addIntImm(self.sloc(top.pos), .i8, 0),
+                    alt.load(self),
+                ));
+            }
         },
         else => op: {
             var lhs = LLValue.init(lex.cursor, res);
@@ -2653,57 +2715,11 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     return self.report(top.pos, "{} can not be compared with null", .{lhs.value.ty});
                 }
 
-                const opt = lhs.value.ty.data().Option.get(self.types);
-                const layout = opt.getLayout(self.types);
-
-                res = switch (lhs.value.normalized2(top.pos, self)) {
-                    .empty => .value(.bool, self.bl.addIntImm(
-                        self.sloc(top.pos),
-                        .i8,
-                        @intFromBool(tok.kind == .@"=="),
-                    )),
-                    .value => |v| .value(.bool, self.bl.addBinOp(
-                        self.sloc(top.pos),
-                        if (tok.kind == .@"==") .eq else .ne,
-                        .i8,
-                        v,
-                        self.bl.addIntImm(self.sloc(top.pos), v.data_type, 0),
-                    )),
-                    .compound_value => |v| .value(.bool, self.bl.addBinOp(
-                        self.sloc(top.pos),
-                        if (tok.kind == .@"==") .eq else .ne,
-                        .i8,
-                        self.bl.addUnOp(
-                            self.sloc(top.pos),
-                            .ired,
-                            self.categoryOf(opt.inner).Scalar,
-                            self.bl.addBinOp(
-                                self.sloc(top.pos),
-                                .ushr,
-                                v.data_type,
-                                v,
-                                self.bl.addIntImm(
-                                    self.sloc(top.pos),
-                                    v.data_type,
-                                    layout.inner.offset,
-                                ),
-                            ),
-                        ),
-                        self.bl.addIntImm(self.sloc(top.pos), v.data_type, 0),
-                    )),
-                    .ptr => |p| .value(.bool, self.bl.addBinOp(
-                        self.sloc(top.pos),
-                        if (tok.kind == .@"==") .eq else .ne,
-                        .i8,
-                        self.bl.addFieldLoad(
-                            self.sloc(top.pos),
-                            p,
-                            layout.inner.offset,
-                            layout.inner.storage.dataType(),
-                        ),
-                        self.bl.addIntImm(self.sloc(top.pos), p.data_type, 0),
-                    )),
-                };
+                res = .value(.bool, self.emitOptionCheck(
+                    top.pos,
+                    @enumFromInt(@intFromEnum(top.kind)),
+                    lhs.value,
+                ));
 
                 lhs.deinit(self);
 
@@ -2792,9 +2808,90 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
     return res;
 }
 
+pub fn ctor(self: *Codegen, pos: u32, ctx: Ctx, ty: Types.Id, lex: *Lexer) !Value {
+    const inner, const slot = self.emitLocHandleOpt(pos, ty, ctx);
+
+    switch (inner.data()) {
+        .Option, .Builtin, .FuncTy, .Pointer, .Array, .Slice, .Enum => return self.report(
+            pos,
+            "{} can not be initialized this way",
+            .{ty},
+        ),
+        .Struct => |s| try self.structCtor(pos, s, lex, slot),
+    }
+
+    var res = Value.ptr(ty, slot);
+    res.normalize(self);
+    return res;
+}
+
+pub fn emitOptionUnwrap(self: *Codegen, pos: u32, res: Value) !Value {
+    const ty = res.ty.data().Option.get(self.types).inner;
+
+    if (res.ty.data().Option.get(self.types).getLayout(self.types).compact) {
+        var cpy = res;
+        cpy.ty = ty;
+        return cpy;
+    }
+
+    return switch (res.normalized(pos, self)) {
+        .empty => {
+            self.bl.addTrap(self.sloc(pos), graph.infinite_loop_trap);
+            return error.Unreachable;
+        },
+        .value => |v| if (self.types.abi.tryCategorizeReg(ty, self.types)) |r|
+            .value(ty, self.bl.addUnOp(self.sloc(pos), .ired, r, v))
+        else
+            .unit(ty),
+        .ptr => |p| .ptr(ty, p),
+    };
+}
+
+pub const OptionCheckOp = enum(u16) {
+    @"==" = @intFromEnum(Lexer.Lexeme.@"=="),
+    @"!=" = @intFromEnum(Lexer.Lexeme.@"!="),
+};
+
+pub fn emitOptionCheck(self: *Codegen, pos: u32, op: OptionCheckOp, lhs: Value) *BNode {
+    const opt = lhs.ty.data().Option.get(self.types);
+    const layout = opt.getLayout(self.types);
+
+    return switch (lhs.normalized(pos, self)) {
+        .empty => self.bl.addIntImm(
+            self.sloc(pos),
+            .i8,
+            @intFromBool(op == .@"=="),
+        ),
+        .value => |v| self.bl.addBinOp(
+            self.sloc(pos),
+            if (op == .@"==") .eq else .ne,
+            .i8,
+            self.bl.addBitFieldLoad(
+                self.sloc(pos),
+                v,
+                layout.inner.offset,
+                layout.inner.storage.dataType(),
+            ),
+            self.bl.addIntImm(self.sloc(pos), v.data_type, 0),
+        ),
+        .ptr => |p| self.bl.addBinOp(
+            self.sloc(pos),
+            if (op == .@"==") .eq else .ne,
+            .i8,
+            self.bl.addFieldLoad(
+                self.sloc(pos),
+                p,
+                layout.inner.offset,
+                layout.inner.storage.dataType(),
+            ),
+            self.bl.addIntImm(self.sloc(pos), layout.inner.storage.dataType(), 0),
+        ),
+    };
+}
+
 pub fn structCtor(
     self: *Codegen,
-    top: Lexer.Token,
+    pos: u32,
     s: Types.StructId,
     lex: *Lexer,
     slot: *BNode,
@@ -2861,16 +2958,16 @@ pub fn structCtor(
 
         if (field.default != .invalid) {
             const loc = self.bl.addFieldOffset(
-                self.sloc(top.pos),
+                self.sloc(pos),
                 slot,
                 field.offset,
             );
             const src = self.bl.addGlobalAddr(
-                self.sloc(top.pos),
+                self.sloc(pos),
                 @intFromEnum(field.default),
             );
             self.bl.addFixedMemCpy(
-                self.sloc(top.pos),
+                self.sloc(pos),
                 loc,
                 src,
                 field.ty.size(self.types),
@@ -2878,7 +2975,7 @@ pub fn structCtor(
         } else {
             const field_name = stru.fieldName(self.types, index);
             self.report(
-                top.pos,
+                pos,
                 "constructor is missin {} field",
                 .{field_name},
             ) catch {};
@@ -2911,7 +3008,6 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
 
         var ass_lhs: ?LLValue = null;
 
-        // put this into a function and handle the error here
         res = self.suffix(.{
             tok, top, prec, ctx, &ass_lhs, is_ass_op,
         }, lex, res) catch |err| switch (err) {
@@ -2984,166 +3080,376 @@ pub fn normalizeCaller(self: *Codegen, c: *LLValue, cty: Types.Id) !void {
     }
 }
 
-pub fn resolveFunction(
+pub fn passArg(
+    self: *Codegen,
+    call: *BBuilder.Call,
+    value: union(enum) {
+        computed: struct { value: Value, pos: u32 },
+        to_compute: struct { lex: *Lexer, inferred: ?Types.Id },
+    },
+) !Types.Id {
+    var vl: Value = undefined;
+
+    const pos = switch (value) {
+        .computed => |c| c.pos,
+        .to_compute => |tc| tc.lex.cursor,
+    };
+
+    switch (value) {
+        .computed => |v| {
+            vl = v.value;
+        },
+        .to_compute => |tc| b: {
+            vl.ty = tc.inferred orelse {
+                vl = try self.expr(.{}, tc.lex);
+                break :b;
+            };
+        },
+    }
+
+    var bf = Abi.Buf{};
+    const splits = self.types.abi.categorize(vl.ty, self.types, &bf).?;
+
+    if (splits.len == 0) return vl.ty;
+
+    if (splits.len != 1 or splits[0] != .Stack) {
+        switch (value) {
+            .computed => {},
+            .to_compute => |tc| {
+                if (tc.inferred) |t| {
+                    vl = try self.typedExpr(t, .{}, tc.lex);
+                }
+            },
+        }
+
+        if (splits.len == 2) {
+            const ptr = vl.normalized(pos, self).ptr;
+            const first = self.bl.addLoad(self.sloc(pos), ptr, splits[0].Reg);
+            call.pushArg(&self.bl, self.sloc(pos), splits[0], first);
+            const second = self.emitArbitraryLoad(
+                pos,
+                self.bl.addFieldOffset(self.sloc(pos), ptr, splits[0].Reg.size()),
+                splits[1].Reg,
+                vl.ty.size(self.types) - splits[0].Reg.size(),
+            );
+            call.pushArg(&self.bl, self.sloc(pos), splits[1], second);
+        } else if (splits[0] == .Reg) {
+            std.debug.assert(splits.len == 1);
+            call.pushArg(&self.bl, self.sloc(pos), splits[0], vl.load(pos, self));
+        } else unreachable;
+    } else {
+        std.debug.assert(splits.len == 1);
+        std.debug.assert(splits[0] == .Stack);
+        const slot = call.allocArgSlot(&self.bl, self.sloc(pos), splits[0]);
+        switch (value) {
+            .computed => self.emitGenericStore(pos, slot.Stack, vl),
+            .to_compute => |tc| {
+                if (tc.inferred) |t| {
+                    vl = try self.typedExpr(t, .{ .loc = slot.Stack }, tc.lex);
+                } else {
+                    self.emitGenericStore(pos, slot.Stack, vl);
+                }
+            },
+        }
+        call.commitArgSlot(&self.bl, slot);
+    }
+
+    return vl.ty;
+}
+
+pub fn emitCall2(
     self: *Codegen,
     pos: u32,
     ctx: Ctx,
     caller: ?LLValue,
     res: Value,
     lex: *Lexer,
-    scratch: *utils.Arena,
-) !struct { Types.FuncId, []LLValue } {
+) !Value {
     if (res.ty == .template) {
-        return try self.instantiateTemplate(
-            try self.peval(pos, res, Types.TemplateId),
-            ctx,
-            caller,
-            lex,
-            scratch,
-        );
+        return self.emitTemplateCall(pos, ctx, caller, res, lex);
     } else {
-        // TODO: maybe faactor this out
-        const fid = self.peval(pos, res, Types.FuncId) catch |err| {
-            lex.eatUntilClosingDelimeter();
-            return err;
-        };
-        const func = fid.get(self.types);
-
-        var args = scratch.makeArrayList(LLValue, func.args.len);
-        errdefer self.deinitLLList(args.items);
-
-        var i: usize = 0;
-        if (caller) |cl| {
-            const c = args.addOneAssumeCapacity();
-            c.* = cl;
-
-            try self.normalizeCaller(c, func.args[i]);
-            i += 1;
-        }
-
-        const iter = lex.list(.@",", .@")");
-        while (iter.next()) : (i += 1) {
-            const ty = if (i < func.args.len) func.args[i] else null;
-
-            const ps = lex.cursor;
-            var arg = self.expr(.{ .ty = ty }, lex) catch |err| switch (err) {
-                error.Unreachable => return err,
-                error.Report => if (iter.recover()) break else continue,
-            };
-
-            if (ty) |t| self.typeCheck(ps, .{}, &arg, t) catch {};
-
-            var llv = LLValue.init(ps, arg);
-
-            args.appendBounded(llv) catch {
-                llv.deinit(self);
-                self.report(ps, "extra argment", .{}) catch {};
-            };
-        }
-
-        if (args.items.len < func.args.len) {
-            return self.report(
-                lex.cursor,
-                "{} missing arguments",
-                .{func.args.len - args.items.len},
-            );
-        }
-
-        return .{ fid, args.items };
+        return self.emitConcreteCall(pos, ctx, caller, res, lex);
     }
+}
+
+pub fn emitTemplateCall(
+    self: *Codegen,
+    pos: u32,
+    ctx: Ctx,
+    caller: ?LLValue,
+    res: Value,
+    lex: *Lexer,
+) !Value {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const template_id = self.peval(pos, res, Types.TemplateId) catch |err| {
+        lex.eatUntilClosingDelimeter();
+        return err;
+    };
+    const template = template_id.get(self.types);
+    const template_file = template.scope.file.get(self.types);
+
+    var call = self.bl.addCall(
+        tmp.arena,
+        self.sloc(pos),
+        self.types.abi.cc,
+        .{ .sym = 0 },
+    );
+
+    var tp = self.types.tmpCheckpoint();
+    defer tp.deinit();
+
+    var template_gen: Codegen = undefined;
+    template_gen.init(
+        self.types,
+        .nany(template_id),
+        .never,
+        tp.allocator(),
+    );
+    template_gen.name = template.scope.name_pos;
+    _ = template_gen.bl.begin(.systemv, &.{}, &.{});
+
+    var param_lex = Lexer.init(template_file.source, template.pos);
+
+    var params = std.ArrayList(Types.Func.Param).empty;
+    var args = std.ArrayList(Types.Id).empty;
+
+    const arg_iter = lex.list(.@",", .@")");
+    const param_iter = param_lex.list(.@",", .@")");
+
+    var caller_vl = caller;
+    var errored = false;
+    var param_next: bool = undefined;
+    var arg_next: bool = undefined;
+    while (true) {
+        param_next = param_iter.next();
+        arg_next = if (caller_vl == null) arg_iter.next() else true;
+        if (!param_next or !arg_next) break;
+
+        errdefer lex.eatUntilClosingDelimeter();
+
+        var round_errored = true;
+        defer errored = errored or round_errored;
+        const ident, const cmptime = param_lex.eatIdent() orelse {
+            self.report(param_lex.cursor, "expected argument name", .{}) catch {};
+            return error.SyntaxError;
+        };
+
+        _ = try self.expect(&param_lex, .@":", "to start an argument type");
+
+        var ty = try template_gen.typ(&param_lex);
+        const is_any = ty == .any;
+
+        const ps = lex.cursor;
+        var value: Value = if (caller_vl) |*vl| b: {
+            if (!is_any) self.normalizeCaller(vl, ty) catch {};
+            break :b vl.value;
+        } else if (is_any or cmptime) self.expr(
+            .{ .ty = if (is_any) null else ty },
+            lex,
+        ) catch |err| switch (err) {
+            error.Unreachable => return err,
+            error.Report => {
+                if (arg_iter.recover()) break else continue;
+            },
+        } else .unit(try self.passArg(
+            &call,
+            .{ .to_compute = .{ .lex = lex, .inferred = ty } },
+        ));
+
+        if (!is_any) self.typeCheck(ps, .{}, &value, ty) catch {};
+        ty = if (is_any) value.ty else ty;
+        caller_vl = null;
+
+        if (cmptime) {
+            const index = template_gen.defineVariable(ident);
+
+            const slot: *Variable = &template_gen.vars.items(.variable)[index];
+            const is_cmptime = slot.meta.kind == .cmptime;
+
+            std.debug.assert(slot.value == std.math.maxInt(u32));
+            std.debug.assert(is_cmptime);
+
+            slot.ty = value.ty;
+
+            const vl = try self.peval(ps, value, Types.ComptimeValue);
+
+            template_gen.cmptime_values.append(self.bl.arena(), vl) catch unreachable;
+            slot.value = @intCast(template_gen.cmptime_values.items.len - 1);
+
+            params.append(tmp.arena.allocator(), .{
+                .flags = .{ .is_any = false },
+                .ty = ty,
+                .value = vl,
+            }) catch unreachable;
+        } else {
+            if (is_any) {
+                params.append(tmp.arena.allocator(), .{
+                    .flags = .{ .is_any = true },
+                    .ty = ty,
+                    .value = undefined,
+                }) catch unreachable;
+
+                _ = try template_gen.pushVariable(
+                    ident,
+                    .ptr(ty, template_gen.bl.addStub(self.sloc(ps), .i64)),
+                );
+
+                _ = try self.passArg(&call, .{ .computed = .{ .value = value, .pos = ps } });
+            }
+
+            args.append(tmp.arena.allocator(), value.ty) catch unreachable;
+        }
+
+        template_gen.frozen_vars = template_gen.vars.len;
+        round_errored = false;
+    }
+
+    if (param_next) {
+        param_lex.eatUntilClosingDelimeter();
+    }
+
+    if (arg_next) {
+        lex.eatUntilClosingDelimeter();
+    }
+
+    _ = try self.expect(&param_lex, .@":", "to start a return type");
+    var ret = try template_gen.typ(&param_lex);
+
+    if (ret == .any) {
+        ret = ctx.ty orelse
+            return self.report(lex.cursor, "can not infer the return type", .{});
+    }
+
+    var func_mem = Types.Func{
+        .scope = template_gen.gatherScope(),
+        .pos = template.pos,
+        .params = params.items,
+        .args = &.{},
+        .captures = .empty,
+        .ret = ret,
+    };
+
+    var func = &func_mem;
+    const slot = self.types.func_index.intern(self.types, func);
+
+    if (!slot.found_existing) {
+        slot.key_ptr.* = self.types.funcs.push(&self.types.arena, func_mem);
+    }
+
+    func = slot.key_ptr.get(self.types);
+
+    if (!slot.found_existing) {
+        std.debug.assert(std.mem.indexOfScalar(Types.Id, args.items, .any) == null);
+        func.args = self.types.arena.dupe(Types.Id, args.items);
+        func.params = self.types.arena.dupe(Types.Func.Param, func.params);
+    }
+
+    call.lateInitSym(@intFromEnum(slot.key_ptr.*));
+
+    var buf = Abi.Buf{};
+    const ret_cata = self.types.abi.categorize(ret, self.types, &buf);
+
+    var slt: *BNode = undefined;
+    if (self.types.abi.isRetByRef(ret_cata)) {
+        slt = self.emitLoc(pos, ret, ctx);
+        call.prependRefRet(&self.bl, slt);
+    }
+
+    return self.endCall(&call, pos, ret_cata, ret, slt);
+}
+
+pub fn emitConcreteCall(
+    self: *Codegen,
+    pos: u32,
+    ctx: Ctx,
+    caller: ?LLValue,
+    res: Value,
+    lex: *Lexer,
+) !Value {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const fid = self.peval(pos, res, Types.FuncId) catch |err| {
+        lex.eatUntilClosingDelimeter();
+        return err;
+    };
+    const func = fid.get(self.types);
+
+    var call = self.bl.addCall(
+        tmp.arena,
+        self.sloc(pos),
+        self.types.abi.cc,
+        .{ .sym = @intFromEnum(fid) },
+    );
+
+    var buf = Abi.Buf{};
+    const ret_cata = self.types.abi.categorize(func.ret, self.types, &buf);
+
+    var slot: *BNode = undefined;
+    if (self.types.abi.isRetByRef(ret_cata)) {
+        slot = self.emitLoc(pos, func.ret, ctx);
+        call.pushArg(&self.bl, self.sloc(pos), .{ .Reg = .i64 }, slot);
+    }
+
+    var i: usize = 0;
+    if (caller) |cl| {
+        var c = cl;
+        try self.normalizeCaller(&c, func.args[i]);
+        _ = try self.passArg(&call, .{ .computed = .{ .value = c.value, .pos = c.pos } });
+        i += 1;
+    }
+
+    const iter = lex.list(.@",", .@")");
+    while (iter.next()) : (i += 1) {
+        const ty = if (i < func.args.len) func.args[i] else null;
+        if (ty == null) self.report(lex.cursor, "extra argument", .{}) catch {};
+        _ = try self.passArg(&call, .{ .to_compute = .{ .lex = lex, .inferred = ty } });
+    }
+
+    if (i < func.args.len) {
+        return self.report(
+            lex.cursor,
+            "{} missing arguments",
+            .{func.args.len - i},
+        );
+    }
+
+    return self.endCall(&call, pos, ret_cata, func.ret, slot);
+}
+
+pub fn endCall(
+    self: *Codegen,
+    call: *BBuilder.Call,
+    pos: u32,
+    ret_cata: ?[]graph.AbiParam,
+    ret: Types.Id,
+    slot: *BNode,
+) !Value {
+    var bf: [2]*BNode = undefined;
+    const vls = call.end(&self.bl, self.sloc(pos), ret_cata, &bf);
+
+    const rcta = ret_cata orelse return error.Unreachable;
+
+    if (self.types.abi.isRetByRef(rcta)) {
+        return .ptr(ret, slot);
+    }
+
+    if (rcta.len == 0) {
+        return .unit(ret);
+    }
+
+    if (rcta.len == 1) {
+        return .value(ret, vls[0]);
+    }
+
+    unreachable; // TODO;
 }
 
 pub fn silentReport(self: *Codegen) error{Report} {
     self.types.errored += 1;
     return error.Report;
-}
-
-pub fn emitCall(
-    self: *Codegen,
-    ctx: Ctx,
-    pos: u32,
-    sig: Types.FuncTy,
-    func: union(enum) { func: Types.FuncId, ptr: LLValue },
-    args: []LLValue,
-    prev_erred: usize,
-) !Value {
-    defer self.deinitLLList(args);
-
-    if (self.types.errored != prev_erred) {
-        return self.silentReport();
-    }
-
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
-
-    const params, const returns, const ret_by_ref = self.types.abi
-        .computeSignature(
-        sig.args,
-        sig.ret,
-        self.types,
-        tmp.arena,
-    ) orelse {
-        std.debug.assert(self.types.errored != 0);
-        return .never;
-    };
-
-    const call_args = self.bl
-        .allocCallArgs(tmp.arena, params, returns, switch (func) {
-        .func => null,
-        .ptr => |p| p.value.load(pos, self),
-    });
-
-    var cursor: usize = 0;
-    var loc: ?*BNode = null;
-
-    if (ret_by_ref) {
-        loc = self.emitLoc(pos, sig.ret, ctx);
-        call_args.arg_slots[cursor] = loc.?;
-        cursor += 1;
-    }
-
-    for (args, sig.args) |*arg, arg_ty| {
-        var buf = Abi.Buf{};
-        const splits = self.types.abi
-            .categorize(arg_ty, self.types, &buf).?;
-        if (splits.len == 0) continue;
-
-        if (splits.len == 2) {
-            const ptr = arg.value.normalized(arg.pos, self).ptr;
-            call_args.arg_slots[cursor] = self.bl.addLoad(self.sloc(arg.pos), ptr, splits[0].Reg);
-            call_args.arg_slots[cursor + 1] = self.emitArbitraryLoad(
-                arg.pos,
-                self.bl.addFieldOffset(self.sloc(arg.pos), ptr, splits[0].Reg.size()),
-                splits[1].Reg,
-                arg_ty.size(self.types) - splits[0].Reg.size(),
-            );
-        } else if (splits.len == 1 and splits[0] != .Reg) {
-            call_args.arg_slots[cursor] = arg.value.normalized(arg.pos, self).ptr;
-        } else {
-            call_args.arg_slots[cursor] = arg.value.load(arg.pos, self);
-        }
-        cursor += splits.len;
-    }
-
-    const result = self.bl.addCall(
-        self.sloc(pos),
-        self.types.abi.cc,
-        switch (func) {
-            .func => |fid| @intFromEnum(fid),
-            .ptr => graph.indirect_call,
-        },
-        .is_sym,
-        call_args,
-    ) orelse return error.Unreachable;
-
-    return if (loc) |l|
-        .ptr(sig.ret, l)
-    else if (result.len == 0)
-        .unit(sig.ret)
-    else if (result.len == 1)
-        .value(sig.ret, result[0])
-    else
-        unreachable;
 }
 
 pub fn deinitLLList(self: *Codegen, lls: []LLValue) void {
@@ -3223,7 +3529,7 @@ pub fn emitLocHandleOpt(self: *Codegen, pos: u32, ty: Types.Id, ctx: Ctx) struct
 
     if (ty.data() == .Option) {
         const layout = ty.data().Option.get(self.types).getLayout(self.types);
-        if (layout.compact) {
+        if (!layout.compact) {
             self.bl.addFieldStore(
                 self.sloc(pos),
                 loc,
@@ -3238,171 +3544,6 @@ pub fn emitLocHandleOpt(self: *Codegen, pos: u32, ty: Types.Id, ctx: Ctx) struct
         if (ty.data() == .Option) ty.data().Option.get(self.types).inner else ty,
         loc,
     };
-}
-
-pub fn instantiateTemplate(
-    self: *Codegen,
-    template_id: Types.TemplateId,
-    ctx: Ctx,
-    caller: ?LLValue,
-    lex: *Lexer,
-    scratch: *utils.Arena,
-) !struct { Types.FuncId, []LLValue } {
-    const template = template_id.get(self.types);
-    const template_file = template.scope.file.get(self.types);
-
-    var tmp = self.types.tmpCheckpoint();
-    defer tmp.deinit();
-
-    var template_gen: Codegen = undefined;
-    template_gen.init(
-        self.types,
-        .nany(template_id),
-        .never,
-        tmp.allocator(),
-    );
-    template_gen.name = template.scope.name_pos;
-    _ = template_gen.bl.begin(.systemv, &.{}, &.{});
-
-    var param_lex = Lexer.init(template_file.source, template.pos);
-
-    var args = std.ArrayList(LLValue).empty;
-    errdefer self.deinitLLList(args.items);
-
-    var params = std.ArrayList(Types.Func.Param).empty;
-
-    const arg_iter = lex.list(.@",", .@")");
-    const param_iter = param_lex.list(.@",", .@")");
-
-    var caller_vl = caller;
-    var errored = false;
-    var param_next: bool = undefined;
-    var arg_next: bool = undefined;
-    while (true) {
-        param_next = param_iter.next();
-        arg_next = if (caller_vl == null) arg_iter.next() else true;
-        if (!param_next or !arg_next) break;
-
-        errdefer lex.eatUntilClosingDelimeter();
-
-        var round_errored = true;
-        defer errored = errored or round_errored;
-        const ident, const cmptime = param_lex.eatIdent() orelse {
-            self.report(param_lex.cursor, "expected argument name", .{}) catch {};
-            return error.SyntaxError;
-        };
-
-        _ = try self.expect(&param_lex, .@":", "to start an argument type");
-
-        var ty = try template_gen.typ(&param_lex);
-        const is_any = ty == .any;
-
-        const pos = lex.cursor;
-        var value: LLValue = if (caller_vl) |*vl| b: {
-            if (!is_any) self.normalizeCaller(vl, ty) catch {};
-            break :b vl.*;
-        } else .init(pos, self.expr(
-            .{ .ty = if (is_any) null else ty },
-            lex,
-        ) catch |err| switch (err) {
-            error.Unreachable => return err,
-            error.Report => {
-                if (arg_iter.recover()) break else continue;
-            },
-        });
-        errdefer value.deinit(self);
-
-        if (!is_any) self.typeCheckLL(.{}, &value, ty) catch {};
-        ty = if (is_any) value.value.ty else ty;
-        caller_vl = null;
-
-        if (cmptime) {
-            const index = template_gen.defineVariable(ident);
-
-            const slot: *Variable = &template_gen.vars.items(.variable)[index];
-            const is_cmptime = slot.meta.kind == .cmptime;
-
-            std.debug.assert(slot.value == std.math.maxInt(u32));
-            std.debug.assert(is_cmptime);
-
-            slot.ty = value.value.ty;
-
-            const vl = try self.peval(pos, value.value, Types.ComptimeValue);
-            value.deinit(self);
-
-            template_gen.cmptime_values.append(self.bl.arena(), vl) catch unreachable;
-            slot.value = @intCast(template_gen.cmptime_values.items.len - 1);
-
-            params.append(scratch.allocator(), .{
-                .flags = .{ .is_any = false },
-                .ty = ty,
-                .value = vl,
-            }) catch unreachable;
-        } else {
-            if (is_any) {
-                params.append(scratch.allocator(), .{
-                    .flags = .{ .is_any = true },
-                    .ty = ty,
-                    .value = undefined,
-                }) catch unreachable;
-
-                _ = try template_gen.pushVariable(
-                    ident,
-                    .ptr(ty, template_gen.bl.addStub(self.sloc(pos), .i64)),
-                );
-            }
-
-            args.append(scratch.allocator(), value) catch unreachable;
-        }
-        template_gen.frozen_vars = template_gen.vars.len;
-        round_errored = false;
-    }
-
-    if (param_next) {
-        param_lex.eatUntilClosingDelimeter();
-    }
-
-    if (arg_next) {
-        lex.eatUntilClosingDelimeter();
-    }
-
-    _ = try self.expect(&param_lex, .@":", "to start a return type");
-    var ret = try template_gen.typ(&param_lex);
-
-    if (ret == .any) {
-        ret = ctx.ty orelse
-            return self.report(lex.cursor, "can not infer the return type", .{});
-    }
-
-    var func_mem = Types.Func{
-        .scope = template_gen.gatherScope(),
-        .pos = template.pos,
-        .params = params.items,
-        .args = &.{},
-        .captures = .empty,
-        .ret = ret,
-    };
-
-    var func = &func_mem;
-    const slot = self.types.func_index.intern(self.types, func);
-
-    if (!slot.found_existing) {
-        slot.key_ptr.* = self.types.funcs.push(&self.types.arena, func_mem);
-    }
-
-    func = slot.key_ptr.get(self.types);
-
-    if (!slot.found_existing) {
-        const arg_tys = self.types.arena.alloc(Types.Id, args.items.len);
-        for (args.items, arg_tys) |a, *slt| {
-            slt.* = a.value.ty;
-        }
-        std.debug.assert(std.mem.indexOfScalar(Types.Id, arg_tys, .any) == null);
-        func.args = arg_tys;
-        func.params = self.types.arena.dupe(Types.Func.Param, func.params);
-    }
-
-    return .{ slot.key_ptr.*, args.items };
 }
 
 pub fn assign(self: *Codegen, pos: u32, dest: Value, src: Value) !void {
@@ -4259,11 +4400,6 @@ pub fn typeCheckLL(
     return self.typeCheck(ll.pos, ctx, &ll.value, expected);
 }
 
-pub fn categoryOf(self: *Codegen, ty: Types.Id) Abi.Category {
-    var buf = Abi.Buf{};
-    return .fromSpec(self.types.abi.categorize(ty, self.types, &buf));
-}
-
 pub fn typeCheck(
     self: *Codegen,
     pos: u32,
@@ -4283,7 +4419,7 @@ pub fn typeCheck(
             return;
         }
 
-        switch (self.categoryOf(got.ty)) {
+        switch (got.ty.category(self.types)) {
             .Impossible => got.* = .unit(expected),
             .Imaginary => got.* = .value(expected, self.bl.addIntImm(self.sloc(pos), .i8, 1)),
             .Scalar, .Stack => {
@@ -4436,6 +4572,7 @@ pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
     var self: Codegen = undefined;
     self.init(types, root.root_sope, .never, tmp.allocator());
     self.name = @enumFromInt(decl.offset);
+    _ = self.bl.begin(.systemv, &.{}, &.{});
 
     var lex = Lexer.init(root.source, decl.offset);
 
@@ -4770,10 +4907,13 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
         return;
     }
 
-    const res = backend.run(.{
-        .name = name,
-        .code = exe.items,
-    });
+    const res = if (@import("options").dont_simulate)
+        error.SegmentationFault
+    else
+        backend.run(.{
+            .name = name,
+            .code = exe.items,
+        });
 
     errdefer {
         backend.disasm(.{
@@ -4782,6 +4922,12 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
             .out = &writer.interface,
         });
     }
+
+    if (0 == 1 or @import("options").dont_simulate) backend.disasm(.{
+        .name = name,
+        .bin = exe.items,
+        .out = &writer.interface,
+    });
 
     try exp.assert(res);
 }

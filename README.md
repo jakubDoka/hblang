@@ -1740,7 +1740,7 @@ main := fn(): uint {
     if @size_of(?^u8) != @size_of(^u8) return 1
     if @size_of(?struct{.v: ^u8}) != @size_of(^u8) return 2
 
-    v := 3
+    v := #3
     ptr := opaque(&v)
     ptr.?.* = 0
 

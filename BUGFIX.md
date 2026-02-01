@@ -1333,7 +1333,7 @@ main := fn(): uint {
 ```
 
 #### float sse call conv 1
-```hb
+```!hb
 expectations := .{
     should_error: true,
 }
@@ -1348,7 +1348,7 @@ main := fn(): int {
 ```
 
 #### float sse call conv 2
-```hb
+```!hb
 expectations := .{
     should_error: true,
 }
@@ -1363,7 +1363,7 @@ main := fn(): int {
 ```
 
 #### float sse call conv 3
-```hb
+```!hb
 expectations := .{
     should_error: true,
 }
@@ -1378,7 +1378,7 @@ main := fn(): int {
 ```
 
 #### float load and store 1
-```hb
+```!hb
 Stru := struct{.a: f32; .b: f32; .c: f32}
 
 fun := fn(s: Stru): f32 return s.a + s.b - s.c
@@ -1637,8 +1637,8 @@ stack_args := fn(
 }
 
 main := fn(): uint {
-    return load_of_args(0, 1, 2, 3, 4, 5, 6, 7) -
-        stack_args(.(0, 1, 2), .(3, 4, 5), .(6, 7))
+    return load_of_args(0, 1, 2, 3, 4, 5, 6, 7)
+        - stack_args(.(0, 1, 2), .(3, 4, 5), .(6, 7))
 }
 ```
 
