@@ -811,8 +811,14 @@ pub const Call = struct {
         const call_mem = bl.func.addNode(.Mem, sloc, .top, &.{call_end}, .{});
         bl.func.setInputNoIntern(bl.scope.?, 1, call_mem);
 
-        self.call.extra(.Call).signature =
+        const extra = self.call.extra(.Call);
+
+        extra.signature =
             .init(self.cc, self.abi_params.items, return_params, bl.arena());
+
+        std.debug.assert(extra.signature.params().len ==
+            self.call.ordInps().len - arg_prefix_len -
+                @intFromBool(extra.id == graph.indirect_call));
 
         if (return_params) |rp| {
             if (rp.len == 1 and rp[0] == .Stack) return &.{};
@@ -857,7 +863,7 @@ pub fn addCall(
                 .fptr => graph.indirect_call,
                 .special, .sym => |i| i,
             },
-            .signature = undefined,
+            .signature = .empty,
         }),
     };
 }

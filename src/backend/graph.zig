@@ -528,6 +528,8 @@ pub const Signature = extern struct {
     par_count: u8 = 0,
     ret_count: u8 = 0,
 
+    pub const empty = Signature{ .call_conv = .systemv };
+
     pub fn initBuf(
         call_conv: CallConv,
         pars: []AbiParam,

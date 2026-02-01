@@ -551,7 +551,7 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
     self.types.vm.regs.set(.ret_addr, Types.stack_size - 1);
 
     while (true) switch (self.types.vm.run(&vm_ctx) catch |err| {
-        self.reportSloc(slc, "the comptime execution failes: {}", .{err}) catch
+        self.reportSloc(slc, "the comptime execution failed: {}", .{err}) catch
             return;
     }) {
         .tx => break,
@@ -2033,7 +2033,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
 
                 var llres = LLValue.init(tok.pos, res);
                 defer llres.deinit(self);
-                res = try self.emitCall(field.pos, ctx, llres, value, lex);
+                res = try self.emitCall(field.pos, ctx, &llres, value, lex);
             } else {
                 if (res.ty.data() == .Pointer) {
                     res = .ptr(
@@ -2142,7 +2142,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
         },
         .@".*" => {
             if (res.ty.data() != .Pointer) {
-                return self.report(top.pos, "{} is not a pointer", .{res.ty.data()});
+                return self.report(top.pos, "{} is not a pointer", .{res.ty});
             }
 
             res = .ptr(
@@ -2553,7 +2553,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
         },
         .@"&&" => and_: {
             var lhs = LLValue.init(tok.pos, res);
-            errdefer lhs.deinit(self);
+            defer if (!is_ass_op) lhs.deinit(self);
 
             try self.typeCheckLL(.{}, &lhs, .bool);
 
@@ -2598,7 +2598,6 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
         },
         .@"||" => or_: {
             var lhs = LLValue.init(tok.pos, res);
-            errdefer lhs.deinit(self);
 
             ass_lhs.* = lhs;
 
@@ -2708,8 +2707,9 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             }
         },
         else => op: {
-            var lhs = LLValue.init(lex.cursor, res);
-            errdefer lhs.deinit(self);
+            self.dbgReport(tok.pos, "lick lhs {}", .{res.load(tok.pos, self)});
+            var lhs = LLValue.init(tok.pos, res);
+            defer if (!is_ass_op) lhs.deinit(self);
 
             if ((top.kind == .@"!=" or top.kind == .@"==") and lex.eatMatch(.null)) {
                 std.debug.assert(!is_ass_op);
@@ -2729,10 +2729,9 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 break :op;
             }
 
-            var rhs = LLValue.init(
-                lex.cursor,
-                try self.exprPrec(.{ .ty = lhs.value.ty }, lex, prevPrec),
-            );
+            const vl = try self.exprPrec(.{ .ty = lhs.value.ty }, lex, prevPrec);
+            self.dbgReport(tok.pos, "lick rhs {}", .{vl.load(tok.pos, self)});
+            var rhs = LLValue.init(lex.cursor, vl);
             defer rhs.deinit(self);
 
             if (lhs.value.ty == .never or rhs.value.ty == .never) return .never;
@@ -3024,8 +3023,6 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                 try self.assign(top.pos, lhs.value, res);
                 lhs.deinit(self);
                 res = .voidv;
-            } else {
-                lhs.deinitKeep();
             }
         }
     }
@@ -3111,9 +3108,13 @@ pub fn passArg(
     }
 
     var bf = Abi.Buf{};
-    const splits = self.types.abi.categorize(vl.ty, self.types, &bf).?;
-
-    if (splits.len == 0) return vl.ty;
+    const splits = self.types.abi.categorize(vl.ty, self.types, &bf) orelse {
+        return self.report(
+            pos,
+            "{} is uninhabited, can not be passed to the call",
+            .{vl.ty},
+        );
+    };
 
     if (splits.len != 1 or splits[0] != .Stack) {
         switch (value) {
@@ -3123,6 +3124,10 @@ pub fn passArg(
                     vl = try self.typedExpr(t, .{}, tc.lex);
                 }
             },
+        }
+
+        if (splits.len == 0) {
+            return vl.ty;
         }
 
         if (splits.len == 2) {
@@ -3163,7 +3168,7 @@ pub fn emitCall(
     self: *Codegen,
     pos: u32,
     ctx: Ctx,
-    caller: ?LLValue,
+    caller: ?*LLValue,
     res: Value,
     lex: *Lexer,
 ) !Value {
@@ -3178,7 +3183,7 @@ pub fn emitTemplateCall(
     self: *Codegen,
     pos: u32,
     ctx: Ctx,
-    caller: ?LLValue,
+    caller: ?*LLValue,
     res: Value,
     lex: *Lexer,
 ) !Value {
@@ -3244,7 +3249,7 @@ pub fn emitTemplateCall(
         const is_any = ty == .any;
 
         var ps = lex.cursor;
-        var value: Value = if (caller_vl) |*vl| b: {
+        var value: Value = if (caller_vl) |vl| b: {
             if (!is_any) self.normalizeCaller(vl, ty) catch {};
             ps = vl.pos;
             break :b vl.value;
@@ -3300,7 +3305,7 @@ pub fn emitTemplateCall(
                 );
             }
 
-            if (caller != null or is_any) {
+            if (caller_vl != null or is_any) {
                 _ = try self.passArg(&call, .{ .computed = .{ .value = value, .pos = ps } });
             }
 
@@ -3369,7 +3374,7 @@ pub fn emitConcreteCall(
     self: *Codegen,
     pos: u32,
     ctx: Ctx,
-    caller: ?LLValue,
+    caller: ?*LLValue,
     res: Value,
     lex: *Lexer,
 ) !Value {
@@ -3400,9 +3405,8 @@ pub fn emitConcreteCall(
 
     var i: usize = 0;
     if (caller) |cl| {
-        var c = cl;
-        try self.normalizeCaller(&c, func.args[i]);
-        _ = try self.passArg(&call, .{ .computed = .{ .value = c.value, .pos = c.pos } });
+        try self.normalizeCaller(cl, func.args[i]);
+        _ = try self.passArg(&call, .{ .computed = .{ .value = cl.value, .pos = cl.pos } });
         i += 1;
     }
 
@@ -4204,7 +4208,7 @@ pub fn partialEvalCall(
 
     const sig: graph.Signature = call.extra(.Call).signature;
     var cursor: usize = 0;
-    for (call.inputs()[BBuilder.arg_prefix_len..], sig.params()) |inp, par| {
+    for (call.ordInps()[BBuilder.arg_prefix_len..], sig.params()) |inp, par| {
         const argvl = try self.partialEval(inp.?);
         switch (par) {
             .Reg => {
@@ -4337,6 +4341,7 @@ pub const LLValue = struct {
         switch (self.value.node()) {
             .empty, .variable => {},
             .value, .ptr => |p| {
+                if (0 == 0) gen.dbgReport(self.pos, "{}", .{p});
                 std.debug.assert(p == self.checksum);
                 BNode.Lock.unlock(.{ .prev_id = self.prev_id, .node = p });
                 // NOTE: we make sure we are not locked as locks stack
@@ -4928,7 +4933,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
         });
     }
 
-    if (0 == 0 or @import("options").dont_simulate) backend.disasm(.{
+    if (1 == 0 or @import("options").dont_simulate) backend.disasm(.{
         .name = name,
         .bin = exe.items,
         .out = &writer.interface,

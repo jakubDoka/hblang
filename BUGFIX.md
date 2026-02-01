@@ -574,6 +574,10 @@ main := fn(): uint return x(null)
 
 #### nullable types 7
 ```hb
+expectations := .{
+    should_error: true,
+}
+
 y := fn(w: never): uint die
 x := fn(z: ?never): u32 return y(z || return 0)
 main := fn(): uint return x(null)

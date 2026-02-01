@@ -351,12 +351,14 @@ pub const classes = enum {
         op: graph.BinOp,
         imm: i32,
     };
-
-    // TODO: have a constant version of this
-    // TODO: when you are at it make it monotonic
     pub const CondJump = extern struct {
         base: graph.If,
         op: graph.BinOp,
+    };
+    pub const ImmCondJump = extern struct {
+        base: graph.If,
+        op: graph.BinOp,
+        imm: i32,
     };
     pub const F32 = extern struct {
         imm: f32,
@@ -1262,12 +1264,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // jz dest
                 self.emitBytes(&.{ 0x0f, 0x84, 0, 0, 0, 0 });
             },
-            .CondJump => |extra| {
+            inline .CondJump, .ImmCondJump => |extra, t| {
                 const lhs = self.getReg(inps[0]);
-                const rhs = self.getReg(inps[1]);
                 const oper_dt = inps[0].data_type;
 
-                self.emitBinopCmp(lhs, rhs, oper_dt);
+                if (t == .CondJump) {
+                    const rhs = self.getReg(inps[1]);
+                    self.emitBinopCmp(lhs, rhs, oper_dt);
+                } else {
+                    const rhs = extra.imm;
+                    self.emitImmCmp(oper_dt, lhs, rhs);
+                }
 
                 self.ctx.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].get().schedule,
@@ -1459,26 +1466,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
                         // cmp lhs, $rhs
-                        const opcode: u8 = switch (op_dt) {
-                            .i8 => 0x80,
-                            .i16, .i32, .i64 => if (crhs == null) 0x81 else 0x83,
-                            else => unreachable,
-                        };
-
-                        if (op_dt == .i16) self.emitByte(0x66);
-                        self.emitRexNoReg(lhs, .rax, op_dt.size());
-                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(0b111, lhs) });
-
-                        if (crhs) |c| {
-                            self.emitImm(i8, c);
-                        } else {
-                            switch (op_dt) {
-                                .i8 => self.emitImm(i8, @intCast(rhs)),
-                                .i16 => self.emitImm(i16, @intCast(rhs)),
-                                .i32, .i64 => self.emitImm(i32, @intCast(rhs)),
-                                else => unreachable,
-                            }
-                        }
+                        self.emitImmCmp(op_dt, lhs, rhs);
 
                         // setx dst
                         self.emitRexNoReg(dst, .rax, 1);
@@ -1776,6 +1764,31 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             else => {
                 utils.panic("{f}", .{instr});
             },
+        }
+    }
+}
+
+pub fn emitImmCmp(self: *X86_64Gen, op_dt: graph.DataType, lhs: Reg, rhs: i32) void {
+    const crhs = std.math.cast(i8, rhs);
+
+    const opcode: u8 = switch (op_dt) {
+        .i8 => 0x80,
+        .i16, .i32, .i64 => if (crhs == null) 0x81 else 0x83,
+        else => unreachable,
+    };
+
+    if (op_dt == .i16) self.emitByte(0x66);
+    self.emitRexNoReg(lhs, .rax, op_dt.size());
+    self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(0b111, lhs) });
+
+    if (crhs) |c| {
+        self.emitImm(i8, c);
+    } else {
+        switch (op_dt) {
+            .i8 => self.emitImm(i8, @intCast(rhs)),
+            .i16 => self.emitImm(i16, @intCast(rhs)),
+            .i32, .i64 => self.emitImm(i32, @intCast(rhs)),
+            else => unreachable,
         }
     }
 }
