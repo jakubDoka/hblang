@@ -275,11 +275,10 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                             4 => .f32,
                             else => .f64,
                         },
-                        else => graph.DataType.fromRaw(.{
-                            .kind = .f64,
-                            .one_less_then_lanes = @intCast(((size +
-                                7) / 8) - 1),
-                        }),
+                        2 => .v128,
+                        3, 4 => .v254,
+                        5, 6, 7, 8 => .v512,
+                        else => unreachable,
                     };
                 },
                 else => unreachable,

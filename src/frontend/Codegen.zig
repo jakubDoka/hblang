@@ -1656,6 +1656,10 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                     },
                 });
 
+                const ty: Types.Id = .nany(struc);
+
+                self.bl.resizeLocal(loc, ty.size(self.types), @intFromEnum(ty));
+
                 return .ptr(.nany(struc), loc);
             };
 
@@ -1993,32 +1997,30 @@ pub fn ctValueToValue(self: *Codegen, pos: u32, ty: Types.Id, ct: Types.Comptime
 
 pub const SuffixCtx = struct { Lexer.Token, Lexer.Token, u8, Ctx, *?LLValue, bool };
 
-pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixError!Value {
+pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) SuffixError!void {
     const tok, const top, const prevPrec, const ctx, const ass_lhs, const is_ass_op = sctx;
-
-    var res = rs;
 
     switch (top.kind) {
         .@"." => {
             const field = try self.expect(lex, .Ident, "to access a field");
 
-            if (res.ty == .type) {
-                const scope_ty = try self.peval(top.pos, res, Types.Id);
+            if (res.value.ty == .type) {
+                const scope_ty = try self.peval(top.pos, res.value, Types.Id);
 
                 const scope = scope_ty.data().downcast(Types.AnyScope) orelse {
                     return self.report(top.pos, "{} does not support field access", .{scope_ty});
                 };
 
-                res = self.lookupIdent(scope.pack(), field.view(lex.source)) orelse {
+                res.set(self.lookupIdent(scope.pack(), field.view(lex.source)) orelse {
                     return self.report(field.pos, "{} does not have this declaration", .{scope_ty});
-                };
+                });
             } else if (lex.eatMatch(.@"(")) {
                 var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
 
-                var scope = res.ty;
-                if (res.ty.data() == .Pointer) {
-                    scope = res.ty.data().Pointer.get(self.types).ty;
+                var scope = res.value.ty;
+                if (res.value.ty.data() == .Pointer) {
+                    scope = res.value.ty.data().Pointer.get(self.types).ty;
                 }
 
                 const ascope = scope.data().downcast(Types.AnyScope) orelse {
@@ -2031,18 +2033,16 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     return self.report(top.pos, "{} does not define this", .{scope});
                 };
 
-                var llres = LLValue.init(tok.pos, res);
-                defer llres.deinit(self);
-                res = try self.emitCall(field.pos, ctx, &llres, value, lex);
+                res.set(try self.emitCall(field.pos, ctx, res, value, lex));
             } else {
-                if (res.ty.data() == .Pointer) {
-                    res = .ptr(
-                        res.ty.data().Pointer.get(self.types).ty,
-                        res.load(top.pos, self),
-                    );
+                if (res.value.ty.data() == .Pointer) {
+                    res.set(.ptr(
+                        res.value.ty.data().Pointer.get(self.types).ty,
+                        res.value.load(top.pos, self),
+                    ));
                 }
 
-                switch (res.ty.data()) {
+                switch (res.value.ty.data()) {
                     .Option => return self.report(
                         field.pos,
                         "options must be unwrapped in order to access fields," ++
@@ -2051,8 +2051,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     ),
                     .Builtin => |b| switch (b) {
                         .never => {
-                            self.types.errored += 1;
-                            return .never;
+                            return self.silentReport();
                         },
                         else => return self.report(field.pos, "TODO: {}", .{b}),
                     }, // TODO
@@ -2063,51 +2062,51 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     ),
                     .Array => |a| {
                         if (std.mem.eql(u8, field.view(lex.source), "len")) {
-                            res = .value(.uint, self.bl.addIntImm(
+                            res.set(.value(.uint, self.bl.addIntImm(
                                 self.sloc(top.pos),
                                 .i64,
                                 a.get(self.types).len.s,
-                            ));
+                            )));
                         } else if (std.mem.eql(u8, field.view(lex.source), "ptr")) {
-                            res = .value(
+                            res.set(.value(
                                 self.types.pointerTo(a.get(self.types).elem),
-                                try res.asPtr(top.pos, self),
-                            );
+                                try res.value.asPtr(top.pos, self),
+                            ));
                         } else {
-                            return self.report(field.pos, "{} only has `len` field", .{res.ty});
+                            return self.report(field.pos, "{} only has `len` field", .{res.value.ty});
                         }
                     },
-                    .FuncTy => return self.report(field.pos, "{} doesn't have fields", .{res.ty}),
+                    .FuncTy => return self.report(field.pos, "{} doesn't have fields", .{res.value.ty}),
                     .Slice => |s| {
-                        const ptr = res.normalized(top.pos, self).ptr;
+                        const ptr = res.value.normalized(top.pos, self).ptr;
                         if (std.mem.eql(u8, field.view(lex.source), "len")) {
-                            res = .ptr(
+                            res.set(.ptr(
                                 .uint,
                                 self.bl.addFieldOffset(self.sloc(top.pos), ptr, Types.Slice.len_offset),
-                            );
+                            ));
                         } else if (std.mem.eql(u8, field.view(lex.source), "ptr")) {
-                            res = .ptr(
+                            res.set(.ptr(
                                 self.types.pointerTo(s.get(self.types).elem),
                                 self.bl.addFieldOffset(self.sloc(top.pos), ptr, Types.Slice.ptr_offset),
-                            );
+                            ));
                         } else {
-                            return self.report(field.pos, "{} only has `len` and `ptr` fields", .{res.ty});
+                            return self.report(field.pos, "{} only has `len` and `ptr` fields", .{res.value.ty});
                         }
                     },
-                    .Enum => return self.report(field.pos, "{} is an enum, enums dont have fields", .{res.ty}),
+                    .Enum => return self.report(field.pos, "{} is an enum, enums dont have fields", .{res.value.ty}),
                     .Struct => |s| {
                         const index = s.get(self.types).lookupField(
                             self.types,
                             field.view(lex.source),
                         ) orelse {
-                            return self.report(field.pos, "undefined field on {}, TODO: list fields", .{res.ty});
+                            return self.report(field.pos, "undefined field on {}, TODO: list fields", .{res.value.ty});
                         };
                         const lfield = s.get(self.types).getLayout(self.types).fields[index];
 
-                        res = switch (lfield.ty.category(self.types)) {
+                        res.set(switch (lfield.ty.category(self.types)) {
                             .Impossible => unreachable,
                             .Imaginary => .unit(lfield.ty),
-                            .Scalar, .Stack => switch (res.normalized(field.pos, self)) {
+                            .Scalar, .Stack => switch (res.value.normalized(field.pos, self)) {
                                 .empty => unreachable,
                                 .value => |v| if (self.types.abi.tryCategorizeReg(lfield.ty, self.types)) |r|
                                     .value(
@@ -2126,7 +2125,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                                     self.bl.addFieldOffset(self.sloc(field.pos), p, lfield.offset),
                                 ),
                             },
-                        };
+                        });
 
                         res.normalize(self);
                     },
@@ -2134,26 +2133,26 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             }
         },
         .@".?" => {
-            if (res.ty.data() != .Option) {
-                return self.report(top.pos, "{} is not optional", .{res.ty});
+            if (res.value.ty.data() != .Option) {
+                return self.report(top.pos, "{} is not optional", .{res.value.ty});
             }
 
-            res = try self.emitOptionUnwrap(top.pos, res);
+            res.set(try self.emitOptionUnwrap(top.pos, res.value));
         },
         .@".*" => {
-            if (res.ty.data() != .Pointer) {
-                return self.report(top.pos, "{} is not a pointer", .{res.ty});
+            if (res.value.ty.data() != .Pointer) {
+                return self.report(top.pos, "{} is not a pointer", .{res.value.ty});
             }
 
-            res = .ptr(
-                res.ty.data().Pointer.get(self.types).ty,
-                res.load(top.pos, self),
-            );
+            res.set(.ptr(
+                res.value.ty.data().Pointer.get(self.types).ty,
+                res.value.load(top.pos, self),
+            ));
         },
         .@".(" => {
             errdefer lex.eatUntilClosingDelimeter();
 
-            const ty = try self.peval(tok.pos, res, Types.Id);
+            const ty = try self.peval(tok.pos, res.value, Types.Id);
 
             const inner, const slot = self.emitLocHandleOpt(top.pos, ty, ctx);
 
@@ -2189,16 +2188,15 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 },
             }
 
-            res = .ptr(ty, slot);
+            res.set(.ptr(ty, slot));
+            res.normalize(self);
         },
         .@".{" => {
             errdefer lex.eatUntilClosingDelimeter();
-            const ty = try self.peval(tok.pos, res, Types.Id);
-            res = try self.ctor(top.pos, ctx, ty, lex);
+            const ty = try self.peval(tok.pos, res.value, Types.Id);
+            res.set(try self.ctor(top.pos, ctx, ty, lex));
         },
         .@"[" => {
-            var base = LLValue.init(tok.pos, res);
-            defer base.deinit(self);
             var index: ?LLValue = null;
             defer if (index) |*i| i.deinit(self);
             var end_index: ?LLValue = null;
@@ -2227,14 +2225,14 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
 
             _ = try self.expect(lex, .@"]", "to close the indexing");
 
-            const can_be_indexed = switch (base.value.ty.data()) {
+            const can_be_indexed = switch (res.value.ty.data()) {
                 .Builtin, .FuncTy, .Enum, .Option => false,
                 .Pointer, .Slice, .Array => true,
                 .Struct => !is_slice,
             };
 
             if (!can_be_indexed) {
-                return self.report(top.pos, "{} can not be indexed", .{base.value.ty});
+                return self.report(top.pos, "{} can not be indexed", .{res.value.ty});
             }
 
             if (is_slice) {
@@ -2244,7 +2242,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     Array: Types.ArrayId,
                 };
 
-                const slc = base.value.ty.data().downcast(Slicable).?;
+                const slc = res.value.ty.data().downcast(Slicable).?;
 
                 var elem = switch (slc) {
                     .Pointer => |p| p.get(self.types).ty,
@@ -2253,14 +2251,14 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 };
 
                 var ptr = switch (slc) {
-                    .Pointer => base.load(self),
+                    .Pointer => res.load(self),
                     .Slice => self.bl.addFieldLoad(
                         self.sloc(top.pos),
-                        base.value.normalized(top.pos, self).ptr,
+                        res.value.normalized(top.pos, self).ptr,
                         Types.Slice.ptr_offset,
                         .i64,
                     ),
-                    .Array => try base.value.asPtr(top.pos, self),
+                    .Array => try res.value.asPtr(top.pos, self),
                 };
 
                 if (index) |vl| {
@@ -2286,7 +2284,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     ),
                     .Slice => self.bl.addFieldLoad(
                         self.sloc(top.pos),
-                        base.value.normalized(top.pos, self).ptr,
+                        res.value.normalized(top.pos, self).ptr,
                         Types.Slice.len_offset,
                         .i64,
                     ),
@@ -2325,28 +2323,28 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     ptr,
                 );
 
-                res = .ptr(ty, slot);
-            } else switch (base.value.ty.data()) {
+                res.set(.ptr(ty, slot));
+            } else switch (res.value.ty.data()) {
                 .Builtin, .FuncTy, .Enum, .Option => {
-                    return self.report(top.pos, "{} can not be indexed", .{base.value.ty});
+                    return self.report(top.pos, "{} can not be indexed", .{res.value.ty});
                 },
                 .Pointer => |p| {
-                    res = .ptr(
+                    res.set(.ptr(
                         p.get(self.types).ty,
                         self.bl.addIndexOffset(
                             self.sloc(top.pos),
-                            base.load(self),
+                            res.load(self),
                             .iadd,
                             p.get(self.types).ty.size(self.types),
                             index.?.load(self),
                         ),
-                    );
+                    ));
                 },
                 .Slice => |s| {
-                    var cpy = base.value;
+                    var cpy = res.value;
                     cpy.ty = .uint;
                     const ptr = cpy.load(top.pos, self);
-                    res = .ptr(
+                    res.set(.ptr(
                         s.get(self.types).elem,
                         self.bl.addIndexOffset(
                             self.sloc(top.pos),
@@ -2355,16 +2353,16 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                             s.get(self.types).elem.size(self.types),
                             index.?.load(self),
                         ),
-                    );
+                    ));
                 },
                 .Array => |a| {
                     if (a.get(self.types).len.s == 0) {
                         return self.report(top.pos, "can't index empty array", .{});
                     }
 
-                    const ptr = try base.value.asPtr(top.pos, self);
+                    const ptr = try res.value.asPtr(top.pos, self);
 
-                    res = .ptr(
+                    res.set(.ptr(
                         a.get(self.types).elem,
                         self.bl.addIndexOffset(
                             self.sloc(top.pos),
@@ -2373,7 +2371,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                             a.get(self.types).elem.size(self.types),
                             index.?.load(self),
                         ),
-                    );
+                    ));
                 },
                 .Struct => |s| {
                     const idx = index orelse return self.report(
@@ -2392,7 +2390,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     }
                     const field = layout.fields[@intCast(i)];
 
-                    res = switch (res.normalized(tok.pos, self)) {
+                    res.set(switch (res.value.normalized(tok.pos, self)) {
                         .empty => .unit(field.ty),
                         .value => |v| b: {
                             std.debug.assert(field.offset == 0);
@@ -2402,14 +2400,14 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                             field.ty,
                             self.bl.addFieldOffset(self.sloc(tok.pos), p, field.offset),
                         ),
-                    };
+                    });
                 },
             }
 
             res.normalize(self);
         },
         .@".[" => {
-            const elem = self.peval(top.pos, res, Types.Id) catch |err| {
+            const elem = self.peval(top.pos, res.value, Types.Id) catch |err| {
                 lex.eatUntilClosingDelimeter();
                 return err;
             };
@@ -2434,29 +2432,26 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 self.bl.resizeLocal(slot, ty.size(self.types), @intFromEnum(ty));
             }
 
-            res = .ptr(ty, slot);
+            res.set(.ptr(ty, slot));
             res.normalize(self);
         },
         .@"(" => {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            res = try self.emitCall(top.pos, ctx, null, res, lex);
+            res.set(try self.emitCall(top.pos, ctx, null, res.value, lex));
         },
         .@"=" => {
-            var dst = LLValue.init(tok.pos, res);
-            defer dst.deinit(self);
-
-            const value = try self.typedExprPrec(dst.value.ty, .{
-                .loc = switch (dst.value.normalized(tok.pos, self)) {
+            const value = try self.typedExprPrec(res.value.ty, .{
+                .loc = switch (res.value.normalized(tok.pos, self)) {
                     .ptr => |p| p,
                     else => null,
                 },
             }, lex, prevPrec);
 
-            try self.assign(top.pos, dst.value, value);
+            try self.assign(top.pos, res.value, value);
 
-            res = .voidv;
+            res.set(.voidv);
         },
         .@":", .@":=" => {
             var ty: ?Types.Id = null;
@@ -2467,10 +2462,10 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 eq = try self.expect(lex, .@"=", " to assign a value");
             }
 
-            const index = switch (res.node()) {
+            const index = switch (res.value.node()) {
                 .variable => |i| i,
                 .value, .ptr, .empty => return self.report(tok.pos, "" ++
-                    "can't use this as an identifier (DEBUG: {})", .{res.tag}),
+                    "can't use this as an identifier (DEBUG: {})", .{res.value.tag}),
             };
 
             const slot: *Variable = &self.vars.items(.variable)[index];
@@ -2487,13 +2482,13 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             var value = try self.exprPrec(.{ .ty = ty }, lex, prevPrec);
             if (ty) |t| try self.typeCheck(eq.pos, .{}, &value, t);
 
-            res = .voidv;
+            res.set(.voidv);
             if (ctx.in_if_or_while) unwrap: {
                 if (value.ty.data() != .Option) {
                     self.report(top.pos, "{} is not optional", .{value.ty}) catch break :unwrap;
                 }
 
-                res = .value(.bool, self.emitOptionCheck(top.pos, .@"!=", value));
+                res.set(.value(.bool, self.emitOptionCheck(top.pos, .@"!=", value)));
                 value = try self.emitOptionUnwrap(top.pos, value);
             }
 
@@ -2552,14 +2547,13 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             }
         },
         .@"&&" => and_: {
-            var lhs = LLValue.init(tok.pos, res);
-            defer if (!is_ass_op) lhs.deinit(self);
+            ass_lhs.* = res.dupe();
 
-            try self.typeCheckLL(.{}, &lhs, .bool);
+            try self.typeCheckLL(.{}, res, .bool);
 
             var if_bl = self.bl.addIfAndBeginThen(
                 self.sloc(top.pos),
-                lhs.load(self),
+                res.load(self),
             );
 
             var alt = LLValue.init(
@@ -2571,11 +2565,11 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     error.Unreachable => {
                         if_bl.end(&self.bl, if_bl.beginElse(&self.bl));
 
-                        res = .value(.bool, self.bl.addIntImm(
+                        res.set(.value(.bool, self.bl.addIntImm(
                             self.sloc(top.pos),
                             .i8,
                             0,
-                        ));
+                        )));
 
                         break :and_;
                     },
@@ -2588,45 +2582,41 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
 
             if_bl.end(&self.bl, if_bl.beginElse(&self.bl));
 
-            ass_lhs.* = lhs;
-
-            res = Value.value(.bool, self.bl.addPhi(
+            res.set(Value.value(.bool, self.bl.addPhi(
                 self.sloc(top.pos),
                 alt.load(self),
                 self.bl.addIntImm(self.sloc(top.pos), .i8, 0),
-            ));
+            )));
         },
         .@"||" => or_: {
-            var lhs = LLValue.init(tok.pos, res);
+            ass_lhs.* = res.dupe();
 
-            ass_lhs.* = lhs;
-
-            if (lhs.value.ty != .bool and lhs.value.ty.data() != .Option) {
-                return self.report(top.pos, "{} is not a bool nor an optional", .{lhs.value.ty});
+            if (res.value.ty != .bool and res.value.ty.data() != .Option) {
+                return self.report(top.pos, "{} is not a bool nor an optional", .{res.value.ty});
             }
 
-            const is_unwrap = lhs.value.ty != .bool;
-            var res_ty = lhs.value.ty;
+            const is_unwrap = res.value.ty != .bool;
+            var res_ty = res.value.ty;
             if (is_unwrap) res_ty = res_ty.data().Option.get(self.types).inner;
 
             if (is_ass_op and is_unwrap) {
                 return self.report(top.pos, "compound assignment is not allowed here", .{});
             }
 
-            if (lhs.value.ty.size(self.types) == 0) {
-                res = try self.exprPrec(.{ .ty = res_ty }, lex, prevPrec);
+            if (res.value.ty.size(self.types) == 0) {
+                res.set(try self.exprPrec(.{ .ty = res_ty }, lex, prevPrec));
                 break :or_;
             }
 
             var if_bl = self.bl.addIfAndBeginThen(
                 self.sloc(top.pos),
                 if (is_unwrap)
-                    self.emitOptionCheck(top.pos, .@"!=", lhs.value)
+                    self.emitOptionCheck(top.pos, .@"!=", res.value)
                 else
-                    lhs.load(self),
+                    res.load(self),
             );
 
-            var unwrapped = LLValue.init(top.pos, lhs.value);
+            var unwrapped = LLValue.init(top.pos, res.value);
             defer unwrapped.deinitKeep();
 
             if (is_unwrap) {
@@ -2649,13 +2639,13 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                         if_bl.end(&self.bl, tk);
 
                         if (is_unwrap) {
-                            res = unwrapped.value;
+                            res.set(unwrapped.value);
                         } else {
-                            res = .value(.bool, self.bl.addIntImm(
+                            res.set(.value(.bool, self.bl.addIntImm(
                                 self.sloc(top.pos),
                                 .i8,
                                 0,
-                            ));
+                            )));
                         }
 
                         break :or_;
@@ -2666,10 +2656,10 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
             defer alt.deinit(self);
 
             if (is_unwrap) b: {
-                if (alt.value.ty == lhs.value.ty) {
+                if (alt.value.ty == res.value.ty) {
                     // we discard the unwrap, should be fine since it has no
                     // side effects
-                    unwrapped.set(lhs.value);
+                    unwrapped.set(res.value);
                 } else {
                     if (res_ty.isScalar(self.types)) {
                         alt.set(.value(res_ty, alt.load(self)));
@@ -2690,75 +2680,69 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
 
                 const phi = self.bl.addPhi(self.sloc(top.pos), lhs_vl, rhs_vl);
 
-                res = switch (rhs_n) {
+                res.set(switch (rhs_n) {
                     .empty => unreachable,
                     .value => .value(alt.value.ty, phi),
                     .ptr => .ptr(alt.value.ty, phi),
-                };
+                });
             } else {
                 alt.set(.value(.bool, alt.load(self)));
                 if_bl.end(&self.bl, tk);
 
-                res = .value(.bool, self.bl.addPhi(
+                res.set(.value(.bool, self.bl.addPhi(
                     self.sloc(top.pos),
                     self.bl.addIntImm(self.sloc(top.pos), .i8, 0),
                     alt.load(self),
-                ));
+                )));
             }
         },
         else => op: {
-            self.dbgReport(tok.pos, "lick lhs {}", .{res.load(tok.pos, self)});
-            var lhs = LLValue.init(tok.pos, res);
-            defer if (!is_ass_op) lhs.deinit(self);
+            ass_lhs.* = res.dupe();
 
             if ((top.kind == .@"!=" or top.kind == .@"==") and lex.eatMatch(.null)) {
                 std.debug.assert(!is_ass_op);
 
-                if (lhs.value.ty.data() != .Option) {
-                    return self.report(top.pos, "{} can not be compared with null", .{lhs.value.ty});
+                if (res.value.ty.data() != .Option) {
+                    return self.report(top.pos, "{} can not be compared with null", .{res.value.ty});
                 }
 
-                res = .value(.bool, self.emitOptionCheck(
+                res.set(.value(.bool, self.emitOptionCheck(
                     top.pos,
                     @enumFromInt(@intFromEnum(top.kind)),
-                    lhs.value,
-                ));
-
-                lhs.deinit(self);
+                    res.value,
+                )));
 
                 break :op;
             }
 
-            const vl = try self.exprPrec(.{ .ty = lhs.value.ty }, lex, prevPrec);
-            self.dbgReport(tok.pos, "lick rhs {}", .{vl.load(tok.pos, self)});
+            const vl = try self.exprPrec(.{ .ty = res.value.ty }, lex, prevPrec);
             var rhs = LLValue.init(lex.cursor, vl);
             defer rhs.deinit(self);
 
-            if (lhs.value.ty == .never or rhs.value.ty == .never) return .never;
+            if (res.value.ty == .never or rhs.value.ty == .never)
+                return self.silentReport();
 
-            if (lhs.value.ty.data() == .Pointer and
+            if (res.value.ty.data() == .Pointer and
                 (top.kind == .@"+" or top.kind == .@"-") and
                 rhs.value.ty.isBuiltin(.isInteger))
             {
-                const elem_ty = lhs.value.ty.data().Pointer.get(self.types).ty;
+                const elem_ty = res.value.ty.data().Pointer.get(self.types).ty;
 
-                res = Value.value(
-                    lhs.value.ty,
+                res.set(Value.value(
+                    res.value.ty,
                     self.bl.addIndexOffset(
                         self.sloc(top.pos),
-                        lhs.load(self),
+                        res.load(self),
                         if (top.kind == .@"+") .iadd else .isub,
                         elem_ty.size(self.types),
                         rhs.load(self),
                     ),
-                );
-
-                ass_lhs.* = lhs;
+                ));
 
                 break :op;
             }
 
-            if (lhs.value.ty.data() == .Pointer and
+            if (res.value.ty.data() == .Pointer and
                 rhs.value.ty.data() == .Pointer and
                 top.kind != .@"-" and !top.kind.isComparison())
             {
@@ -2766,16 +2750,16 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                     " each other, alternatively use @as(int, @bit_cast(expr))", .{});
             }
 
-            var oper_ty = ctx.ty orelse lhs.value.ty;
+            var oper_ty = ctx.ty orelse res.value.ty;
 
-            if (is_ass_op) oper_ty = lhs.value.ty;
-            if (top.kind.isComparison()) oper_ty = lhs.value.ty;
-            if (!lhs.value.ty.canUpcast(oper_ty, self.types)) {
-                oper_ty = lhs.value.ty;
+            if (is_ass_op) oper_ty = res.value.ty;
+            if (top.kind.isComparison()) oper_ty = res.value.ty;
+            if (!res.value.ty.canUpcast(oper_ty, self.types)) {
+                oper_ty = res.value.ty;
             }
 
             if (is_ass_op) {
-                oper_ty = lhs.value.ty;
+                oper_ty = res.value.ty;
             } else {
                 oper_ty = self.binOpUpcast(oper_ty, rhs.value.ty) catch {
                     return self.report(
@@ -2786,28 +2770,24 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, rs: Value) SuffixErr
                 };
             }
 
-            try self.typeCheckLL(.{}, &lhs, oper_ty);
+            try self.typeCheckLL(.{}, res, oper_ty);
             try self.typeCheckLL(.{}, &rhs, oper_ty);
 
             var result: Types.Id = oper_ty;
-            if (lhs.value.ty.data() == .Pointer) result = .int;
+            if (res.value.ty.data() == .Pointer) result = .int;
             if (top.kind.isComparison()) result = .bool;
 
             const op = try self.lexemeToBinOp(top.pos, top.kind, oper_ty);
 
-            ass_lhs.* = lhs;
-
-            res = Value.value(result, self.bl.addBinOp(
+            res.set(Value.value(result, self.bl.addBinOp(
                 self.sloc(top.pos),
                 op,
                 Abi.categorizeBuiltinUnwrapped(result.data().Builtin),
-                lhs.load(self),
+                res.load(self),
                 rhs.load(self),
-            ));
+            )));
         },
     }
-
-    return res;
 }
 
 pub fn ctor(self: *Codegen, pos: u32, ctx: Ctx, ty: Types.Id, lex: *Lexer) !Value {
@@ -2988,11 +2968,12 @@ pub fn structCtor(
 pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value {
     const tok = lex.next();
 
-    var res: Value = self.unitExpr(tok, ctx, lex) catch |err| switch (err) {
+    var res: LLValue = .init(tok.pos, self.unitExpr(tok, ctx, lex) catch |err| switch (err) {
         error.SyntaxError => return error.Report,
         error.Unreachable => return error.Unreachable,
         error.Report => .never,
-    };
+    });
+    defer res.deinitKeep();
 
     while (true) {
         var top = lex.peekNext();
@@ -3010,24 +2991,24 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
 
         var ass_lhs: ?LLValue = null;
 
-        res = self.suffix(.{
+        self.suffix(.{
             tok, top, prec, ctx, &ass_lhs, is_ass_op,
-        }, lex, res) catch |err| switch (err) {
+        }, lex, &res) catch |err| switch (err) {
             error.SyntaxError => return error.Report,
             error.Unreachable => return error.Unreachable,
-            error.Report => .never,
+            error.Report => {},
         };
 
         if (ass_lhs) |*lhs| {
             if (is_ass_op) {
-                try self.assign(top.pos, lhs.value, res);
-                lhs.deinit(self);
-                res = .voidv;
+                try self.assign(top.pos, lhs.value, res.value);
+                res.set(.voidv);
             }
+            lhs.deinit(self);
         }
     }
 
-    return res;
+    return res.value;
 }
 
 pub fn expectDestType(
@@ -3560,6 +3541,10 @@ pub fn assign(self: *Codegen, pos: u32, dest: Value, src: Value) !void {
         .variable => |i| {
             const slot: *Variable = &self.vars.items(.variable)[i];
 
+            if (slot.value == std.math.maxInt(u32)) {
+                return self.report(pos, "can't assign to undeclared variable", .{});
+            }
+
             switch (slot.meta.kind) {
                 .empty => {},
                 .value => self.bl.setScopeValue(
@@ -3581,7 +3566,7 @@ pub fn assign(self: *Codegen, pos: u32, dest: Value, src: Value) !void {
             self.emitGenericStore(pos, p, src);
         },
         .value => {
-            self.report(pos, "can't assign to a value", .{}) catch {};
+            return self.report(pos, "can't assign to a value", .{});
         },
         .empty => {},
     }
@@ -3782,6 +3767,7 @@ pub fn validateType(self: *Codegen, slc: graph.Sloc, value: i64) !Types.Id {
         std.meta.Tag(Types.Data),
         repr.tag,
     ) catch {
+        std.debug.dumpCurrentStackTrace(@returnAddress());
         return self.reportSloc(slc, "the type value is corrupted, (invalid tag)", .{});
     };
 
@@ -3928,7 +3914,7 @@ pub fn partialEvalGlobal(self: *Codegen, addr: *BNode) !*BNode {
 
     std.mem.sortUnstable(BNode.Out, interesting_ops.items, {}, struct {
         fn less(_: void, lhs: BNode.Out, rhs: BNode.Out) bool {
-            return lhs.get().idWithoutLock() < rhs.get().idWithoutLock();
+            return lhs.get().id < rhs.get().id;
         }
     }.less);
 
@@ -4288,22 +4274,28 @@ pub fn reportSloc(self: *Codegen, slc: graph.Sloc, fmt: []const u8, args: anytyp
 pub const LLValue = struct {
     value: Value,
     pos: u32,
-    prev_id: u16,
     checksum: if (graph.is_debug) ?*BNode else void,
 
     pub fn init(pos: u32, value: Value) LLValue {
+        switch (value.node()) {
+            .empty, .variable => {},
+            .value, .ptr => |p| _ = p.lock(),
+        }
+
         return .{
             .value = value,
             .pos = pos,
-            .prev_id = switch (value.node()) {
-                .empty, .variable => 0,
-                .value, .ptr => |p| p.lock().prev_id,
-            },
             .checksum = if (graph.is_debug) switch (value.node()) {
                 .empty, .variable => null,
                 .value, .ptr => |p| p,
             },
         };
+    }
+
+    pub fn normalize(self: *LLValue, gen: *Codegen) void {
+        self.tmpUnlock();
+        self.value.normalize(gen);
+        self.tmpLock();
     }
 
     pub fn set(self: *LLValue, to: Value) void {
@@ -4312,24 +4304,29 @@ pub const LLValue = struct {
         self.tmpLock();
     }
 
+    pub fn dupe(self: *LLValue) LLValue {
+        self.tmpLock();
+        return self.*;
+    }
+
     pub fn tmpUnlock(self: *LLValue) void {
         switch (self.value.node()) {
             .empty, .variable => {},
             .value, .ptr => |p| {
                 std.debug.assert(p == self.checksum);
-                BNode.Lock.unlock(.{ .prev_id = self.prev_id, .node = p });
+                BNode.Lock.unlock(.{ .node = p });
             },
         }
     }
 
     pub fn tmpLock(self: *LLValue) void {
-        self.prev_id = switch (self.value.node()) {
-            .empty, .variable => 0,
-            .value, .ptr => |p| b: {
-                self.checksum = p;
-                break :b p.lock().prev_id;
+        switch (self.value.node()) {
+            .empty, .variable => {},
+            .value, .ptr => |p| {
+                if (graph.is_debug) self.checksum = p;
+                _ = p.lock();
             },
-        };
+        }
     }
 
     pub fn deinitKeep(self: *LLValue) void {
@@ -4341,11 +4338,9 @@ pub const LLValue = struct {
         switch (self.value.node()) {
             .empty, .variable => {},
             .value, .ptr => |p| {
-                if (0 == 0) gen.dbgReport(self.pos, "{}", .{p});
                 std.debug.assert(p == self.checksum);
-                BNode.Lock.unlock(.{ .prev_id = self.prev_id, .node = p });
-                // NOTE: we make sure we are not locked as locks stack
-                if (p.outputs().len == 0 and p.id != self.prev_id) {
+                BNode.Lock.unlock(.{ .node = p });
+                if (p.outputs().len == 0) {
                     gen.bl.func.kill(p);
                 }
             },

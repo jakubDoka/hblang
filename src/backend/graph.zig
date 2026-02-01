@@ -178,7 +178,7 @@ pub const BinOp = enum(u8) {
             .slt => @intFromBool(lhs < rhs),
             .sge => @intFromBool(lhs >= rhs),
             .sle => @intFromBool(lhs <= rhs),
-        }) & dt.mask().?;
+        }) & dt.mask();
     }
 
     pub fn propagatesPoison(self: BinOp) enum { yes, into_other_value } {
@@ -226,7 +226,7 @@ pub const BinOp = enum(u8) {
     pub fn neutralElememnt(self: BinOp, ty: DataType) ?i64 {
         return switch (self) {
             .iadd, .isub, .fsub, .fadd, .bxor, .bor, .ishl, .sshr, .ushr => 0,
-            .band => @as(i64, -1) & ty.mask().?,
+            .band => @as(i64, -1) & ty.mask(),
             .imul, .sdiv, .udiv => 1,
             .fmul, .fdiv => if (ty == .f64)
                 @bitCast(@as(f64, 1.0))
@@ -299,11 +299,11 @@ pub const UnOp = enum(u8) {
                 @as(u32, @bitCast(@as(f32, @floatCast(tf(oper)))))
             else
                 @bitCast(@as(f64, @floatCast(tf32(oper)))),
-        }) & src.mask().?;
+        }) & src.mask();
     }
 };
 
-pub const DataType = enum(u16) {
+pub const DataType = enum(u8) {
     bot,
     i8,
     i16,
@@ -311,62 +311,10 @@ pub const DataType = enum(u16) {
     i64,
     f32,
     f64,
+    v128,
+    v254,
+    v512,
     top,
-    _,
-
-    // TODO: derive this from DataType
-    pub const Kind = enum(u3) {
-        bot,
-        i8,
-        i16,
-        i32,
-        i64,
-        f32,
-        f64,
-        top,
-
-        pub fn isFloat(self: Kind) bool {
-            return switch (self) {
-                .f32, .f64 => true,
-                else => false,
-            };
-        }
-
-        pub fn size(self: Kind) u8 {
-            return switch (self) {
-                .top, .bot => unreachable,
-                .i8 => 1,
-                .i16 => 2,
-                .i32, .f32 => 4,
-                .i64, .f64 => 8,
-            };
-        }
-
-        pub fn mask(self: Kind) i64 {
-            return switch (self) {
-                .top, .bot => unreachable,
-                .i8 => 0xFF,
-                .i16 => 0xFFFF,
-                .i32, .f32 => 0xFFFFFFFF,
-                .i64, .f64 => -1,
-            };
-        }
-    };
-
-    comptime {
-        std.debug.assert(std.meta.fields(Kind).len ==
-            std.meta.fields(DataType).len);
-    }
-
-    pub const Raw = packed struct(u16) {
-        kind: Kind,
-        one_less_then_lanes: u5 = 0,
-        unused: u8 = 0,
-
-        pub fn lanes(self: Raw) u8 {
-            return @as(u8, self.one_less_then_lanes) + 1;
-        }
-    };
 
     pub fn memUnitForAlign(alignment: u64, float: bool) DataType {
         if (float) return @enumFromInt(@intFromEnum(DataType.f32) +
@@ -375,58 +323,15 @@ pub const DataType = enum(u16) {
             @min(std.math.log2_int(u64, alignment), 3));
     }
 
-    pub fn toRaw(self: DataType) Raw {
-        return @bitCast(@intFromEnum(self));
-    }
-
-    pub fn fromRaw(raw: Raw) DataType {
-        return @enumFromInt(@as(u16, @bitCast(raw)));
-    }
-
-    pub fn vec(ty: DataType, lans: u64) DataType {
-        const raw = ty.toRaw();
-        return .fromRaw(.{
-            .kind = raw.kind,
-            .one_less_then_lanes = @intCast(raw.lanes() * lans - 1),
-        });
-    }
-
-    pub fn lanes(self: DataType) u64 {
-        return self.toRaw().lanes();
-    }
-
-    pub fn size(self: DataType) u8 {
-        const raw = self.toRaw();
-        return raw.kind.size() * raw.lanes();
-    }
-
     pub fn halv(self: DataType) DataType {
         std.debug.assert(self != .i8);
         std.debug.assert(self != .f32);
         return @enumFromInt(@intFromEnum(self) - 1);
     }
 
-    pub fn mask(self: DataType) ?i64 {
-        return switch (self) {
-            .top, .bot => unreachable,
-            .i8 => 0xFF,
-            .i16 => 0xFFFF,
-            .i32, .f32 => 0xFFFFFFFF,
-            .i64, .f64 => -1,
-            else => {
-                if (self.size() == 8) return -1;
-                return null;
-            },
-        };
-    }
-
     pub fn isSse(self: DataType) bool {
-        return self.lanes() != 1;
-    }
-
-    pub fn isFloat(self: DataType) bool {
         return switch (self) {
-            .f32, .f64 => true,
+            .v128, .v254, .v512 => true,
             else => false,
         };
     }
@@ -451,11 +356,38 @@ pub const DataType = enum(u16) {
     }
 
     pub fn format(self: DataType, writer: *std.Io.Writer) !void {
-        const raw = self.toRaw();
-        try writer.print("{s}", .{@tagName(raw.kind)});
-        if (raw.lanes() != 1) {
-            try writer.print("x{}", .{raw.lanes()});
-        }
+        try writer.print("{s}", .{@tagName(self)});
+    }
+
+    pub fn isFloat(self: DataType) bool {
+        return switch (self) {
+            .f32, .f64 => true,
+            else => false,
+        };
+    }
+
+    pub fn size(self: DataType) u8 {
+        return switch (self) {
+            .top, .bot => unreachable,
+            .i8 => 1,
+            .i16 => 2,
+            .i32, .f32 => 4,
+            .i64, .f64 => 8,
+            .v128 => 16,
+            .v254 => 32,
+            .v512 => 64,
+        };
+    }
+
+    pub fn mask(self: DataType) i64 {
+        return switch (self) {
+            .top, .bot => unreachable,
+            .i8 => 0xFF,
+            .i16 => 0xFFFF,
+            .i32, .f32 => 0xFFFFFFFF,
+            .i64, .f64 => -1,
+            .v128, .v254, .v512 => unreachable,
+        };
     }
 };
 
@@ -1203,6 +1135,7 @@ pub fn Func(comptime Backend: type) type {
             id: u16,
             schedule: u16 = std.math.maxInt(u16),
             data_type: mod.DataType = .top,
+            tmp_rc: u8 = 0,
 
             input_ordered_len: u16,
             input_len: u16,
@@ -1533,13 +1466,14 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn format(self: *const Node, writer: *std.Io.Writer) !void {
+                @constCast(self).assertAlive();
                 const colors: std.io.tty.Config = if (!utils.freestanding and
                     writer.vtable.drain == std.fs.File.stderr().writer(&.{})
                         .interface.vtable.drain)
                     std.io.tty.detectConfig(std.fs.File.stderr())
                 else
                     .escape_codes;
-                self.fmt(null, writer, colors);
+                @constCast(self).fmt(null, writer, colors);
             }
 
             fn isVisibel(comptime Ty: type) bool {
@@ -1609,7 +1543,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn fmt(
-                self: *const Node,
+                self: *Node,
                 scheduled: ?u16,
                 writer: *std.Io.Writer,
                 colors: std.io.tty.Config,
@@ -1628,7 +1562,7 @@ pub fn Func(comptime Backend: type) type {
 
                 switch (self.kind) {
                     .CInt => {
-                        const ext = self.extraConst(.CInt);
+                        const ext = self.extra(.CInt);
                         switch (self.data_type) {
                             .f64 => try writer.print(" = {d}", .{tf(ext.value)}),
                             .f32 => try writer.print(" = {d}", .{tf32(ext.value)}),
@@ -1636,7 +1570,7 @@ pub fn Func(comptime Backend: type) type {
                         }
                     },
                     inline else => |t| {
-                        const ext = self.extraConst(t);
+                        const ext = self.extra(t);
                         if (@TypeOf(ext.*) != void) {
                             if (comptime isVisibel(@TypeOf(ext.*))) {
                                 writer.writeAll(": ") catch unreachable;
@@ -1719,17 +1653,12 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn isLocked(self: *Node) bool {
-                return self.id & 0x8000 != 0;
-            }
-
-            pub fn idWithoutLock(self: *Node) u16 {
-                return self.id & ~@as(u16, 0x8000);
+                return self.tmp_rc != 0;
             }
 
             pub const Lock = struct {
                 // TODO: we can inline the tag in the pointer
                 node: *Node,
-                prev_id: u16,
 
                 pub const Meta = struct {
                     trace: std.builtin.StackTrace,
@@ -1737,14 +1666,14 @@ pub fn Func(comptime Backend: type) type {
 
                 pub fn unlock(slf: @This()) void {
                     std.debug.assert(slf.node.isLocked());
-                    slf.node.id = slf.prev_id;
+                    slf.node.tmp_rc -= 1;
                 }
             };
 
             threadlocal var arna: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
 
             pub fn lock(self: *Node) Lock {
-                if (is_debug) {
+                if (is_debug and (!self.isLocked() or true)) {
                     self.lock_at = arna.allocator().create(Lock.Meta) catch unreachable;
                     self.lock_at.* = Lock.Meta{
                         .trace = std.builtin.StackTrace{
@@ -1756,8 +1685,8 @@ pub fn Func(comptime Backend: type) type {
                     std.debug.captureStackTrace(@returnAddress(), &self.lock_at.trace);
                 }
 
-                defer self.id |= 0x8000;
-                return .{ .prev_id = self.id, .node = self };
+                self.tmp_rc += 1;
+                return .{ .node = self };
             }
 
             pub fn inputs(self: *Node) []?*Node {
@@ -1796,15 +1725,6 @@ pub fn Func(comptime Backend: type) type {
                     self.outputs(),
                     .init(output, index, self),
                 ).?;
-            }
-
-            pub fn extraConst(
-                self: *const Node,
-                comptime kind: Kind,
-            ) *const ClassFor(kind) {
-                std.debug.assert(self.kind == kind);
-                const ptr: *const LayoutFor(kind) = @ptrCast(@alignCast(self));
-                return &ptr.ext;
             }
 
             pub fn extra(self: *Node, comptime kind: Kind) *ClassFor(kind) {

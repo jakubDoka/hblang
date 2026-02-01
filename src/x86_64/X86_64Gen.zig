@@ -1900,7 +1900,7 @@ pub fn emitMemStoreOrLoad(
         .i16 => self.emitByte(0x66),
         .f32 => self.emitByte(0xf3),
         .f64 => self.emitByte(0xf2),
-        else => std.debug.assert(dt.lanes() == 1),
+        else => std.debug.assert(!dt.isSse()),
     }
     self.emitRex(reg, bse, .no_index, dt.size());
     self.emitBytes(switch (dt) {
