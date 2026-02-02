@@ -194,7 +194,7 @@ pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType
     const mem = self.memory();
     const ctrl = self.control();
     const store = self.func.addNode(.Store, sloc, ty, &.{ ctrl, mem, addr, value }, .{});
-    self.func.setInputNoIntern(self.scope.?, 1, store);
+    self.func.setInputNoIntern(self.scope orelse return, 1, store);
 }
 
 pub fn addFieldStore(
@@ -221,7 +221,7 @@ pub fn addFixedMemCpy(self: *Builder, sloc: graph.Sloc, dst: *BuildNode, src: *B
     const ctrl = self.control();
     const siz = self.addIntImm(sloc, .i64, @bitCast(size));
     const mcpy = self.func.addNode(.MemCpy, sloc, .top, &.{ ctrl, mem, dst, src, siz }, .{});
-    self.func.setInputNoIntern(self.scope.?, 1, mcpy);
+    self.func.setInputNoIntern(self.scope orelse return, 1, mcpy);
 }
 
 pub fn addFieldOffset(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: i64) *BuildNode {
@@ -229,6 +229,7 @@ pub fn addFieldOffset(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset
 }
 
 pub fn addGlobalAddr(self: *Builder, sloc: graph.Sloc, arbitrary_global_id: u32) SpecificNode(.GlobalAddr) {
+    std.debug.assert(arbitrary_global_id != 0xaaaaaaaa);
     return self.func.addGlobalAddr(sloc, arbitrary_global_id);
 }
 
@@ -311,12 +312,12 @@ pub fn unpin(self: *Builder, to_unpin: SpecificNode(.Pin)) *Func.Node {
     return unpinned;
 }
 
-pub fn memory(self: *Builder) *Func.Node {
+pub fn memory(self: *Builder) ?*Func.Node {
     return self._readScopeValue(1);
 }
 
-pub fn control(self: *Builder) *Func.Node {
-    return getScopeValues(self.scope.?)[0];
+pub fn control(self: *Builder) ?*Func.Node {
+    return getScopeValues(self.scope orelse return null)[0];
 }
 
 pub const scope_value_start = 2;
@@ -360,11 +361,11 @@ pub fn addPins(self: *Builder) Pins {
 }
 
 pub fn pushScopeValue(self: *Builder, value: *BuildNode) u16 {
-    return self.pushToScope(self.scope.?, value) - scope_value_start;
+    return self.pushToScope(self.scope orelse return 0, value) - scope_value_start;
 }
 
 pub fn setScopeValue(self: *Builder, index: usize, value: *BuildNode) void {
-    self.func.setInputNoIntern(self.scope.?, scope_value_start + index, value);
+    self.func.setInputNoIntern(self.scope orelse return, scope_value_start + index, value);
 }
 
 fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) u16 {
@@ -386,7 +387,7 @@ fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) u16 {
 }
 
 pub fn getScopeValue(self: *Builder, index: usize) *Func.Node {
-    return self._readScopeValue(scope_value_start + index);
+    return self._readScopeValue(scope_value_start + index) orelse self.addStub(.none, .top);
 }
 
 pub fn getScopeValues(scope: SpecificNode(.Scope)) []*BuildNode {
@@ -395,8 +396,8 @@ pub fn getScopeValues(scope: SpecificNode(.Scope)) []*BuildNode {
     return @ptrCast(scope.input_base[0..scope.input_ordered_len]);
 }
 
-pub fn _readScopeValue(self: *Builder, index: usize) *Func.Node {
-    return getScopeValueMulty(&self.func, self.scope.?, index);
+pub fn _readScopeValue(self: *Builder, index: usize) ?*Func.Node {
+    return getScopeValueMulty(&self.func, self.scope orelse return null, index);
 }
 
 pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.Node {
@@ -447,7 +448,7 @@ pub fn mergeScopes(
 }
 
 pub fn cloneScope(self: *Builder) SpecificNode(.Scope) {
-    const values = getScopeValues(self.scope.?);
+    const values = getScopeValues(self.scope orelse return self.func.addNode(.Scope, .none, .top, &.{}, .{}));
     return self.func.addNode(.Scope, .none, .top, values, .{});
 }
 
@@ -492,6 +493,10 @@ pub const If = struct {
 
     pub fn beginElse(self: *If, builder: *Builder) EndToken {
         const then = builder.scope;
+        if (self.saved_branch.else_.inputs().len == 0) {
+            self.saved_branch = .{ .then = null };
+            return @enumFromInt(0);
+        }
         builder.scope = self.saved_branch.else_;
         self.saved_branch = .{ .then = then };
         builder.func.setInputNoIntern(
@@ -514,8 +519,28 @@ pub const If = struct {
     }
 };
 
+pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If {
+    const else_ = self.cloneScope();
+
+    const builder_scope = self.scope orelse {
+        return .{
+            .if_node = self.func.addNode(.If, sloc, .top, &.{}, .{ .id = 0 }),
+            .saved_branch = .{ .else_ = else_ },
+        };
+    };
+
+    const if_node = self.func.addNode(.If, sloc, .top, &.{ self.control(), cond }, .{ .id = 0 });
+    self.func.setInputNoIntern(builder_scope, 0, self.func.addNode(.Then, .none, .top, &.{if_node}, .{}));
+    return .{
+        .if_node = if_node,
+        .saved_branch = .{ .else_ = else_ },
+    };
+}
+
 pub fn addPhi(self: *Builder, sloc: graph.Sloc, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.Phi) {
-    std.debug.assert(self.control().kind == .Region);
+    if (self.scope == null) return self.func.addNode(.Phi, sloc, .top, &.{}, .{});
+
+    std.debug.assert(self.control().?.kind == .Region);
     return self.func.addNode(
         .Phi,
         sloc,
@@ -523,16 +548,6 @@ pub fn addPhi(self: *Builder, sloc: graph.Sloc, lhs: *BuildNode, rhs: *BuildNode
         &.{ self.control(), lhs, rhs },
         .{},
     );
-}
-
-pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If {
-    const else_ = self.cloneScope();
-    const if_node = self.func.addNode(.If, sloc, .top, &.{ self.control(), cond }, .{ .id = 0 });
-    self.func.setInputNoIntern(self.scope.?, 0, self.func.addNode(.Then, .none, .top, &.{if_node}, .{}));
-    return .{
-        .if_node = if_node,
-        .saved_branch = .{ .else_ = else_ },
-    };
 }
 
 pub const Loop = struct {
@@ -547,12 +562,14 @@ pub const Loop = struct {
     }
 
     pub fn addControl(self: *Loop, builder: *Builder, kind: Loop.Control) void {
+        const builder_scope = builder.scope orelse return;
+
         if (self.control.getPtr(kind).*) |ctrl| {
-            const rhs = mergeScopes(&builder.func, builder.scope.?, ctrl);
+            const rhs = mergeScopes(&builder.func, builder_scope, ctrl);
             getScopeValues(rhs)[0].extra(.Region).preserve_identity_phys = kind == .@"continue";
         } else {
-            builder._truncateScope(builder.scope.?, self.scope.node.inputs().len);
-            self.control.set(kind, builder.scope.?);
+            builder._truncateScope(builder_scope, self.scope.node.inputs().len);
+            self.control.set(kind, builder_scope);
         }
         if (kind == .@"break") self.markBreaking();
         builder.scope = null;
@@ -562,7 +579,7 @@ pub const Loop = struct {
         if (self.control.get(.@"continue")) |cscope| {
             if (builder.scope) |scope| {
                 builder.scope = mergeScopes(&builder.func, scope, cscope);
-                builder.control().extra(.Region).preserve_identity_phys = true;
+                builder.control().?.extra(.Region).preserve_identity_phys = true;
             } else {
                 builder.scope = cscope;
             }
@@ -576,13 +593,16 @@ pub const Loop = struct {
         if (self.control.get(.@"continue")) |cscope| {
             if (builder.scope) |scope| {
                 builder.scope = mergeScopes(&builder.func, scope, cscope);
-                builder.control().extra(.Region).preserve_identity_phys = true;
+                builder.control().?.extra(.Region).preserve_identity_phys = true;
             } else {
                 builder.scope = cscope;
             }
         }
 
         const init_values = getScopeValues(self.scope.node);
+
+        if (init_values.len == 0) return;
+
         const start = 1;
         if (builder.scope) |backedge| {
             const update_values = getScopeValues(backedge);
@@ -634,14 +654,19 @@ pub const Loop = struct {
 };
 
 pub fn addLoopAndBeginBody(self: *Builder, sloc: graph.Sloc) Loop {
+    const scope = self.scope orelse return .{
+        .scope = self.cloneScope().lock(),
+    };
+
     const loop = self.func.addNode(.Loop, sloc, .top, &.{
         self.control(),
         null,
     }, .{});
-    self.func.setInputNoIntern(self.scope.?, 0, loop);
+
+    self.func.setInputNoIntern(scope, 0, loop);
     const pscope = self.cloneScope();
-    for (1..self.scope.?.input_ordered_len) |i| {
-        self.func.setInputNoIntern(self.scope.?, i, pscope);
+    for (1..scope.input_ordered_len) |i| {
+        self.func.setInputNoIntern(scope, i, pscope);
     }
     return .{ .scope = pscope.lock() };
 }
@@ -650,9 +675,11 @@ pub const Block = struct {
     prev_scope: ?BuildNode.Lock = null,
 
     pub fn addBreak(self: *Block, bl: *Builder) void {
+        const scope = bl.scope orelse return;
+
         if (self.prev_scope) |ps| {
             ps.unlock();
-            self.prev_scope = mergeScopes(&bl.func, bl.scope.?, ps.node).lock();
+            self.prev_scope = mergeScopes(&bl.func, scope, ps.node).lock();
         } else {
             self.prev_scope = if (bl.scope) |s| s.lock() else null;
         }
@@ -805,11 +832,20 @@ pub const Call = struct {
         return_params: ?[]const graph.AbiParam,
         ret_buf: *[2]*BuildNode,
     ) []*BuildNode {
+        const scope = bl.scope orelse {
+            if (return_params) |rp| {
+                @memset(ret_buf, bl.addStub(sloc, .i64));
+                return ret_buf[0..rp.len];
+            } else {
+                return undefined;
+            }
+        };
+
         bl.func.setInputNoIntern(self.call, 1, bl.memory());
         const call_end = bl.func.addNode(.CallEnd, sloc, .top, &.{self.call}, .{});
-        bl.func.setInputNoIntern(bl.scope.?, 0, call_end);
+        bl.func.setInputNoIntern(scope, 0, call_end);
         const call_mem = bl.func.addNode(.Mem, sloc, .top, &.{call_end}, .{});
-        bl.func.setInputNoIntern(bl.scope.?, 1, call_mem);
+        bl.func.setInputNoIntern(scope, 1, call_mem);
 
         const extra = self.call.extra(.Call);
 
@@ -869,6 +905,8 @@ pub fn addCall(
 }
 
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
+    const scope = self.scope orelse return;
+
     for (values, self.func.signature.returns().?) |val, rtt|
         if (val.data_type != val.data_type.meet(rtt.getReg()))
             utils.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt.getReg()) });
@@ -895,14 +933,16 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
         }
     }
 
-    killScope(&self.func, self.scope.?);
+    killScope(&self.func, scope);
     self.scope = null;
 }
 
 pub fn addTrap(self: *Builder, sloc: graph.Sloc, code: u64) void {
-    self.func.addTrap(sloc, self.control(), code, .intern);
+    const scope = self.scope orelse return;
 
-    killScope(&self.func, self.scope.?);
+    self.func.addTrap(sloc, self.control().?, code, .intern);
+
+    killScope(&self.func, scope);
     self.scope = null;
 }
 
