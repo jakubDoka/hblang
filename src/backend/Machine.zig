@@ -207,15 +207,20 @@ pub const Data = struct {
         // TODO: use binary search
         for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rel| {
             if (rel.offset == offset) {
-                const sm = &self.syms.items[@intFromEnum(rel.target)];
                 // TODO: This is slow
                 for (self.funcs.items, 0..) |f, i| {
                     if (rel.target == f) {
                         return .{ .func = @intCast(i) };
                     }
                 }
-                const gid: u32 = @bitCast(self.code.items[sm.offset - 4 ..][0..4].*);
-                return .{ .global = gid };
+
+                for (self.globals.items, 0..) |f, i| {
+                    if (rel.target == f) {
+                        return .{ .global = @intCast(i) };
+                    }
+                }
+
+                unreachable;
             }
         }
 

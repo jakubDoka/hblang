@@ -244,7 +244,8 @@ pub fn buildLow(
                     (peek.kind == .@"}" or
                         peek.kind == .@";" or
                         peek.kind == .@":=" or
-                        peek.kind == .@":"))
+                        peek.kind == .@":" or
+                        peek.kind == .Ident))
                 {
                     fields.append(tmp.arena.allocator(), ident.pos) catch unreachable;
                 }

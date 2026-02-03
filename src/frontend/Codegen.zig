@@ -21,7 +21,7 @@ file: File.Id,
 scope: Types.AnyScopeRef,
 cmptime_values: std.ArrayList(Types.ComptimeValue) = .empty,
 name: Types.Scope.NamePos = .empty,
-vars: Scope = .empty,
+vars: std.MultiArrayList(VEntry) = .empty,
 defers: std.ArrayList(u32) = .empty,
 frozen_vars: usize = 0,
 var_pins: BBuilder.Pins,
@@ -31,8 +31,6 @@ bl: BBuilder,
 target: Types.Target = .runtime,
 
 pub const undeclared_prefix: u8 = 0;
-
-pub const Scope = std.MultiArrayList(VEntry);
 
 pub const Loop = struct {
     prev: ?*Loop,
@@ -80,14 +78,6 @@ pub const Value = struct {
     pub const voidv = unit(.void);
     pub const never = unit(.never);
 
-    pub fn isPinned(self: Value, codegen: *Codegen) bool {
-        return switch (self.node()) {
-            .variable, .empty => false,
-            .value => |v| codegen.bl.isPinned(v),
-            .ptr => |p| codegen.bl.isPinned(p),
-        };
-    }
-
     pub fn load(self: Value, pos: u32, gen: *Codegen) *BNode {
         return switch (self.normalized(pos, gen)) {
             .empty => if (self.ty == .never)
@@ -104,7 +94,8 @@ pub const Value = struct {
 
                 const ty = gen.types.abi
                     .categorizeAssumeReg(self.ty, gen.types);
-                return gen.bl.peep(gen.bl.addLoad(gen.sloc(pos), p, ty));
+                const ld = gen.emitArbitraryLoad(pos, p, ty, self.ty.size(gen.types));
+                return gen.bl.peep(ld);
             },
         };
     }
@@ -114,41 +105,6 @@ pub const Value = struct {
             .variable, .empty => {},
             .value => self.value_.node = codegen.bl.peep(self.value_.node),
             .ptr => self.value_.node = codegen.bl.peep(self.value_.node),
-        };
-    }
-
-    pub fn pin(self: Value, codegen: *Codegen) ?*BNode {
-        return switch (self.node()) {
-            .variable, .empty => null,
-            .value => |v| codegen.bl.pin(v),
-            .ptr => |p| codegen.bl.pin(p),
-        };
-    }
-
-    pub fn unpin(self: *Value, codegen: *Codegen, pn: ?*BNode) void {
-        const tmp = self.*;
-        self.* = switch (self.node()) {
-            .variable, .empty => return std.debug.assert(pn == null),
-            .value => .value(tmp.ty, codegen.bl.unpin(pn.?)),
-            .ptr => .ptr(tmp.ty, codegen.bl.unpin(pn.?)),
-        };
-    }
-
-    pub fn unpinKeep(self: *Value, codegen: *Codegen, pn: ?*BNode) void {
-        const tmp = self.*;
-        self.* = switch (self.node()) {
-            .variable, .empty => return std.debug.assert(pn == null),
-            .value => .value(tmp.ty, codegen.bl.unpinKeep(pn.?)),
-            .ptr => .ptr(tmp.ty, codegen.bl.unpinKeep(pn.?)),
-        };
-    }
-
-    pub fn sync(self: *Value, pn: ?*BNode) void {
-        const tmp = self.*;
-        self.* = switch (self.node()) {
-            .variable, .empty => return std.debug.assert(pn == null),
-            .value => .value(tmp.ty, pn.?.inputs()[0].?),
-            .ptr => .ptr(tmp.ty, pn.?.inputs()[0].?),
         };
     }
 
@@ -241,11 +197,93 @@ pub const Value = struct {
     }
 };
 
-pub const NormalizedNode2 = union(enum) {
-    empty,
-    value: *BNode,
-    compound_value: *BNode,
-    ptr: *BNode,
+// Long Lived
+pub const LLValue = struct {
+    value: Value,
+    pos: u32,
+    checksum: if (graph.is_debug) ?*BNode else void,
+
+    pub fn init(pos: u32, value: Value) LLValue {
+        switch (value.node()) {
+            .empty, .variable => {},
+            .value, .ptr => |p| _ = p.lock(),
+        }
+
+        return .{
+            .value = value,
+            .pos = pos,
+            .checksum = if (graph.is_debug) switch (value.node()) {
+                .empty, .variable => null,
+                .value, .ptr => |p| p,
+            },
+        };
+    }
+
+    pub fn normalize(self: *LLValue, gen: *Codegen) void {
+        self.tmpUnlock();
+        self.value.normalize(gen);
+        self.tmpLock();
+    }
+
+    pub fn set(self: *LLValue, to: Value) void {
+        self.tmpUnlock();
+        self.value = to;
+        self.tmpLock();
+    }
+
+    pub fn peep(self: *LLValue, gen: *Codegen) void {
+        self.tmpUnlock();
+        self.value.peep(gen);
+        self.tmpLock();
+    }
+
+    pub fn dupe(self: *LLValue) LLValue {
+        self.tmpLock();
+        return self.*;
+    }
+
+    pub fn tmpUnlock(self: *LLValue) void {
+        switch (self.value.node()) {
+            .empty, .variable => {},
+            .value, .ptr => |p| {
+                std.debug.assert(p == self.checksum);
+                BNode.Lock.unlock(.{ .node = p });
+            },
+        }
+    }
+
+    pub fn tmpLock(self: *LLValue) void {
+        switch (self.value.node()) {
+            .empty, .variable => {},
+            .value, .ptr => |p| {
+                if (graph.is_debug) self.checksum = p;
+                _ = p.lock();
+            },
+        }
+    }
+
+    pub fn deinitKeep(self: *LLValue) void {
+        self.tmpUnlock();
+        self.* = undefined;
+    }
+
+    pub fn deinit(self: *LLValue, gen: *Codegen) void {
+        switch (self.value.node()) {
+            .empty, .variable => {},
+            .value, .ptr => |p| {
+                std.debug.assert(p == self.checksum);
+                BNode.Lock.unlock(.{ .node = p });
+                if (p.outputs().len == 0) {
+                    gen.bl.func.kill(p);
+                }
+            },
+        }
+        self.* = undefined;
+    }
+
+    pub fn load(self: LLValue, cg: *Codegen) *BNode {
+        return self.value.load(self.pos, cg);
+    }
 };
 
 pub const NormalizedNode = union(enum) {
@@ -328,17 +366,27 @@ pub fn sloc(self: *Codegen, pos: u32) graph.Sloc {
     return .{ .namespace = self.file.index(), .index = pos };
 }
 
-pub fn lookupIdent(
+pub fn lookupIdent(self: *Codegen, scope: Types.AnyScopeRef, name: []const u8) ?Value {
+    return self.lookupIdentLow(scope, name, false);
+}
+
+pub fn lookupIdentDotted(self: *Codegen, scope: Types.AnyScopeRef, name: []const u8) ?Value {
+    return self.lookupIdentLow(scope, name, true);
+}
+
+pub fn lookupIdentLow(
     self: *Codegen,
     scope: Types.AnyScopeRef,
     name: []const u8,
+    dotted: bool,
 ) ?Value {
     const scope_meta = scope.data().scope(self.types);
     const file = scope_meta.file.get(self.types);
 
+    var dt = dotted;
     var scope_cursor = scope.data();
     while (true) {
-        if (scope_cursor == .Enum) {
+        if (scope_cursor == .Enum and dt) {
             const en = scope_cursor.Enum.get(self.types);
             if (en.lookupField(self.types, name)) |field| {
                 return .value(.nany(scope_cursor.Enum), self.bl.addIntImm(
@@ -348,6 +396,8 @@ pub fn lookupIdent(
                 ));
             }
         }
+
+        dt = false;
 
         if (scope_cursor.downcast(Types.UnorderedScope)) |us| {
             if (us.decls(self.types).lookup(file.source, name)) |vl| {
@@ -424,7 +474,7 @@ pub fn lookupIdent(
                         return null;
                     };
 
-                    glb = self.lookupIdent(
+                    glb = self.lookupIdentDotted(
                         scpe.upcast(Types.AnyScope).pack(),
                         p,
                     ) orelse return null;
@@ -529,7 +579,7 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
     const func_sym = self.types.ct_backend.mach.out
         .getFuncSym(@intFromEnum(func));
 
-    const log = 0 == 1;
+    const log = @import("options").log_ct_exec;
     var stderr = if (log) std.fs.File.stderr().writer(&.{});
     var vm_ctx = Vm.SafeContext{
         .writer = if (log) &stderr.interface else null,
@@ -1050,12 +1100,25 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             var oper = try self.exprPrec(.{ .ty = ctx.ty }, lex, 1);
 
             switch (oper.normalized(tok.pos, self)) {
+                .empty => break :spill oper,
                 .value => |v| {
                     const slot = self.emitLoc(tok.pos, oper.ty, ctx);
-                    self.bl.addStore(self.sloc(tok.pos), slot, v.data_type, v);
+                    self.emitArbitraryStore(tok.pos, slot, v, oper.ty.size(self.types));
                     break :spill .ptr(oper.ty, slot);
                 },
-                else => break :spill oper,
+                .ptr => |p| {
+                    if (isUniqueLocal(p)) break :spill oper;
+
+                    const slot = self.emitLoc(tok.pos, oper.ty, ctx);
+                    self.bl.addFixedMemCpy(
+                        self.sloc(tok.pos),
+                        slot,
+                        p,
+                        oper.ty.size(self.types),
+                    );
+
+                    break :spill .ptr(oper.ty, slot);
+                },
             }
         },
         .@"&" => ref: {
@@ -1155,15 +1218,10 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             var iter = lex.list(.@";", .@"}");
             while (iter.next()) {
-                if (!reached_end) {
-                    defer lex.eatUntilClosingDelimeter();
-                    self.report(lex.cursor, "code past unreachable" ++
-                        " statement, use `if true <stmt>`", .{}) catch {};
-                    return error.Unreachable;
-                }
-
                 if (self.branchExpr(lex)) {
+                    lex.eatUntilClosingDelimeter();
                     reached_end = false;
+                    break;
                 }
             }
 
@@ -1286,19 +1344,19 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             return .voidv;
         },
         .@"$if" => {
-            if (self.peval(tok.pos, try self.expr(.{ .ty = .bool }, lex), bool) catch false) {
-                const res = self.expr(.{ .ty = .void }, lex);
+            if (self.peval(tok.pos, try self.typedExpr(.bool, .{}, lex), bool) catch false) {
+                const unreached = self.branchExpr(lex);
 
                 if (lex.eatMatch(.@"else")) {
                     lex.skipExprDropErr();
                 }
 
-                _ = try res;
+                if (unreached) return error.Unreachable;
             } else {
                 lex.skipExprDropErr();
 
                 if (lex.eatMatch(.@"else")) {
-                    _ = try self.expr(.{ .ty = .void }, lex);
+                    if (self.branchExpr(lex)) return error.Unreachable;
                 }
             }
 
@@ -1443,6 +1501,155 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             return .voidv;
         },
+        .@"for" => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const slc = self.sloc(tok.pos);
+
+            const frame = self.vars.len;
+
+            var iters = std.ArrayList(usize).empty;
+            var len: ?struct { LLValue, usize } = null;
+
+            while (true) {
+                const name = try self.expect(lex, .Ident, "to bind the range decl");
+                _ = try self.expect(lex, .@":=", "to start the range definition");
+
+                var vindex: ?usize = null;
+                parse_iter: {
+                    var value = self.exprPrec(
+                        .{},
+                        lex,
+                        Lexer.Lexeme.@"..".precedence(false),
+                    ) catch break :parse_iter;
+
+                    if (lex.eatMatch(.@"..")) {
+                        self.typeCheck(lex.cursor, .{}, &value, .uint) catch {};
+                        if (lex.peekNext().kind == .@",") {
+                            vindex = self.pushVariable(name, value) catch unreachable;
+                        } else {
+                            var start = LLValue.init(lex.cursor, value);
+                            defer start.deinit(self);
+
+                            std.debug.assert(start.value.ty == .uint);
+
+                            if (len == null) {
+                                const vl = LLValue.init(lex.cursor, self.typedExpr(
+                                    .uint,
+                                    .{},
+                                    lex,
+                                ) catch break :parse_iter);
+                                len = .{ vl, self.vars.len };
+                            }
+
+                            vindex = self.pushVariable(name, start.value) catch unreachable;
+                        }
+                    } else {
+                        if (value.ty.data() != .Slice) {
+                            self.report(
+                                lex.cursor,
+                                "{} is not a slice",
+                                .{value.ty},
+                            ) catch break :parse_iter;
+                        }
+
+                        if (len == null) len = .{ .init(tok.pos, .value(
+                            .uint,
+                            self.bl.addIndexOffset(
+                                slc,
+                                self.bl.addFieldLoad(
+                                    slc,
+                                    value.normalized(tok.pos, self).ptr,
+                                    Types.Slice.ptr_offset,
+                                    .i64,
+                                ),
+                                .iadd,
+                                value.ty.data().Slice
+                                    .get(self.types).elem.size(self.types),
+                                self.bl.addFieldLoad(
+                                    slc,
+                                    value.normalized(tok.pos, self).ptr,
+                                    Types.Slice.len_offset,
+                                    .i64,
+                                ),
+                            ),
+                        )), self.vars.len };
+
+                        vindex = self.pushVariable(name, .ptr(
+                            self.types.pointerTo(value.ty
+                                .data().Slice.get(self.types).elem),
+                            self.bl.addFieldOffset(
+                                slc,
+                                value.normalized(tok.pos, self).ptr,
+                                Types.Slice.ptr_offset,
+                            ),
+                        )) catch unreachable;
+                    }
+                }
+
+                if (vindex) |v| iters.append(tmp.arena.allocator(), v) catch unreachable;
+
+                if (!lex.eatMatch(.@",")) break;
+            }
+
+            var loop = Loop{
+                .prev = self.loops,
+                .defer_frame = self.defers.items.len,
+                .name = try self.eatLabel(lex),
+                .state = .{ .runtime = .{
+                    .bl = self.bl.addLoopAndBeginBody(slc),
+                } },
+            };
+            self.loops = &loop;
+            defer self.loops = loop.prev;
+
+            var end, const counter = len orelse {
+                return self.report(tok.pos, "the for loop is missin upper bound", .{});
+            };
+            defer end.deinit(self);
+
+            const counter_slot = &self.vars.items(.variable)[counter];
+            const counter_vl = Value.variable(counter_slot.ty, counter);
+            const cond = self.bl.addBinOp(slc, .ult, .i8, counter_vl.load(tok.pos, self), end.load(self));
+
+            var cond_bl = self.bl.addIfAndBeginThen(slc, cond);
+
+            if (!self.branchExpr(lex)) {
+                loop.state.runtime.bl.joinContinues(&self.bl);
+
+                for (iters.items) |vidx| {
+                    const slot: *Variable = &self.vars.items(.variable)[vidx];
+
+                    const step = if (slot.ty == .uint)
+                        1
+                    else
+                        slot.ty.data().Pointer.get(self.types).ty.size(self.types);
+
+                    const value = Value.variable(slot.ty, vidx);
+
+                    const step_const = self.bl.addIntImm(slc, .i64, step);
+                    const next = self.bl.addBinOp(
+                        slc,
+                        .iadd,
+                        .i64,
+                        value.load(tok.pos, self),
+                        step_const,
+                    );
+                    self.assign(tok.pos, value, .value(slot.ty, next)) catch unreachable;
+                }
+            }
+
+            const tk = cond_bl.beginElse(&self.bl);
+            loop.state.runtime.bl.addControl(&self.bl, .@"break");
+            cond_bl.end(&self.bl, tk);
+
+            loop.state.runtime.bl.end(&self.bl);
+
+            self.popScope(frame);
+
+            return .voidv;
+        },
         .@"break" => try self.loopControl(lex, .@"break", try self.eatLabel(lex)),
         .@"continue" => try self.loopControl(lex, .@"continue", try self.eatLabel(lex)),
         .@"return" => {
@@ -1529,6 +1736,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
         },
         .@".[" => {
             const ity = ctx.ty orelse {
+                lex.eatUntilClosingDelimeter();
                 return self.report(tok.pos, "TODO: infer type form the element", .{});
             };
 
@@ -1642,7 +1850,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                     return self.report(tok.pos, "{} does not have an unordered scope so it does not support inferred access", .{ty});
                 };
 
-                return self.lookupIdent(scope.upcast(Types.AnyScope).pack(), field.view(lex.source)) orelse {
+                return self.lookupIdentDotted(scope.upcast(Types.AnyScope).pack(), field.view(lex.source)) orelse {
                     return self.report(tok.pos, "cant find the inferred value in {}", .{ty});
                 };
             }
@@ -1864,7 +2072,7 @@ pub fn directive(
                     .ptr(res, p),
             };
         },
-        .size_of => {
+        .align_of, .size_of => {
             var res = ctx.ty orelse .uint;
             if (!res.isBuiltin(.isInteger)) res = .uint;
 
@@ -1873,7 +2081,7 @@ pub fn directive(
             break :d .value(res, self.bl.addIntImm(
                 self.sloc(tok.pos),
                 Abi.categorizeBuiltinUnwrapped(res.data().Builtin),
-                ty.size(self.types),
+                if (d == .size_of) ty.size(self.types) else ty.alignment(self.types),
             ));
         },
         .as => {
@@ -1887,6 +2095,48 @@ pub fn directive(
             const ct = self.peval(vpos, value, Types.ComptimeValue) catch break :d .never;
             break :d self.ctValueToValue(pos, value.ty, ct);
         },
+        .target => {
+            const pat = try self.expect(lex, .@"\"", "to define the triple pattern");
+            const content = lex.source[pat.pos + 1 .. pat.end - 1];
+            const triple = self.types.target;
+            const matched = matchTriple(content, triple) catch |err| {
+                return self.report(pat.pos, "{}", .{@errorName(err)});
+            };
+            break :d .value(.bool, self.bl.addIntImm(slc, .i8, @intFromBool(matched)));
+        },
+        .syscall => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const ret = try self.expectDestType(.syscall, pos, ctx.ty);
+            var call = self.bl.addCall(
+                tmp.arena,
+                self.sloc(pos),
+                .systemv,
+                .{ .special = hb.x86_64.X86_64Gen.syscall },
+            );
+
+            var buf = Abi.Buf{};
+            const ret_cata = self.types.abi.categorize(ret, self.types, &buf);
+
+            while (iter.next()) {
+                const prev_len = call.abi_params.items.len;
+                const ty = self.passArg(&call, .{ .to_compute = .{ .lex = lex } }) catch continue;
+                if (call.abi_params.items.len - prev_len != 1 or
+                    call.abi_params.items[prev_len] != .Reg)
+                {
+                    self.report(pos, "{} can not be passed by register but" ++
+                        " syscall call convention does not allow that", .{ty}) catch {};
+                }
+            }
+
+            if (self.types.abi.isRetByRef(ret_cata)) {
+                return self.report(pos, "{} needs to be passed by stack but" ++
+                    " syscall call convention does not allow that", .{ret});
+            }
+
+            return try self.endCall(&call, pos, ret_cata, ret, undefined);
+        },
         else => {
             lex.eatUntilClosingDelimeter();
             return self.report(tok.pos, "unexpected directive", .{});
@@ -1896,6 +2146,60 @@ pub fn directive(
     try self.expectEnd(iter);
 
     return value;
+}
+
+pub fn matchTriple(pattern: []const u8, triple: []const u8) !bool {
+    // CAUTION: written by LLM
+
+    if (std.mem.eql(u8, pattern, "*")) {
+        return error.@"you can replace this with 'true'";
+    }
+
+    if (std.mem.endsWith(u8, pattern, "-*")) {
+        return error.@"trailing '*' is redundant";
+    }
+
+    var matcher = std.mem.splitScalar(u8, pattern, '-');
+    var matchee = std.mem.splitScalar(u8, triple, '-');
+    var eat_start = false;
+
+    while (matcher.next()) |pat| {
+        if (std.mem.eql(u8, pat, "*")) {
+            if (eat_start) {
+                return error.@"consecutive '*' are redundant";
+            }
+            if (matchee.next() == null) {
+                return false;
+            }
+            eat_start = true;
+        } else if (eat_start) {
+            var found = false;
+            while (matchee.next()) |v| {
+                if (std.mem.eql(u8, v, pat)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        } else if (!std.mem.eql(u8, matchee.next() orelse return false, pat)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+test "sanity match triple" {
+    try std.testing.expect(try matchTriple("a-b-c", "a-b-c"));
+    try std.testing.expect(try matchTriple("hbvm-ableos", "hbvm-ableos"));
+    try std.testing.expect(try matchTriple("*-b-c", "a-b-c"));
+    try std.testing.expect(try matchTriple("*-c", "a-b-c"));
+    try std.testing.expect(try matchTriple("a", "a-b-c"));
+    try std.testing.expect(!try matchTriple("*-a", "a-b-c"));
+    try std.testing.expectError(error.@"consecutive '*' are redundant", matchTriple("*-*-a", "a-b-c"));
+    try std.testing.expectError(error.@"trailing '*' is redundant", matchTriple("*-b-*", "a-b-c"));
 }
 
 pub fn ctValueToValue(self: *Codegen, pos: u32, ty: Types.Id, ct: Types.ComptimeValue) Value {
@@ -1926,7 +2230,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     return self.report(top.pos, "{} does not support field access", .{scope_ty});
                 };
 
-                res.set(self.lookupIdent(scope.pack(), field.view(lex.source)) orelse {
+                res.set(self.lookupIdentDotted(scope.pack(), field.view(lex.source)) orelse {
                     return self.report(field.pos, "{} does not have this declaration", .{scope_ty});
                 });
             } else if (lex.eatMatch(.@"(")) {
@@ -1943,7 +2247,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     return self.report(top.pos, "can't dispatch a function on {}", .{scope});
                 };
 
-                const value = self.lookupIdent(ascope.pack(), field.view(lex.source)) orelse {
+                const value = self.lookupIdentDotted(ascope.pack(), field.view(lex.source)) orelse {
                     lex.eatUntilClosingDelimeter();
                     return self.report(top.pos, "{} does not define this", .{scope});
                 };
@@ -2049,6 +2353,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
         },
         .@".?" => {
             if (res.value.ty.data() != .Option) {
+                if (res.value.ty == .never) return self.silentReport();
                 return self.report(top.pos, "{} is not optional", .{res.value.ty});
             }
 
@@ -2056,6 +2361,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
         },
         .@".*" => {
             if (res.value.ty.data() != .Pointer) {
+                if (res.value.ty == .never) return self.silentReport();
                 return self.report(top.pos, "{} is not a pointer", .{res.value.ty});
             }
 
@@ -2086,6 +2392,12 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     Lexer.Lexeme.@"..".precedence(false),
                 ));
             } else {
+                if (lex.peekNext().kind != .@"]") {
+                    end_index = .init(top.pos, try self.expr(
+                        .{ .ty = .uint },
+                        lex,
+                    ));
+                }
                 is_slice = true;
             }
 
@@ -2376,34 +2688,6 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             switch (value.normalized(tok.pos, self)) {
                 .value, .empty => {},
                 .ptr => |p| {
-                    const isUniqueLocal = opaque {
-                        pub fn f(ptr: *BNode) bool {
-                            if (ptr.kind != .Local) return false;
-
-                            for (ptr.outputs()) |o| {
-                                if (o.get().kind == .Scope) return false;
-                                if (!isOkayOp(o)) return false;
-                            }
-
-                            return true;
-                        }
-
-                        pub fn isOkayOp(o: BNode.Out) bool {
-                            if (o.get().kind == .BinOp) {
-                                for (o.get().outputs()) |oo| {
-                                    if (!isOkayOp(oo)) return false;
-                                }
-                                return true;
-                            }
-
-                            if (o.get().kind == .Store and o.pos() == 2) return true;
-                            if (o.get().kind == .MemCpy and o.pos() == 2) return true;
-                            if (o.get().kind == .Call) return true;
-
-                            return false;
-                        }
-                    }.f;
-
                     if (!isUniqueLocal(p)) {
                         if (value.ty.size(self.types) == 0) {
                             value = .unit(value.ty);
@@ -2584,6 +2868,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 std.debug.assert(!is_ass_op);
 
                 if (res.value.ty.data() != .Option) {
+                    if (res.value.ty == .never) return self.silentReport();
                     return self.report(top.pos, "{} can not be compared with null", .{res.value.ty});
                 }
 
@@ -2667,8 +2952,35 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 res.load(self),
                 rhs.load(self),
             )));
+            res.peep(self);
         },
     }
+}
+
+pub fn isUniqueLocal(ptr: *BNode) bool {
+    if (ptr.kind != .Local) return false;
+
+    for (ptr.outputs()) |o| {
+        if (o.get().kind == .Scope) return false;
+        if (!isOkayOp(o)) return false;
+    }
+
+    return true;
+}
+
+pub fn isOkayOp(o: BNode.Out) bool {
+    if (o.get().kind == .BinOp) {
+        for (o.get().outputs()) |oo| {
+            if (!isOkayOp(oo)) return false;
+        }
+        return true;
+    }
+
+    if (o.get().kind == .Store and o.pos() == 2) return true;
+    if (o.get().kind == .MemCpy and o.pos() == 2) return true;
+    if (o.get().kind == .Call) return true;
+
+    return false;
 }
 
 pub fn tupl(self: *Codegen, pos: u32, lex: *Lexer, ty: Types.Id, ctx: Ctx) !Value {
@@ -2913,15 +3225,15 @@ pub fn exprPrecAllowUnreachable(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec:
 
     while (true) {
         var top = lex.peekNext();
-        var is_ass_op = false;
 
+        const prec = top.kind.precedence(ctx.in_if_or_while);
+        if (prec >= prevPrec) break;
+
+        var is_ass_op = false;
         if (top.kind.innerOp()) |op| {
             top.kind = op;
             is_ass_op = true;
         }
-
-        const prec = top.kind.precedence(ctx.in_if_or_while);
-        if (prec >= prevPrec) break;
 
         lex.cursor = top.end;
 
@@ -2932,7 +3244,9 @@ pub fn exprPrecAllowUnreachable(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec:
         }, lex, &res) catch |err| switch (err) {
             error.SyntaxError => return error.Report,
             error.Unreachable => return error.Unreachable,
-            error.Report => {},
+            error.Report => {
+                res.set(.never);
+            },
         };
 
         if (ass_lhs) |*lhs| {
@@ -2959,7 +3273,6 @@ pub fn expectDestType(
 
 pub fn expect(self: *Codegen, lex: *Lexer, comptime to_expect: Lexer.Lexeme, comptime msg: []const u8) error{SyntaxError}!Lexer.Token {
     return lex.expect(to_expect) catch {
-        if (0 == 1) std.debug.dumpCurrentStackTrace(@returnAddress());
         self.report(lex.cursor, "expected '" ++ @tagName(to_expect) ++
             "' " ++ msg, .{}) catch
             return error.SyntaxError;
@@ -3002,9 +3315,9 @@ pub fn passArg(
     call: *BBuilder.Call,
     value: union(enum) {
         computed: struct { value: Value, pos: u32 },
-        to_compute: struct { lex: *Lexer, inferred: ?Types.Id },
+        to_compute: struct { lex: *Lexer, inferred: ?Types.Id = null },
     },
-) !Types.Id {
+) Error!Types.Id {
     var vl: Value = undefined;
 
     const pos = switch (value) {
@@ -3177,10 +3490,10 @@ pub fn emitTemplateCall(
             error.Report => {
                 if (arg_iter.recover()) break else continue;
             },
-        } else .unit(try self.passArg(
+        } else .unit(self.passArg(
             &call,
             .{ .to_compute = .{ .lex = lex, .inferred = ty } },
-        ));
+        ) catch continue);
 
         if (!is_any) self.typeCheck(ps, .{}, &value, ty) catch {};
         ty = if (is_any) value.ty else ty;
@@ -3330,7 +3643,7 @@ pub fn emitConcreteCall(
     while (iter.next()) : (i += 1) {
         const ty = if (i < func.args.len) func.args[i] else null;
         if (ty == null) self.report(lex.cursor, "extra argument", .{}) catch {};
-        _ = try self.passArg(&call, .{ .to_compute = .{ .lex = lex, .inferred = ty } });
+        _ = self.passArg(&call, .{ .to_compute = .{ .lex = lex, .inferred = ty } }) catch {};
     }
 
     if (i < func.args.len) {
@@ -3602,6 +3915,7 @@ pub fn peval(self: *Codegen, pos: u32, value: Value, comptime T: type) !T {
     };
 
     if (mismatch) {
+        if (value.ty == .never) return self.silentReport();
         return self.report(pos, "expected " ++ name ++ ", got {}", .{value.ty});
     }
 
@@ -4204,89 +4518,6 @@ pub fn reportSloc(self: *Codegen, slc: graph.Sloc, fmt: []const u8, args: anytyp
     return error.Report;
 }
 
-// Long Lived
-pub const LLValue = struct {
-    value: Value,
-    pos: u32,
-    checksum: if (graph.is_debug) ?*BNode else void,
-
-    pub fn init(pos: u32, value: Value) LLValue {
-        switch (value.node()) {
-            .empty, .variable => {},
-            .value, .ptr => |p| _ = p.lock(),
-        }
-
-        return .{
-            .value = value,
-            .pos = pos,
-            .checksum = if (graph.is_debug) switch (value.node()) {
-                .empty, .variable => null,
-                .value, .ptr => |p| p,
-            },
-        };
-    }
-
-    pub fn normalize(self: *LLValue, gen: *Codegen) void {
-        self.tmpUnlock();
-        self.value.normalize(gen);
-        self.tmpLock();
-    }
-
-    pub fn set(self: *LLValue, to: Value) void {
-        self.tmpUnlock();
-        self.value = to;
-        self.tmpLock();
-    }
-
-    pub fn dupe(self: *LLValue) LLValue {
-        self.tmpLock();
-        return self.*;
-    }
-
-    pub fn tmpUnlock(self: *LLValue) void {
-        switch (self.value.node()) {
-            .empty, .variable => {},
-            .value, .ptr => |p| {
-                std.debug.assert(p == self.checksum);
-                BNode.Lock.unlock(.{ .node = p });
-            },
-        }
-    }
-
-    pub fn tmpLock(self: *LLValue) void {
-        switch (self.value.node()) {
-            .empty, .variable => {},
-            .value, .ptr => |p| {
-                if (graph.is_debug) self.checksum = p;
-                _ = p.lock();
-            },
-        }
-    }
-
-    pub fn deinitKeep(self: *LLValue) void {
-        self.tmpUnlock();
-        self.* = undefined;
-    }
-
-    pub fn deinit(self: *LLValue, gen: *Codegen) void {
-        switch (self.value.node()) {
-            .empty, .variable => {},
-            .value, .ptr => |p| {
-                std.debug.assert(p == self.checksum);
-                BNode.Lock.unlock(.{ .node = p });
-                if (p.outputs().len == 0) {
-                    gen.bl.func.kill(p);
-                }
-            },
-        }
-        self.* = undefined;
-    }
-
-    pub fn load(self: LLValue, cg: *Codegen) *BNode {
-        return self.value.load(self.pos, cg);
-    }
-};
-
 pub fn binOpUpcast(self: *Codegen, lhs: Types.Id, rhs: Types.Id) !Types.Id {
     if (lhs == rhs) return lhs;
     if (lhs.canUpcast(rhs, self.types)) return rhs;
@@ -4374,6 +4605,11 @@ pub fn typeCheck(
     if (got.ty.canUpcast(expected, self.types)) {
         const sloca = self.sloc(pos);
         const res_dt = Abi.categorizeBuiltinUnwrapped(expected.data().Builtin);
+
+        if (got.ty.data() == .Enum) {
+            got.ty = got.ty.data().Enum.get(self.types)
+                .getLayout(self.types).backingInteger();
+        }
 
         if (got.ty.isBuiltin(.isSigned) and
             got.ty.size(self.types) < expected.size(self.types))
@@ -4483,7 +4719,14 @@ pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
         root.decls.log(0, types.loader.diagnostics.?) catch {};
     }
 
-    const decl = root.decls.lookup(root.source, "main") orelse {
+    var tmp = types.tmpCheckpoint();
+    defer tmp.deinit();
+
+    var self: Codegen = undefined;
+    self.init(types, root.root_sope, .never, tmp.allocator());
+    _ = self.bl.begin(.systemv, &.{}, &.{});
+
+    const main = self.lookupIdent(root.root_sope, "main") orelse {
         if (types.loader.diagnostics) |diags| {
             try diags.writeAll(
                 \\...you can define the `main` in the mentioned file (or pass --no-entry):
@@ -4501,33 +4744,9 @@ pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
         return error.NoMain;
     };
 
-    std.debug.assert(decl.root == decl.offset); // TODO
-
-    var tmp = types.tmpCheckpoint();
-    defer tmp.deinit();
-
-    var self: Codegen = undefined;
-    self.init(types, root.root_sope, .never, tmp.allocator());
-    self.name = @enumFromInt(decl.offset);
-    _ = self.bl.begin(.systemv, &.{}, &.{});
-
-    var lex = Lexer.init(root.source, decl.offset);
-
-    _ = lex.expect(.Ident) catch unreachable; // TODO
-    _ = lex.expect(.@":=") catch unreachable; // TODO
-
-    _ = lex.expect(.@"fn") catch {
-        return self.report(lex.cursor, "expected function", .{});
-    };
-
-    const func = switch (try self.@"fn"(&lex)) {
-        .template => return self.report(lex.cursor, "main function cannot be a template", .{}),
-        .func => |v| v[0],
-        .func_ty => return self.report(lex.cursor, "main function cannot be a fn type", .{}),
-    };
+    const func = try self.peval(0, main, Types.FuncId);
 
     func.get(types).linkage = .exported;
-
     func.get(types).queue(.runtime, types);
 }
 
@@ -4559,8 +4778,9 @@ pub fn report(self: *Codegen, pos: u32, msg: []const u8, args: anytype) error{Re
     self.types.report(self.file, pos, msg, args);
     self.types.errored += 1;
 
-    if (graph.is_debug and 0 == 1) {
-        var buf: [2]usize = undefined;
+    const trace_size = @import("options").report_trace_size;
+    if (trace_size != 0) {
+        var buf: [trace_size]usize = undefined;
         var st = std.builtin.StackTrace{
             .index = 0,
             .instruction_addresses = &buf,
@@ -4810,11 +5030,12 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
         &writer.interface,
     );
 
-    const backend = hb.backend.Machine.SupportedTarget.@"x86_64-linux"
-        .toMachine(&scratch, gpa);
+    const target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
+
+    const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();
 
-    var types = Types.init(asts, &kl.loader, backend, scratch, gpa);
+    var types = Types.init(asts, &kl.loader, @tagName(target), backend, scratch, gpa);
     defer types.deinit();
 
     try collectExports(&types, gpa);
@@ -4926,6 +5147,9 @@ pub const Expectations = struct {
             },
             else => |e| return e,
         };
+
+        try std.testing.expect(!expectations.unreaches);
+        try std.testing.expect(!expectations.times_out);
 
         try std.testing.expectEqual(expectations.return_value, ret);
     }

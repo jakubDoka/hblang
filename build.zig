@@ -10,12 +10,18 @@ pub fn build(b: *std.Build) !void {
     const use_lld = b.option(bool, "use-lld", "use lld, last resort option") orelse
         (b.graph.host.result.os.tag == .windows) or optimize != .Debug;
     const stack_size = b.option(usize, "stack-size", "the amount of stack for the build") orelse 1024 * 1024 * 4;
+    const dont_clean_up_x86_64 = b.option(bool, "dont-clean-up-x86-64", "keep the onject file from the test execution") orelse false;
+    const report_trace_size = b.option(usize, "report-trace-size", "amout of frames on each report logged") orelse 0;
+    const log_ct_exec = b.option(bool, "log-ct-exec", "log the instructions executed during comptime") orelse false;
 
     const check_step = b.step("check", "type check");
 
     const options = b.addOptions();
     options.addOption(usize, "stack_size", stack_size);
     options.addOption(bool, "dont_simulate", dont_simulate);
+    options.addOption(bool, "cleanup_x86_64", !dont_clean_up_x86_64);
+    options.addOption(usize, "report_trace_size", report_trace_size);
+    options.addOption(bool, "log_ct_exec", log_ct_exec);
 
     const utils = b.dependency("utils", .{
         .target = target,

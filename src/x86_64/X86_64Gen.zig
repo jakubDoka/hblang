@@ -63,7 +63,7 @@ const CtxF64 = struct {
     }
 };
 
-const syscall = root.backend.Machine.max_func;
+pub const syscall = root.backend.Machine.max_func;
 const max_instruction_size = 15;
 
 pub const Reg = enum(u8) {
@@ -839,7 +839,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         return;
     };
 
-    //func.fmtScheduledLog();
+    // func.fmtScheduledLog();
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -2246,7 +2246,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *X86_64Gen, env: Mach.RunEnv) Mach.RunError!usize {
-    const cleanup = 0 == 0;
+    const cleanup = @import("options").cleanup_x86_64;
     const res = b: {
         errdefer unreachable;
 

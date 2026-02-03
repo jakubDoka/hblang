@@ -857,7 +857,7 @@ opaque := true
 use := fn(v: @Any()): void {}
 
 store_pullout := fn(): uint {
-    x := 1
+    x := #1
     use(&x)
     if opaque {
         x = 0
@@ -868,7 +868,7 @@ store_pullout := fn(): uint {
 }
 
 duplicate_store := fn(): uint {
-    x := 1
+    x := #1
     use(&x)
     x = 0
     x = 0
@@ -877,7 +877,7 @@ duplicate_store := fn(): uint {
 }
 
 combine_pull_out_duplicate := fn(): uint {
-    x := 1
+    x := #1
     use(&x)
     if opaque {
         x = 0
@@ -890,8 +890,8 @@ combine_pull_out_duplicate := fn(): uint {
 }
 
 parallel_stores := fn(): uint {
-    a := 0
-    b := 0
+    a := #0
+    b := #0
 
     use(&a)
     use(&b)
@@ -1467,7 +1467,7 @@ main := fn(): uint {
     value := u8.[1, 2, 3]
 
     value2 := value
-    value3 := value2
+    value3 := #value2
 
     return value3[0] + value3[1] - value3[2]
 }
@@ -1479,7 +1479,7 @@ main := fn(): uint {
     value := u8.[1, 2, 3]
     value2 := u8.[1, 2, 0]
 
-    tmp := value
+    tmp := #value
     value[2] = value2[2]
     value2[2] = tmp[2]
 
@@ -1649,7 +1649,7 @@ main := fn(): uint {
 #### index-ptr precedence 1
 ```hb
 main := fn(): uint {
-    val := 0
+    val := #0
     return (&val)[..1][0]
 }
 ```
@@ -1736,8 +1736,10 @@ $unreachable := fn(): void die
 
 $double_inline := fn(): void no_op()
 
+use := fn(vl: ^uint): void {}
+
 $some_mem_ops := fn(vl: ^uint): void {
-    vl += 1
+    vl.* += 1
 }
 
 $loop_fn := fn(iters: uint): void {
@@ -1755,7 +1757,7 @@ $recurcive := fn(n: uint): uint {
 main := fn(): uint {
     no_op()
 
-    a := 0
+    a := #0
     some_mem_ops(&a)
     if a != 1 return 0
 
@@ -2173,7 +2175,7 @@ expectations := .{
 obf := 1
 
 main := fn(): uint {
-    a := obf
+    a := #obf
     b := &a
 
     loop {
@@ -2193,7 +2195,7 @@ main := fn(): uint {
 #### big constant 1
 ```hb
 main := fn(): uint {
-    return uninit(&0)
+    return uninit(&#0)
 }
 
 uninit := fn(p: ^uint): uint {
@@ -2311,7 +2313,7 @@ A := struct {
 }
 
 main := fn(): uint {
-    x: u8 = 0
+    x: u8 = #0
     a := A.(&x)
     return @size_of(@TypeOf(a.a.?.*)) != @size_of(u8)
 }

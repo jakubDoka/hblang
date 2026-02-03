@@ -42,6 +42,7 @@ line_indexes: []const hb.LineIndex,
 loader: *Loader,
 backend: *Machine,
 vm: hb.hbvm.Vm = .{},
+target: []const u8,
 abi: Abi = .systemv,
 func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
     .initFill(.empty),
@@ -444,13 +445,13 @@ pub const Id = enum(u32) {
     u8,
     u16,
     u32,
-    u64,
     uint,
+    u64,
     i8,
     i16,
     i32,
-    i64,
     int,
+    i64,
     f32,
     f64,
     type,
@@ -546,8 +547,8 @@ pub const Id = enum(u32) {
         if (from.isBuiltin(.isUnsigned) and to.isBuiltin(.isUnsigned)) return is_bigger;
         if (from.isBuiltin(.isSigned) and to.isBuiltin(.isSigned)) return is_bigger;
         if (from.isBuiltin(.isUnsigned) and to.isBuiltin(.isSigned)) return is_bigger;
-        //if (from.data() == .Enum and to.isBuiltin(.isUnsigned)) return from.size(types) <= to.size(types);
-        //if (from.data() == .Enum and to.isBuiltin(.isSigned)) return is_bigger;
+        if (from.data() == .Enum and to.isBuiltin(.isUnsigned)) return from.size(types) <= to.size(types);
+        if (from.data() == .Enum and to.isBuiltin(.isSigned)) return is_bigger;
         if (from == .bool and to.isBuiltin(.isInteger)) return true;
 
         return false;
@@ -601,13 +602,13 @@ pub const Builtin = enum(u32) {
     u8,
     u16,
     u32,
-    u64,
     uint,
+    u64,
     i8,
     i16,
     i32,
-    i64,
     int,
+    i64,
     f32,
     f64,
     type,
@@ -622,12 +623,12 @@ pub const Builtin = enum(u32) {
 
     pub fn isUnsigned(self: Builtin) bool {
         return @intFromEnum(Builtin.u8) <= @intFromEnum(self) and
-            @intFromEnum(self) <= @intFromEnum(Id.uint);
+            @intFromEnum(self) <= @intFromEnum(Id.u64);
     }
 
     pub fn isSigned(self: Builtin) bool {
         return @intFromEnum(Builtin.i8) <= @intFromEnum(self) and
-            @intFromEnum(self) <= @intFromEnum(Id.int);
+            @intFromEnum(self) <= @intFromEnum(Id.i64);
     }
 
     pub fn isFloat(self: Builtin) bool {
@@ -927,6 +928,10 @@ pub const Enum = struct {
     pub const Layout = struct {
         spec: graph.AbiParam.StackSpec,
         fields: []i64,
+
+        pub fn backingInteger(self: *Layout) Id {
+            return @enumFromInt(@intFromEnum(Id.u8) + self.spec.alignment);
+        }
     };
 
     pub fn format_(
@@ -1312,6 +1317,7 @@ pub const Global = struct {
 pub fn init(
     files: []File,
     loader: *Loader,
+    target: []const u8,
     backend: *Machine,
     arena: utils.Arena,
     gpa: std.mem.Allocator,
@@ -1326,6 +1332,7 @@ pub fn init(
         },
         .loader = loader,
         .backend = backend,
+        .target = target,
         .tmp = undefined,
         .arena = arena,
     };

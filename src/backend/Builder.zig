@@ -1,7 +1,6 @@
 func: Func,
 scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
-pin_free_list: ?*Func.Node = undefined,
 
 pub const max_func_id = graph.indirect_call - 1;
 
@@ -21,21 +20,6 @@ pub const UnOp = graph.UnOp;
 pub const classes = enum {
     // [Cfg, mem, ...values]
     pub const Scope = extern struct {};
-
-    // [pinned_node]
-    pub const Pin = extern struct {
-        pub fn next(self: *Pin) ?*Func.Node {
-            const layout: *Func.LayoutOf(Pin) =
-                @alignCast(@fieldParentPtr("ext", self));
-            return @ptrFromInt(@as(u64, @bitCast(layout.base.sloc)));
-        }
-
-        pub fn setNext(self: *Pin, nxt: ?*Func.Node) void {
-            const layout: *Func.LayoutOf(Pin) =
-                @alignCast(@fieldParentPtr("ext", self));
-            layout.base.sloc = @bitCast(@intFromPtr(nxt));
-        }
-    };
 
     pub const Stub = extern struct {};
 };
@@ -74,8 +58,6 @@ pub fn begin(
     self.func.end = self.func.addNode(.Return, .none, .top, &.{ null, null, null }, .{});
 
     self.func.signature = .init(call_conv, params, return_values, self.func.arena.allocator());
-
-    self.pin_free_list = null;
 
     return @enumFromInt(0);
 }
@@ -119,7 +101,6 @@ pub fn end(self: *Builder, _: BuildToken) void {
 
         for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
-            std.debug.assert(node.kind != .Pin);
             std.debug.assert(node.kind != .Stub);
             if (node.isLocked()) {
                 std.debug.dumpStackTrace(node.lock_at.trace);
@@ -233,8 +214,8 @@ pub fn addGlobalAddr(self: *Builder, sloc: graph.Sloc, arbitrary_global_id: u32)
     return self.func.addGlobalAddr(sloc, arbitrary_global_id);
 }
 
-pub fn addFuncAddr(self: *Builder, sloc: graph.Sloc, func_id: u32) SpecificNode(.FuncAddr) {
-    return self.func.addFuncAddr(sloc, func_id);
+pub fn addFuncAddr(self: *Builder, sloc: graph.Sloc, arbitrary_func_id: u32) SpecificNode(.FuncAddr) {
+    return self.func.addFuncAddr(sloc, arbitrary_func_id);
 }
 
 // #MATH =======================================================================
@@ -275,42 +256,6 @@ pub fn addUnOp(self: *Builder, sloc: graph.Sloc, op: UnOp, ty: DataType, oper: *
 }
 
 // #SCOPE ======================================================================
-
-pub fn isPinned(_: *Builder, node: *Func.Node) bool {
-    return for (node.outputs()) |o| {
-        if (o.get().kind == .Pin) return true;
-    } else false;
-}
-
-pub fn pin(self: *Builder, to_pin: *Func.Node) SpecificNode(.Pin) {
-    if (self.pin_free_list) |pfl| {
-        self.pin_free_list = pfl.extra(.Pin).next();
-        self.func.setInputNoIntern(pfl, 0, to_pin);
-        return pfl;
-    }
-
-    return self.func.addNode(
-        .Pin,
-        std.mem.zeroes(graph.Sloc),
-        .bot,
-        &.{to_pin},
-        .{},
-    );
-}
-
-pub fn unpinKeep(self: *Builder, to_unpin: SpecificNode(.Pin)) *Func.Node {
-    const lock = to_unpin.inputs()[0].?.lock();
-    defer lock.unlock();
-    return self.unpin(to_unpin);
-}
-
-pub fn unpin(self: *Builder, to_unpin: SpecificNode(.Pin)) *Func.Node {
-    const unpinned = to_unpin.inputs()[0].?;
-    self.func.setInputNoIntern(to_unpin, 0, null);
-    to_unpin.extra(.Pin).setNext(self.pin_free_list);
-    self.pin_free_list = to_unpin;
-    return unpinned;
-}
 
 pub fn memory(self: *Builder) ?*Func.Node {
     return self._readScopeValue(1);
@@ -906,10 +851,6 @@ pub fn addCall(
 
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
     const scope = self.scope orelse return;
-
-    for (values, self.func.signature.returns().?) |val, rtt|
-        if (val.data_type != val.data_type.meet(rtt.getReg()))
-            utils.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt.getReg()) });
 
     const ret = self.func.end;
     const inps = ret.inputs();
