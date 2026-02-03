@@ -492,6 +492,16 @@ pub const Id = enum(u32) {
         return self.data().alignment(types);
     }
 
+    pub fn len(self: Id, types: *Types) Size {
+        return @intCast(switch (self.data()) {
+            .Slice, .Pointer, .Builtin, .Option => 0,
+            .Array => |a| a.get(types).len.s,
+            .Struct => |s| s.get(types).decls.fields.len,
+            .Enum => |s| s.get(types).decls.fields.len,
+            .FuncTy => |f| f.get(types).args.len,
+        });
+    }
+
     pub fn alignmentPow(self: Id, types: *Types) u6 {
         return std.math.log2_int(u64, self.alignment(types));
     }
@@ -1294,6 +1304,7 @@ pub const Global = struct {
         }
     } = .{},
     readonly: bool,
+    uninit: bool = false,
     runtime_emmited: bool = false,
     linkage: Machine.Data.Linkage = .local,
 

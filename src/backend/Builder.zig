@@ -313,10 +313,10 @@ pub fn setScopeValue(self: *Builder, index: usize, value: *BuildNode) void {
     self.func.setInputNoIntern(self.scope orelse return, scope_value_start + index, value);
 }
 
-fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) u16 {
+fn pushToScopeFn(self: *Func, scope: *Func.Node, value: *Func.Node) u16 {
     if (scope.input_ordered_len == scope.input_len) {
         const new_cap = @max(1, scope.input_len) * 2;
-        const new_alloc = self.func.arena.allocator().realloc(
+        const new_alloc = self.arena.allocator().realloc(
             scope.input_base[0..scope.input_len],
             new_cap,
         ) catch unreachable;
@@ -326,9 +326,13 @@ fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) u16 {
     }
 
     scope.input_base[scope.input_ordered_len] = value;
-    self.func.addUse(value, scope.input_ordered_len, scope);
+    self.addUse(value, scope.input_ordered_len, scope);
     scope.input_ordered_len += 1;
     return scope.input_ordered_len - 1;
+}
+
+fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) u16 {
+    return pushToScopeFn(&self.func, scope, value);
 }
 
 pub fn getScopeValue(self: *Builder, index: usize) *Func.Node {
@@ -370,10 +374,23 @@ pub fn mergeScopes(
     lhs: SpecificNode(.Scope),
     rhs: SpecificNode(.Scope),
 ) SpecificNode(.Scope) {
-    const lhs_values = getScopeValues(lhs);
-    const rhs_values = getScopeValues(rhs);
+    var lhs_values = getScopeValues(lhs);
+    var rhs_values = getScopeValues(rhs);
 
-    const relevant_size = @min(lhs_values.len, rhs_values.len);
+    const relevant_size = @max(lhs_values.len, rhs_values.len);
+
+    for (lhs_values.len..relevant_size) |i| {
+        const other = rhs_values[i];
+        _ = pushToScopeFn(func, lhs, func.addUninit(other.sloc, other.data_type));
+    }
+
+    for (rhs_values.len..relevant_size) |i| {
+        const other = lhs_values[i];
+        _ = pushToScopeFn(func, rhs, func.addUninit(other.sloc, other.data_type));
+    }
+
+    lhs_values = getScopeValues(lhs);
+    rhs_values = getScopeValues(rhs);
 
     const new_ctrl = func.addNode(.Region, .none, .top, &.{ lhs_values[0], rhs_values[0] }, .{});
 
@@ -589,7 +606,7 @@ pub const Loop = struct {
             return;
         };
 
-        const exit_values = getScopeValues(exit);
+        const exit_values = getScopeValues(exit)[0..init_values.len];
         for (init_values[start..], exit_values[start..], start..) |ini, exi, i| {
             if (exi.kind == .Scope) {
                 builder.func.setInputNoIntern(exit, i, ini);
@@ -786,6 +803,7 @@ pub const Call = struct {
             }
         };
 
+        bl.func.setInputNoIntern(self.call, 0, bl.control());
         bl.func.setInputNoIntern(self.call, 1, bl.memory());
         const call_end = bl.func.addNode(.CallEnd, sloc, .top, &.{self.call}, .{});
         bl.func.setInputNoIntern(scope, 0, call_end);
@@ -825,7 +843,7 @@ pub fn addCall(
     var buf: [4]?*BuildNode = undefined;
     var inps = std.ArrayList(?*BuildNode).initBuffer(&buf);
 
-    inps.appendAssumeCapacity(self.control());
+    inps.appendAssumeCapacity(null);
     inps.appendAssumeCapacity(null);
     inps.appendAssumeCapacity(switch (id) {
         .special, .fptr => null,

@@ -2531,6 +2531,8 @@ pub fn Func(comptime Backend: type) type {
 
             self.next_id += 1;
 
+            //if (node.id == 22 and node.kind == .CInt) unreachable;
+
             @memcpy(@as([*]u64, @ptrCast(&node.edata)), extra);
 
             for (node.ordInps(), 0..) |on, i| if (on) |def| {

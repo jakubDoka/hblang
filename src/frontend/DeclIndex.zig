@@ -323,6 +323,10 @@ pub fn buildLow(
                     },
                 }
             },
+            .@"for" => {
+                bl.lexer.cursor = tok.pos;
+                bl.lexer.skipExpr() catch {};
+            },
             .@"$", .Ident => {
                 if (bl.depth != init_depth) continue;
 

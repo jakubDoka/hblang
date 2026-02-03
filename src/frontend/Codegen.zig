@@ -522,12 +522,54 @@ pub fn lookupIdentLow(
 pub const comptime_gen_mode = Machine.OptOptions{ .mode = .debug };
 
 pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.GlobalId) void {
+    const global = self.types.globals.at(global_id);
+
+    if (lex.eatMatch(.idk)) {
+        global.uninit = true;
+
+        if (global.readonly) {
+            self.report(lex.cursor, "readonly uninitialized global is nonsense", .{}) catch {};
+        }
+
+        self.types.ct_backend.mach.emitData(.{
+            .id = @intFromEnum(global_id),
+            .value = .{ .uninit = global.ty.size(self.types) },
+            .readonly = false,
+            .thread_local = true,
+            .uuid = @splat(0),
+        });
+
+        return;
+    }
+
+    if (lex.eatMatch(.@"@thread_local_storage")) {
+        _ = self.expect(lex, .@"(", "to keep the directive syntax consistent") catch {};
+        _ = self.expect(lex, .@")", "to keep the directive syntax consistent") catch {};
+
+        global.ty = ty orelse .never;
+        if (ty == null) self.report(lex.cursor, "cant infer the type of the thread" ++
+            " local, use <name>: <type> = @thread_local_storage()", .{}) catch {};
+
+        if (global.readonly) {
+            self.report(lex.cursor, "readonly thread local is nonsense", .{}) catch {};
+        }
+
+        self.types.ct_backend.mach.emitData(.{
+            .id = @intFromEnum(global_id),
+            .value = .{ .uninit = global.ty.size(self.types) },
+            .readonly = false,
+            .thread_local = true,
+            .uuid = @splat(0),
+        });
+
+        return;
+    }
+
     const prev_errored = self.types.errored;
     const until = self.types.func_queue.getPtr(.cmptime).items.len;
     const relocs_until = self.types.ct_backend.mach.out.relocs.items.len;
     const token = self.bl
         .begin(.systemv, &.{.{ .Reg = .i64 }}, &.{});
-    const global = self.types.globals.at(global_id);
     const pos = lex.cursor;
 
     const ret_addr = self.bl
@@ -580,6 +622,10 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
         .getFuncSym(@intFromEnum(func));
 
     const log = @import("options").log_ct_exec;
+    if (log) {
+        self.types.reportSloc(slc, "executing this", .{});
+        self.types.errored -= 1;
+    }
     var stderr = if (log) std.fs.File.stderr().writer(&.{});
     var vm_ctx = Vm.SafeContext{
         .writer = if (log) &stderr.interface else null,
@@ -812,6 +858,8 @@ pub fn emitToBackend(
                         .id = @intFromEnum(global),
                         .name = global.get(self.types)
                             .fmt(self.types).toString(tmp.arena),
+                        // NOTE: this can get optimized to .uninit if the
+                        // content is all zero on some targets
                         .value = .{ .init = global.get(self.types)
                             .data.get(self.types) },
                         .readonly = global.get(self.types).readonly,
@@ -1343,6 +1391,57 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             return .voidv;
         },
+        .@"$match" => {
+            const pat = self.expr(.{}, lex) catch |err| switch (err) {
+                error.Report => {
+                    try lex.skipExpr();
+                    return error.Report;
+                },
+            };
+
+            if (pat.ty.data() != .Enum) {
+                return self.report(lex.cursor, "{} is not an enum", .{pat.ty});
+            }
+
+            const pat_value = try self.peval(lex.cursor, pat, i64);
+
+            _ = try self.expect(lex, .@"{", "to open the match arms");
+
+            var iter = lex.list(.@",", .@"}");
+
+            var else_branch: ?u32 = null;
+
+            while (iter.next()) {
+                if (lex.eatMatch(.@"else")) {
+                    _ = try self.expect(lex, .@"=>", "to start the else branch");
+                    else_branch = lex.cursor;
+                    try lex.skipExpr();
+                    continue;
+                }
+
+                const pvl = try self.typedExpr(pat.ty, .{}, lex);
+                const pvl_lit = try self.peval(lex.cursor, pvl, i64);
+
+                _ = try self.expect(lex, .@"=>", "to start the branch");
+                if (pvl_lit == pat_value) {
+                    const unreached = self.branchExpr(lex);
+                    lex.eatUntilClosingDelimeter();
+                    if (unreached) return error.Unreachable;
+                    return .voidv;
+                } else {
+                    try lex.skipExpr();
+                }
+            }
+
+            if (else_branch) |pos| {
+                var elex = Lexer.init(lex.source, pos);
+                if (self.branchExpr(&elex)) return error.Unreachable;
+                return .voidv;
+            }
+
+            return self.report(tok.pos, "unable to match any pattern for {}" ++
+                " (TODO: display enums properly)", .{pat_value});
+        },
         .@"$if" => {
             if (self.peval(tok.pos, try self.typedExpr(.bool, .{}, lex), bool) catch false) {
                 const unreached = self.branchExpr(lex);
@@ -1695,6 +1794,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             };
 
             var ty = ctx.ty orelse .uint;
+            if (ty.data() == .Option) ty = ty.data().Option.get(self.types).inner;
             if (!ty.isBuiltin(.isInteger)) ty = .uint;
 
             break :int .value(ty, self.bl.addIntImm(
@@ -2072,7 +2172,7 @@ pub fn directive(
                     .ptr(res, p),
             };
         },
-        .align_of, .size_of => {
+        .len_of, .align_of, .size_of, .kind_of => {
             var res = ctx.ty orelse .uint;
             if (!res.isBuiltin(.isInteger)) res = .uint;
 
@@ -2081,7 +2181,13 @@ pub fn directive(
             break :d .value(res, self.bl.addIntImm(
                 self.sloc(tok.pos),
                 Abi.categorizeBuiltinUnwrapped(res.data().Builtin),
-                if (d == .size_of) ty.size(self.types) else ty.alignment(self.types),
+                switch (d) {
+                    .size_of => ty.size(self.types),
+                    .align_of => ty.alignment(self.types),
+                    .len_of => ty.len(self.types),
+                    .kind_of => @intFromEnum(ty.data()),
+                    else => unreachable,
+                },
             ));
         },
         .as => {
@@ -2136,6 +2242,10 @@ pub fn directive(
             }
 
             return try self.endCall(&call, pos, ret_cata, ret, undefined);
+        },
+        .@"inline" => {
+            const fn_arg = try self.expr(.{}, lex);
+            return self.emitCall(pos, ctx, null, fn_arg, lex);
         },
         else => {
             lex.eatUntilClosingDelimeter();
@@ -2212,6 +2322,36 @@ pub fn ctValueToValue(self: *Codegen, pos: u32, ty: Types.Id, ct: Types.Comptime
     } else {
         return .ptr(ty, self.bl.addGlobalAddr(self.sloc(pos), @intFromEnum(ct.spilled)));
     }
+}
+
+pub fn accessStructField(self: *Codegen, pos: u32, base: Value, lfield: Types.Struct.Layout.Field) Value {
+    var res: Value = switch (lfield.ty.category(self.types)) {
+        .Impossible => unreachable,
+        .Imaginary => .unit(lfield.ty),
+        .Scalar, .Stack => switch (base.normalized(pos, self)) {
+            .empty => unreachable,
+            .value => |v| if (self.types.abi.tryCategorizeReg(lfield.ty, self.types)) |r|
+                .value(
+                    lfield.ty,
+                    self.bl.addBitFieldLoad(
+                        self.sloc(pos),
+                        v,
+                        lfield.offset,
+                        r,
+                    ),
+                )
+            else
+                .unit(lfield.ty),
+            .ptr => |p| .ptr(
+                lfield.ty,
+                self.bl.addFieldOffset(self.sloc(pos), p, lfield.offset),
+            ),
+        },
+    };
+
+    res.normalize(self);
+
+    return res;
 }
 
 pub const SuffixCtx = struct { Lexer.Token, Lexer.Token, u8, Ctx, *?LLValue, bool };
@@ -2322,31 +2462,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                         };
                         const lfield = s.get(self.types).getLayout(self.types).fields[index];
 
-                        res.set(switch (lfield.ty.category(self.types)) {
-                            .Impossible => unreachable,
-                            .Imaginary => .unit(lfield.ty),
-                            .Scalar, .Stack => switch (res.value.normalized(field.pos, self)) {
-                                .empty => unreachable,
-                                .value => |v| if (self.types.abi.tryCategorizeReg(lfield.ty, self.types)) |r|
-                                    .value(
-                                        lfield.ty,
-                                        self.bl.addBitFieldLoad(
-                                            self.sloc(field.pos),
-                                            v,
-                                            lfield.offset,
-                                            r,
-                                        ),
-                                    )
-                                else
-                                    .unit(lfield.ty),
-                                .ptr => |p| .ptr(
-                                    lfield.ty,
-                                    self.bl.addFieldOffset(self.sloc(field.pos), p, lfield.offset),
-                                ),
-                            },
-                        });
-
-                        res.normalize(self);
+                        res.set(self.accessStructField(field.pos, res.value, lfield));
                     },
                 }
             }
@@ -2578,17 +2694,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     }
                     const field = layout.fields[@intCast(i)];
 
-                    res.set(switch (res.value.normalized(tok.pos, self)) {
-                        .empty => .unit(field.ty),
-                        .value => |v| b: {
-                            std.debug.assert(field.offset == 0);
-                            break :b .value(field.ty, v);
-                        },
-                        .ptr => |p| .ptr(
-                            field.ty,
-                            self.bl.addFieldOffset(self.sloc(tok.pos), p, field.offset),
-                        ),
-                    });
+                    res.set(self.accessStructField(top.pos, res.value, field));
                 },
             }
 
@@ -3497,7 +3603,6 @@ pub fn emitTemplateCall(
 
         if (!is_any) self.typeCheck(ps, .{}, &value, ty) catch {};
         ty = if (is_any) value.ty else ty;
-        caller_vl = null;
 
         if (cmptime) {
             const index = template_gen.defineVariable(ident);
@@ -3543,6 +3648,7 @@ pub fn emitTemplateCall(
 
         template_gen.frozen_vars = template_gen.vars.len;
         round_errored = false;
+        caller_vl = null;
     }
 
     if (param_next) {
@@ -4432,6 +4538,10 @@ pub fn partialEvalCall(
     const fnid: Types.FuncId = @enumFromInt(call.extra(.Call).id);
     fnid.get(self.types).queue(.cmptime, self.types);
 
+    if (self.emitCtFuncs(until, self.types.ct_backend.mach.out.relocs.items.len)) {
+        return error.Report;
+    }
+
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -4460,10 +4570,6 @@ pub fn partialEvalCall(
 
     for (args[0..cursor], 0..) |arg, i| {
         self.types.vm.regs.set(.arg(i), @bitCast(arg));
-    }
-
-    if (self.emitCtFuncs(until, self.types.ct_backend.mach.out.relocs.items.len)) {
-        return error.Report;
     }
 
     self.runVm(call.sloc, fnid);
@@ -4533,7 +4639,8 @@ pub fn lexemeToBinOp(self: *Codegen, pos: u32, lx: Lexer.Lexeme, ty: Types.Id) !
 }
 
 pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) !?graph.BinOp {
-    const unsigned = ty.isBuiltin(.isUnsigned) or ty == .bool or ty == .type or ty.data() == .Pointer;
+    const unsigned = ty.isBuiltin(.isUnsigned) or ty == .bool or ty == .type or
+        ty.data() == .Pointer or ty.data() == .Enum;
     const float = ty.isBuiltin(.isFloat);
     if (!unsigned and !ty.isBuiltin(.isSigned) and !float) return null;
     return switch (self) {

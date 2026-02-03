@@ -940,6 +940,17 @@ pub fn skipUnitExpr(lex: *Lexer) SkipError!void {
             _ = try lex.skipLabel();
             try lex.skipExpr();
         },
+        .match, .@"$match" => {
+            try lex.skipExpr();
+            try lex.skipExpr();
+        },
+        .@"for" => {
+            while (true) {
+                try lex.skipExpr();
+                if (!lex.eatMatch(.@",")) break;
+            }
+            try lex.skipExpr();
+        },
         .@"break", .@"continue" => _ = try lex.skipLabel(),
         .@"return" => {
             try lex.skipExpr();

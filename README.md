@@ -1371,7 +1371,7 @@ main := fn(): uint {
 
     match Nm.b {
         .a => return 3,
-        _ => return 0,
+        else => return 0,
     }
 }
 ```
@@ -1400,6 +1400,7 @@ main := fn(): void {
     match enum{.a; .b}.a {}
 
     match enum{.a; .b}.a {
+        .a => {},
         .a => {},
     }
 
@@ -1976,7 +1977,7 @@ main := fn(): uint {
 #### directives 7 (@kind_of)
 ```hb
 expectations := .{
-    return_value: 7,
+    return_value: 6,
 }
 
 main := fn(): uint {

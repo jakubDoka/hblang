@@ -193,6 +193,8 @@ pub const Data = struct {
 
         if (!sym.readonly and !force_readonly) return null;
 
+        if (sym.kind == .prealloc) return .{ .value = 0 };
+
         var value: i64 = 0;
 
         if (sym.offset + offset + @as(i64, @intCast(size)) >
@@ -779,8 +781,12 @@ pub const Data = struct {
         const vs = &self.syms.items[vi];
         std.debug.assert(vs.readonly and vs.linkage != .imported);
 
-        hasher.update(std.mem.asBytes(&vs.kind));
-        hasher.update(self.code.items[vs.offset..][0..vs.size]);
+        hasher.update(@ptrCast(&vs.kind));
+        if (vs.kind == .prealloc) {
+            hasher.update(@ptrCast(&vs.size));
+        } else {
+            hasher.update(self.code.items[vs.offset..][0..vs.size]);
+        }
         hasher.update(@ptrCast(self.relocs.items[vs.reloc_offset..][0..vs.reloc_count]));
 
         return hasher.final();
@@ -1317,7 +1323,14 @@ pub fn emitFunc(self: *Machine, func: *BuilderFunc, opts: EmitOptions) void {
 
 /// generate apropriate final output for a data section
 /// this assumes to be called from a single lane
-pub fn emitData(self: *Machine, opts: DataOptions) void {
+pub fn emitData(self: *Machine, opts_: DataOptions) void {
+    // NOTE: this seems like its safe to assume on any platform since C does
+    // this if this is not the case then the backend impl ensures it is
+    var opts = opts_;
+    if (opts.value == .init and std.mem.allEqual(u8, opts.value.init, 0)) {
+        const tmp = opts.value.init.len;
+        opts.value = .{ .uninit = tmp };
+    }
     self.vtable.emitData(self, opts);
 }
 

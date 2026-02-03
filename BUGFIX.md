@@ -481,7 +481,7 @@ memset := fn(len: uint, dest: ^u8, src: u8): void {
 }
 
 main := fn(): uint {
-    arr: [8]u8 = idk
+    arr: [8]u8 = #idk
     memset(arr.len, arr.ptr, 0)
     return arr[0]
 }
@@ -505,7 +505,7 @@ main := fn(): uint {
 
 #### dump asm crash 1
 ```hb
-cache := fn($fnc: type, $Args: type): type {
+cache := fn($fnc: template, $Args: type): type {
     $Inner := struct {
         cached: ?@TypeOf(fnc(@as(Args, idk))) = null
         args: ?Args = null
@@ -591,6 +591,10 @@ main := fn(): uint return x(null)
 
 #### nullable types 9
 ```hb
+expectations := .{
+    should_error: true,
+}
+
 y := fn(w: never): u32 return 0
 x := fn(z: ?never): u32 if z == null return 0 else return y(z.?)
 main := fn(): uint return x(null)
@@ -599,7 +603,7 @@ main := fn(): uint return x(null)
 #### nullable types 10
 ```hb
 y := fn(w: @Any()): u32 die
-x := fn(z: ?never): u32 return y(z || return 0)
+x := fn(z: ?void): u32 return y(z || return 0)
 main := fn(): uint return x(null)
 ```
 
@@ -625,7 +629,7 @@ main := fn(): uint return c() - 5
 reset := fn(x: []u8): void for i := 0..x.len x[i] = 0xFF
 defb := fn(): ??bool return null
 defc := fn(): ??bool {
-    x: ??bool = idk
+    x: ??bool = #idk
     reset(@as(^u8, @bit_cast(&x))[0..@size_of(??bool)])
     return defb()
 }
@@ -655,14 +659,14 @@ var := ""
 foo := fn(arg: @Any()): uint {
     var = "foo"
     ty := @TypeOf(arg)
-    $if @kind_of(ty) == 7 {
+    $if @kind_of(ty) == 6 {
         i := 0
         $while i < @len_of(ty) {
             _ = foo(arg[i])
             i += 1
         }
         return 0
-    } else $if @kind_of(ty) == 3 {
+    } else $if @kind_of(ty) == 1 {
         if arg == null return 0
         return foo(arg.?)
     } else {
@@ -1278,7 +1282,7 @@ main := fn(): uint return @as(^u8, @bit_cast(0)) != ptr
 ```
 
 #### duplicate identifier 1
-```hb
+```!hb
 expectations := .{
     should_error: true,
 }
