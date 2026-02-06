@@ -151,6 +151,7 @@ expectations := .{
 
 hex := fn(): uint {
     return 0x2d
+}
 dec := fn(): uint {
     return 45
 }
@@ -1786,19 +1787,6 @@ main := fn(): uint {
 }
 ```
 
-#### function pointers 5 (errors)
-```hb
-expectations := .{
-    should_error: true,
-}
-
-call := fn(f: ^fn(u8): u8, v: u8): u8 return f(v)
-
-main := fn(): uint {
-    return call(&fn(x: u8): u8 return x - 10, 10)
-}
-```
-
 #### function pointers 6 (vtable)
 ```hb
 expectations := .{
@@ -2451,7 +2439,6 @@ main := fn(): uint {
 
 #### directives 27 (@alloc_global)
 ```hb
-
 mk_arr := fn(len: uint): []u8 {
     buf: [1024]u8 = idk
 

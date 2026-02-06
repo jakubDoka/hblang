@@ -445,6 +445,9 @@ pub const CcBuilder = struct {
                     (self.int_reg_count > 6 and r.isInt()) or
                     (self.float_reg_count > 8 and r.isFloat());
             },
+            .ablecall => {
+                spilled = self.int_reg_count + self.float_reg_count > 11;
+            },
             else => utils.panic("{}", .{cc}),
         }
 

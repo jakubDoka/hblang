@@ -330,6 +330,8 @@ pub fn buildLow(
             .@"$", .Ident => {
                 if (bl.depth != init_depth) continue;
 
+                if (bl.lexer.eatMatch(.@".")) continue;
+
                 const off = tok.pos + @intFromBool(tok.kind == .@"$");
 
                 const next = bl.lexer.peekNext();

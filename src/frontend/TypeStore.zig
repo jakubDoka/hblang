@@ -16,10 +16,13 @@ arena: utils.Arena,
 tmp: utils.Arena,
 tmp_depth: usize = 0,
 
+// TDOD: remove indexes that are actually not used
 structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .empty,
 struct_index: Interner(StructId) = .empty,
 enums: utils.SegmentedList(Enum, EnumId, 1024, 1024 * 1024) = .empty,
 enum_index: Interner(EnumId) = .empty,
+unions: utils.SegmentedList(Union, UnionId, 1024, 1024 * 1024) = .empty,
+union_index: Interner(UnionId) = .empty,
 funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .empty,
 func_index: Interner(FuncId) = .empty,
 globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .empty,
@@ -149,6 +152,7 @@ pub const Target = enum {
 pub const UnorderedScope = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
     Enum: EnumId,
+    Union: UnionId,
 
     pub const upcast = generic.upcast;
     pub const downcast = generic.downcast;
@@ -172,6 +176,7 @@ pub const ParentRef = enum(u32) {
 pub const Parent = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
     Enum: EnumId,
+    Union: UnionId,
     Func: FuncId,
     Template: TemplateId,
     Tail: enum(u32) { end },
@@ -195,6 +200,7 @@ pub const AnyScopeRef = enum(u32) {
 pub const AnyScope = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
     Enum: EnumId,
+    Union: UnionId,
     Func: FuncId,
     Template: TemplateId,
 
@@ -359,6 +365,7 @@ pub const Data = union(enum(u8)) {
     FuncTy: FuncTyId,
     Struct: StructId,
     Enum: EnumId,
+    Union: UnionId,
 
     pub const scope_start = 6;
     pub const index_start = 2;
@@ -369,26 +376,24 @@ pub const Data = union(enum(u8)) {
     pub fn size(self: Data, types: *Types) Size {
         return switch (self) {
             .Builtin => |b| b.size(types),
-            .Option => |o| o.get(types).getLayout(types).spec.size,
             .FuncTy => 4,
             .Pointer => 8,
             .Slice => 16,
-            .Enum => |e| e.get(types).getLayout(types).spec.size,
             .Array => |a| a.get(types).elem.size(types) * a.get(types).len.s,
-            .Struct => |s| s.get(types).getLayout(types).spec.size,
+            inline .Option, .Struct, .Enum, .Union => |s| s.get(types)
+                .getLayout(types).spec.size,
         };
     }
 
     pub fn alignment(self: Data, types: *Types) Size {
         return switch (self) {
             .Builtin => |b| b.alignment(types),
-            .Option => |o| o.get(types).getLayout(types).spec.alignmentBytes(),
             .FuncTy => 4,
             .Pointer => 8,
             .Slice => 16,
-            .Enum => |e| e.get(types).getLayout(types).spec.alignmentBytes(),
             .Array => |a| a.get(types).elem.alignment(types),
-            .Struct => |s| s.get(types).getLayout(types).spec.alignmentBytes(),
+            inline .Option, .Struct, .Enum, .Union => |e| e.get(types)
+                .getLayout(types).spec.alignmentBytes(),
         };
     }
 };
@@ -473,6 +478,15 @@ pub const Id = enum(u32) {
         return self.data().size(types);
     }
 
+    pub fn child(self: Id, types: *Types) ?Id {
+        return switch (self.data()) {
+            .Pointer => |p| p.get(types).ty,
+            .Option => |o| o.get(types).inner,
+            inline .Slice, .Array => |a| a.get(types).elem,
+            .Struct, .Enum, .Union, .FuncTy, .Builtin => null,
+        };
+    }
+
     pub fn isBuiltin(
         self: Id,
         comptime pred: enum { isInteger, isUnsigned, isSigned, isFloat },
@@ -496,8 +510,7 @@ pub const Id = enum(u32) {
         return @intCast(switch (self.data()) {
             .Slice, .Pointer, .Builtin, .Option => 0,
             .Array => |a| a.get(types).len.s,
-            .Struct => |s| s.get(types).decls.fields.len,
-            .Enum => |s| s.get(types).decls.fields.len,
+            inline .Struct, .Enum, .Union => |s| s.get(types).decls.fields.len,
             .FuncTy => |f| f.get(types).args.len,
         });
     }
@@ -544,7 +557,7 @@ pub const Id = enum(u32) {
                 try writer.writeAll("[]");
                 try s.get(types).elem.format_(types, writer);
             },
-            inline .Enum, .Struct => |s| try s.get(types).format_(types, writer),
+            inline .Enum, .Struct, .Union => |s| try s.get(types).format_(types, writer),
         }
     }
 
@@ -743,8 +756,9 @@ pub const Scope = extern struct {
     }
 
     pub const NamePos = enum(u32) {
-        tuple = std.math.maxInt(u32) - 2,
-        file = std.math.maxInt(u32) - 1,
+        tuple = std.math.maxInt(u32) - 3,
+        file,
+        import,
         empty,
         _,
 
@@ -753,6 +767,7 @@ pub const Scope = extern struct {
                 .file => 0,
                 .empty => 0,
                 .tuple => 0,
+                .import => |v| @intFromEnum(v),
                 _ => |v| @intFromEnum(v),
             };
         }
@@ -762,6 +777,10 @@ pub const Scope = extern struct {
                 .file => file.get(types).path,
                 .empty => "",
                 .tuple => "tuple",
+                .import => |v| {
+                    const str = file.get(types).tokenStr(@intFromEnum(v));
+                    return str[1 .. str.len - 1];
+                },
                 _ => |v| file.get(types).tokenStr(@intFromEnum(v)),
             };
         }
@@ -870,6 +889,7 @@ pub const Option = struct {
                 .never => return .empty,
                 else => return .not_computed,
             },
+            .Union => return .not_computed,
             .Enum => |e| return if (e.get(types).decls.fields.len == 0)
                 .empty
             else
@@ -925,98 +945,6 @@ pub const Array = extern struct {
     pub fn eql(self: *Array, other: *Array, _: *Types) bool {
         return std.meta.eql(self.elem, other.elem) and
             std.meta.eql(self.len, other.len);
-    }
-};
-
-pub const EnumId = EntId(Enum, "enums");
-pub const Enum = struct {
-    scope: Scope,
-    captures: Captures,
-    decls: *DeclIndex,
-    layout: ?Layout = null,
-
-    pub const Layout = struct {
-        spec: graph.AbiParam.StackSpec,
-        fields: []i64,
-
-        pub fn backingInteger(self: *Layout) Id {
-            return @enumFromInt(@intFromEnum(Id.u8) + self.spec.alignment);
-        }
-    };
-
-    pub fn format_(
-        self: *@This(),
-        types: *Types,
-        writer: *std.Io.Writer,
-    ) std.Io.Writer.Error!void {
-        try self.scope.format_(types.enums.ptrToIndex(self), types, writer);
-    }
-
-    pub const lookupField = generic.lookupField;
-
-    pub fn getLayout(self: *Enum, types: *Types) *Layout {
-        if (self.layout) |*l| return l;
-
-        const file = self.scope.file.get(types);
-
-        self.layout = Layout{
-            .spec = .{ .size = 0, .alignment = 1 },
-            .fields = types.arena.alloc(i64, self.decls.fields.len),
-        };
-        const layout = &self.layout.?;
-
-        var lex = Lexer.init(file.source, self.decls.start);
-        _ = lex.slit(.@"enum");
-        if (lex.eatMatch(.@"(")) tag: {
-            var gen: Codegen = undefined;
-            gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, types.tmp.allocator());
-
-            const vl = gen.typ(&lex) catch break :tag;
-            layout.spec = vl.stackSpec(types);
-        }
-
-        var tmp = types.tmpCheckpoint();
-        defer tmp.deinit();
-
-        var max_value: i64 = 0;
-        var value: i64 = 0;
-        for (self.decls.fields.items(.offset), layout.fields) |f, *slt| {
-            var flex = Lexer.init(file.source, f);
-
-            _ = flex.slit(.Ident);
-            if (flex.eatMatch(.@":=")) vl: {
-                var gen: Codegen = undefined;
-                gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, tmp.allocator());
-
-                const vl = gen.typedExpr(.i64, .{}, &flex) catch break :vl;
-                value = gen.peval(flex.cursor, vl, i64) catch break :vl;
-            }
-
-            if (layout.spec.size != 0) {
-                if ((@as(u64, 1) <<| layout.spec.size * 8) < value) {
-                    types.report(
-                        self.scope.file,
-                        flex.cursor,
-                        "enum value too large, does not fit in {} bits",
-                        .{layout.spec.size * 8},
-                    );
-                }
-            }
-
-            slt.* = value;
-            max_value = @max(max_value, value);
-            value +%= 1;
-        }
-
-        if (layout.spec.size == 0) {
-            layout.spec.size = @max(8, std.math.ceilPowerOfTwo(
-                Size,
-                @max(64 - @clz(max_value), 1),
-            ) catch unreachable) / 8;
-            layout.spec.alignment = std.math.log2_int(u64, @max(1, layout.spec.size));
-        }
-
-        return layout;
     }
 };
 
@@ -1159,6 +1087,203 @@ pub const Struct = struct {
             layout.spec.size,
             layout.spec.alignmentBytes(),
         );
+
+        return layout;
+    }
+};
+
+pub const EnumId = EntId(Enum, "enums");
+pub const Enum = struct {
+    scope: Scope,
+    captures: Captures,
+    decls: *DeclIndex,
+    layout: ?Layout = null,
+
+    pub const Layout = struct {
+        spec: graph.AbiParam.StackSpec,
+        fields: []i64,
+
+        pub fn backingInteger(self: *Layout) Id {
+            return @enumFromInt(@intFromEnum(Id.u8) + self.spec.alignment);
+        }
+    };
+
+    pub fn format_(
+        self: *@This(),
+        types: *Types,
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
+        try self.scope.format_(types.enums.ptrToIndex(self), types, writer);
+    }
+
+    pub const lookupField = generic.lookupField;
+
+    pub fn getLayout(self: *Enum, types: *Types) *Layout {
+        if (self.layout) |*l| return l;
+
+        const file = self.scope.file.get(types);
+
+        self.layout = Layout{
+            .spec = .{ .size = 0, .alignment = 1 },
+            .fields = types.arena.alloc(i64, self.decls.fields.len),
+        };
+        const layout = &self.layout.?;
+
+        var lex = Lexer.init(file.source, self.decls.start);
+
+        if (lex.eatMatch(.@"union")) {
+            _ = lex.slit(.@"(");
+            _ = lex.slit(.@"enum");
+            _ = lex.slit(.@")");
+        } else {
+            _ = lex.slit(.@"enum");
+
+            if (lex.eatMatch(.@"(")) tag: {
+                var gen: Codegen = undefined;
+                gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, types.tmp.allocator());
+
+                const vl = gen.typ(&lex) catch break :tag;
+                layout.spec = vl.stackSpec(types);
+            }
+        }
+
+        var tmp = types.tmpCheckpoint();
+        defer tmp.deinit();
+
+        var max_value: i64 = 0;
+        var value: i64 = 0;
+        for (self.decls.fields.items(.offset), layout.fields) |f, *slt| {
+            var flex = Lexer.init(file.source, f);
+
+            _ = flex.slit(.Ident);
+            if (flex.eatMatch(.@":=")) vl: {
+                var gen: Codegen = undefined;
+                gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, tmp.allocator());
+
+                const vl = gen.typedExpr(.i64, .{}, &flex) catch break :vl;
+                value = gen.peval(flex.cursor, vl, i64) catch break :vl;
+            }
+
+            if (layout.spec.size != 0) {
+                if ((@as(u64, 1) <<| layout.spec.size * 8) < value) {
+                    types.report(
+                        self.scope.file,
+                        flex.cursor,
+                        "enum value too large, does not fit in {} bits",
+                        .{layout.spec.size * 8},
+                    );
+                }
+            }
+
+            slt.* = value;
+            max_value = @max(max_value, value);
+            value +%= 1;
+        }
+
+        if (layout.spec.size == 0) {
+            layout.spec.size = @max(8, std.math.ceilPowerOfTwo(
+                Size,
+                @max(64 - @clz(max_value), 1),
+            ) catch unreachable) / 8;
+            layout.spec.alignment = std.math.log2_int(u64, @max(1, layout.spec.size));
+        }
+
+        return layout;
+    }
+};
+
+pub const UnionId = EntId(Union, "unions");
+pub const Union = struct {
+    scope: Scope,
+    captures: Captures,
+    decls: *DeclIndex,
+    layout: ?Layout = null,
+
+    pub const Layout = struct {
+        tag: ?EnumId,
+        spec: graph.AbiParam.StackSpec,
+        fields: []Id,
+
+        pub const TagLayout = struct { id: EnumId, offset: Size };
+
+        pub fn tagLayout(self: *Layout) ?TagLayout {
+            return if (self.tag) |tag|
+                .{ .id = tag, .offset = self.spec.size - self.spec.alignmentBytes() }
+            else
+                null;
+        }
+    };
+
+    pub const lookupField = generic.lookupField;
+
+    pub fn format_(self: *Union, types: *Types, writer: *std.Io.Writer) error{WriteFailed}!void {
+        try self.scope.format_(types.unions.ptrToIndex(self), types, writer);
+    }
+
+    pub fn getLayout(self: *Union, types: *Types) *Layout {
+        if (self.layout) |*l| return l;
+
+        const file = self.scope.file.get(types);
+
+        self.layout = .{
+            .tag = null,
+            .spec = .{ .alignment = 1, .size = 0 },
+            .fields = types.arena.alloc(Id, self.decls.fields.len),
+        };
+        const layout = &self.layout.?;
+
+        var tmp = types.tmpCheckpoint();
+        defer tmp.deinit();
+
+        var gen: Codegen = undefined;
+        gen.init(
+            types,
+            .nany(types.unions.ptrToIndex(self)),
+            .never,
+            tmp.allocator(),
+        );
+        _ = gen.bl.begin(.systemv, &.{}, &.{});
+
+        var lex = Lexer.init(file.source, self.decls.start);
+        _ = lex.slit(.@"union");
+        if (lex.eatMatch(.@"(")) tag: {
+            const check_point = lex.cursor;
+            if (lex.eatMatch(.@"enum") and lex.eatMatch(.@")")) {
+                layout.tag = types.enums.push(&types.arena, .{
+                    .scope = gen.gatherScope(),
+                    .captures = .empty,
+                    .decls = self.decls, // mabye, just mabye
+                });
+            } else {
+                lex.cursor = check_point;
+                const ty = gen.typ(&lex) catch break :tag;
+                if (ty.data() != .Enum) {
+                    gen.report(lex.cursor, "{} is not an enum", .{ty}) catch break :tag;
+                }
+
+                layout.tag = ty.data().Enum;
+            }
+        }
+
+        for (self.decls.fields.items(.offset), layout.fields) |off, *slot| {
+            var flex = Lexer.init(file.source, off);
+
+            _ = flex.slit(.Ident);
+            _ = gen.expect(&flex, .@":", "to start the field type declaration") catch {};
+
+            slot.* = gen.typ(&flex) catch .never;
+
+            layout.spec.size = @max(layout.spec.size, slot.size(types));
+            layout.spec.alignment = @max(layout.spec.alignment, slot.alignmentPow(types));
+        }
+
+        if (layout.tag) |t| {
+            layout.spec.alignment = @max(
+                layout.spec.alignment,
+                Id.nany(t).alignmentPow(types),
+            );
+            layout.spec.size += layout.spec.alignmentBytes();
+        }
 
         return layout;
     }
@@ -1340,6 +1465,7 @@ pub fn init(
             .gpa = gpa,
             .push_uninit_globals = true,
             .emit_global_reloc_offsets = true,
+            .comptime_only_fn = Codegen.comptime_only_fn,
         },
         .loader = loader,
         .backend = backend,
@@ -1615,6 +1741,25 @@ pub fn collectRelocsRecur(
                     @intCast(offset + f.offset),
                 );
             }
+        },
+        .Union => |u| {
+            const layout = u.get(self).getLayout(self);
+            const tag = layout.tagLayout() orelse return;
+
+            const tag_size = Id.nany(tag.id).size(self);
+            var value: i64 = 0;
+            @memcpy(
+                std.mem.asBytes(&value)[0..tag_size],
+                ctx.bytes[tag.offset..][0..tag_size],
+            );
+
+            const findex = std.mem.indexOfScalar(i64, tag.id.get(self)
+                .getLayout(self).fields, value) orelse {
+                self.reportSloc(ctx.sloc, "tagged union has an invalid tag", .{});
+                return;
+            };
+
+            self.collectRelocsRecur(ctx, layout.fields[findex], offset);
         },
     }
 }

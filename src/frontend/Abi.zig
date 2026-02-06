@@ -40,6 +40,11 @@ pub fn isRetByRef(abi: Abi, self: Spec) bool {
     };
 }
 
+pub fn isMultivalue(_: Abi, self: Spec) bool {
+    const pr = self orelse return false;
+    return pr.len == 2 or (pr.len == 1 and pr[0] == .Stack);
+}
+
 pub fn categorizeSignature(
     abi: Abi,
     args: []const Types.Id,
@@ -105,15 +110,9 @@ pub fn categorizeAssumeReg(self: Abi, ty: Id, types: *Types) graph.DataType {
 
 pub fn categorize(self: Abi, ty: Id, types: *Types, buf: *Buf) ?[]graph.AbiParam {
     switch (self.cc) {
-        .ablecall, .wasmcall => switch (ty.data()) {
-            .Builtin => |b| {
-                const param = categorizeBuiltin(b) catch return null;
-                if (param) |pa| buf.push(.{ .Reg = pa });
-            },
-            else => unreachable,
-        },
-        .systemv => switch (ty.data()) {
+        .ablecall, .wasmcall, .systemv => switch (ty.data()) {
             else => {
+                // NOTE: well, maybe we can improve some stuff, but eh
                 categorizeSystemv(ty, buf, types) catch |err| switch (err) {
                     error.ByRef => buf.spilled(ty.stackSpec(types)),
                     error.Impossible => return null,
@@ -225,6 +224,28 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                     for (s.get(ts).getLayout(ts).fields) |f| {
                         try classify(f.ty, ts, offset + f.offset, catas);
                     }
+                    return;
+                },
+                .Union => |u| {
+                    if (u.get(ts).decls.fields.len == 0) return error.Impossible;
+
+                    const layout = u.get(ts).getLayout(ts);
+
+                    var impossible = true;
+
+                    for (layout.fields) |f| {
+                        classify(f, ts, offset, catas) catch |err| switch (err) {
+                            error.ByRef => return err,
+                            error.Impossible => continue,
+                        };
+                        impossible = false;
+                    }
+
+                    if (layout.tagLayout()) |tl| {
+                        try classify(.nany(tl.id), ts, offset + tl.offset, catas);
+                    }
+
+                    if (impossible) return error.Impossible;
                     return;
                 },
                 .Array => |a| {

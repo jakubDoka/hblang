@@ -833,12 +833,14 @@ pub const Call = struct {
     }
 };
 
+pub const CallId = union(enum) { fptr: *BuildNode, sym: u32, special: u32 };
+
 pub fn addCall(
     self: *Builder,
     scratch: *utils.Arena,
     sloc: graph.Sloc,
     call_conv: graph.CallConv,
-    id: union(enum) { fptr: *BuildNode, sym: u32, special: u32 },
+    id: CallId,
 ) Call {
     var buf: [4]?*BuildNode = undefined;
     var inps = std.ArrayList(?*BuildNode).initBuffer(&buf);

@@ -839,7 +839,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         return;
     };
 
-    // func.fmtScheduledLog();
+    //func.fmtScheduledLog();
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();

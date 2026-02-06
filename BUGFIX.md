@@ -2768,3 +2768,15 @@ main := fn(): uint {
 }
 
 ```
+
+#### duplicate import 1
+```hb
+malloc := fn(i: int): ^void @import("malloc")
+malloc2 := fn(i: int): ^void @import("malloc")
+
+main := fn(): uint {
+    _ = malloc(10)
+    _ = malloc2(10)
+    return 0
+}
+```
