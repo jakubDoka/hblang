@@ -109,7 +109,7 @@ pub const File = struct {
     source: [:0]const u8,
     decls: DeclIndex,
     lines: hb.LineIndex,
-    root_sope: Types.AnyScopeRef = undefined,
+    root_sope: Types.StructId = undefined,
 
     pub const Id = enum(u32) {
         root,
@@ -131,6 +131,14 @@ pub const File = struct {
             .decls = try .build(source, loader, scratch),
             .lines = .init(source, scratch),
         };
+    }
+
+    pub fn builtin(scratch: *utils.Arena) !File {
+        return init(
+            @embedFile("../builtin.hb"),
+            &Loader.noop_state.loader,
+            scratch,
+        );
     }
 
     pub fn isComptime(self: File, offset: u32) bool {
@@ -167,7 +175,6 @@ pub const Loader = struct {
 
     pub const LoadOptions = struct {
         pos: u32,
-
         path: []const u8,
     };
 
@@ -190,6 +197,10 @@ pub const Loader = struct {
 
     pub fn load(self: *Loader, opts: LoadOptions) ?File.Id {
         return self._load(self, opts);
+    }
+
+    pub fn loadEmbed(self: *Loader, opts: LoadOptions) ?[:0]const u8 {
+        return self._load_embed(self, opts);
     }
 };
 

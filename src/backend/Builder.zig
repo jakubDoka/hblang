@@ -150,6 +150,24 @@ pub fn addFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: 
     return self.addLoad(sloc, self.addFieldOffset(sloc, base, offset), ty);
 }
 
+pub fn addBitIndexLoad(
+    self: *Builder,
+    sloc: graph.Sloc,
+    base: *Func.Node,
+    subscript: *Func.Node,
+    ty: DataType,
+) *BuildNode {
+    std.debug.assert(base.data_type.isInt());
+    std.debug.assert(ty.isInt());
+
+    const elem_size_imm = self.addIntImm(sloc, base.data_type, ty.size());
+    const index = self.addBinOp(sloc, .imul, base.data_type, subscript, elem_size_imm);
+    const shift = self.addBinOp(sloc, .ushr, base.data_type, base, index);
+    const red = self.addUnOp(sloc, .ired, ty, shift);
+
+    return red;
+}
+
 pub fn addBitFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
     std.debug.assert(base.data_type.isInt());
     std.debug.assert(ty.isInt());

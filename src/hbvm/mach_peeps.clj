@@ -1,6 +1,6 @@
 (CInt ?c (:value 0)) : (Zero (:data_type .i64) c)
 
-(UnOp _ (:op .cast | .ired) oper) : oper
+(UnOp _ (:op .cast) oper) : oper
 
 (MemCpy c m d s (CInt (:value size))) :
   (BlockCpy c m d s (:size {@intCast(size)}))

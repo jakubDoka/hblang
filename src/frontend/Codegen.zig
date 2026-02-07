@@ -122,6 +122,9 @@ pub const Value = struct {
     }
 
     pub fn asPtr(self: Value, pos: u32, gen: *Codegen) !*BNode {
+        const no_address_msg = "the value is not" ++
+            " referncable, it has no address, use `#<expr>` to force a spill";
+
         return switch (self.normalized(pos, gen)) {
             .empty => gen.bl.addUninit(gen.sloc(pos), .i64),
             .value => return gen.report(pos, no_address_msg, .{}),
@@ -762,21 +765,17 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
 
     var lex = Lexer.init(file.source, func.pos);
 
+    reportGeneric(file.path, file.source, self.types, func.pos, "", .{});
+
     const arg_iter = lex.list(.@",", .@")");
     var param_idx: usize = 0;
     var arg_idx: usize = 0;
     while (arg_iter.next()) : (arg_idx += 1) {
         const name, const cmptime = lex.eatIdent() orelse unreachable;
         _ = lex.slit(.@":");
+        lex.skipExpr() catch unreachable;
 
-        var ty = self.typ(&lex) catch .never;
-        if (ty == .any) {
-            if (cmptime) {
-                ty = func.params[param_idx].ty;
-            } else {
-                ty = func.args[arg_idx];
-            }
-        }
+        const ty = func.args[arg_idx];
 
         if (cmptime) {
             const index = self.defineVariable(name);
@@ -787,7 +786,7 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
             std.debug.assert(slot.value == std.math.maxInt(u32));
             std.debug.assert(is_cmptime);
 
-            slot.ty = func.params[param_idx].ty;
+            slot.ty = ty;
 
             self.cmptime_values.append(
                 self.bl.arena(),
@@ -967,9 +966,6 @@ pub fn typedExpr(self: *Codegen, ty: Types.Id, ctx: Ctx, lex: *Lexer) Error!Valu
 pub fn expr(self: *Codegen, ctx: Ctx, lex: *Lexer) Error!Value {
     return self.exprPrec(ctx, lex, 254);
 }
-
-const no_address_msg = "the value is not" ++
-    " referncable, it has no address, use `#<expr>` to force a spill";
 
 pub const StringEncodeResutl = union(enum) {
     ok: []u8,
@@ -1274,6 +1270,9 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 const felem = elem orelse {
                     return self.report(lex.cursor, "cant infer the element type of the slice literal", .{});
                 };
+
+                const slot_ty = self.types.arrayOf(felem, len);
+                self.bl.resizeLocal(slot, slot_ty.size(self.types), slot_ty.raw());
 
                 const slice_ty = self.types.sliceOf(felem);
                 const slice = self.emitLoc(tok.pos, slice_ty, ctx);
@@ -1840,6 +1839,17 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
         .@"break" => try self.loopControl(lex, .@"break", try self.eatLabel(lex)),
         .@"continue" => try self.loopControl(lex, .@"continue", try self.eatLabel(lex)),
         .@"return" => {
+            var cursor = self.loops;
+            while (cursor) |l| : (cursor = l.prev) {
+                switch (l.state) {
+                    .runtime => |*r| {
+                        r.bl.markBreaking();
+                        break;
+                    },
+                    else => {},
+                }
+            }
+
             const cx = Ctx{ .ty = self.ret_ty, .loc = self.ret_ref };
 
             var ret: Value = if (lex.peekNext().kind.canStartExpression())
@@ -2101,6 +2111,37 @@ pub fn directive(
     const slc = self.sloc(pos);
 
     const value: Value = d: switch (d) {
+        .is_comptime => .value(.bool, self.bl.addIntImm(
+            slc,
+            .i8,
+            @intFromBool(self.target == .cmptime),
+        )),
+        .@"error" => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            var message = std.Io.Writer.Allocating.init(tmp.arena.allocator());
+
+            while (iter.next()) {
+                const tk = lex.peekNext();
+                if (tk.kind == .@"\"") {
+                    lex.cursor = tk.end;
+                    const smsg = tk.view(lex.source);
+                    message.writer.writeAll(
+                        smsg[1 .. smsg.len - 1],
+                    ) catch unreachable;
+                    continue;
+                }
+
+                const vl = self.expr(.{}, lex) catch continue;
+                if (vl.ty == .type) {
+                    const ty = self.peval(lex.cursor, vl, Types.Id) catch .never;
+                    message.writer.print("{f}", .{ty.fmt(self.types)}) catch unreachable;
+                }
+            }
+
+            return self.report(pos, "{}", .{message.written()});
+        },
         .use => {
             _ = lex.slit(.@"\"");
 
@@ -2109,7 +2150,40 @@ pub fn directive(
                 return self.report(tok.pos, "BUG: cannot find imported declaration", .{});
             };
 
-            break :d self.tyLit(tok.pos, use.get(self.types).root_sope.data().Struct);
+            break :d self.tyLit(tok.pos, use.get(self.types).root_sope);
+        },
+        .embed => {
+            const path = try self.expect(lex, .@"\"", "to declare the relative path");
+            var path_str = path.view(lex.source);
+            path_str = path_str[1 .. path_str.len - 1];
+
+            const embed = self.types.loader.loadEmbed(.{
+                .path = path_str,
+                .pos = pos,
+            }) orelse {
+                return self.report(pos, "can't load the embed", .{});
+            };
+
+            const storage = self.types.globals.push(&self.types.arena, .{
+                .scope = self.gatherScope(),
+                .ty = self.types.arrayOf(.u8, @intCast(embed.len)),
+                .readonly = true,
+            });
+
+            storage.get(self.types).scope.name_pos = .empty;
+
+            self.types.ct_backend.emitData(.{
+                .id = @intFromEnum(storage),
+                .value = .{ .init = embed },
+                .readonly = true,
+                .thread_local = false,
+                .uuid = @splat(0),
+            });
+
+            break :d .ptr(
+                storage.get(self.types).ty,
+                self.bl.addGlobalAddr(slc, @intFromEnum(storage)),
+            );
         },
         .ReturnType => {
             const func = self.scope.data().findCurrentFunc(self.types) orelse {
@@ -2138,6 +2212,8 @@ pub fn directive(
         },
         .CurrentScope => self.tyLit(pos, self.scope.data()
             .findCurrentScope(self.types)),
+        .RootScope => self.tyLit(pos, hb.frontend.DeclIndex.File.Id
+            .root.get(self.types).root_sope),
         .ChildOf => {
             const oper = try self.typ(lex);
             break :d self.tyLit(pos, oper.child(self.types) orelse
@@ -2304,9 +2380,11 @@ pub fn directive(
             };
             break :d .value(.bool, self.bl.addIntImm(slc, .i8, @intFromBool(matched)));
         },
-        .syscall => {
+        .syscall, .ecall => {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
+
+            comptime if (hb.x86_64.X86_64Gen.syscall != hb.hbvm.HbvmGen.eca) unreachable;
 
             const ret = try self.expectDestType(.syscall, pos, ctx.ty);
             var call = self.bl.addCall(
@@ -2325,8 +2403,8 @@ pub fn directive(
                 if (call.abi_params.items.len - prev_len != 1 or
                     call.abi_params.items[prev_len] != .Reg)
                 {
-                    self.report(pos, "{} can not be passed by register but" ++
-                        " syscall call convention does not allow that", .{ty}) catch {};
+                    self.report(pos, "{} can not be passed by single register but" ++
+                        " syscall/ecall call convention does not allow that", .{ty}) catch {};
                 }
             }
 
@@ -2340,6 +2418,24 @@ pub fn directive(
         .@"inline" => {
             const fn_arg = try self.expr(.{}, lex);
             return self.emitCall(pos, ctx, null, fn_arg, lex);
+        },
+        .frame_pointer => .value(.uint, self.bl.addFramePointer(slc, .i64)),
+        .has_decl => {
+            const ty = try self.typ(lex);
+            try self.expectNext(iter);
+
+            const name = try self.expect(lex, .@"\"", "to indicate the decl name");
+            var str_name = name.view(lex.source);
+            str_name = str_name[1 .. str_name.len - 1];
+
+            const unoscope = ty.data().downcast(Types.UnorderedScope) orelse {
+                break :d .value(.bool, self.bl.addIntImm(slc, .i8, 0));
+            };
+
+            const scope_file = unoscope.scope(self.types).file.get(self.types).source;
+            const has = unoscope.decls(self.types).lookup(scope_file, str_name) != null;
+
+            break :d .value(.bool, self.bl.addIntImm(slc, .i8, @intFromBool(has)));
         },
         .alloc_global => {
             var tmp = utils.Arena.scrath(null);
@@ -2825,20 +2921,34 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                         ),
                     ));
                 },
-                .Array => |a| {
+                .Array => |a| ax: {
                     if (a.get(self.types).len.s == 0) {
                         return self.report(top.pos, "can't index empty array", .{});
                     }
 
-                    const ptr = try res.value.asPtr(top.pos, self);
+                    const elem = a.get(self.types).elem;
+
+                    const ptr = switch (res.value.normalized(top.pos, self)) {
+                        .empty => self.bl.addUninit(self.sloc(top.pos), .i64),
+                        .value => |v| {
+                            res.set(.value(elem, self.bl.addBitIndexLoad(
+                                self.sloc(top.pos),
+                                v,
+                                index.?.load(self),
+                                self.types.abi.categorizeAssumeReg(elem, self.types),
+                            )));
+                            break :ax;
+                        },
+                        .ptr => |p| p,
+                    };
 
                     res.set(.ptr(
-                        a.get(self.types).elem,
+                        elem,
                         self.bl.addIndexOffset(
                             self.sloc(top.pos),
                             ptr,
                             .iadd,
-                            a.get(self.types).elem.size(self.types),
+                            elem.size(self.types),
                             index.?.load(self),
                         ),
                     ));
@@ -3883,19 +3993,9 @@ pub fn emitTemplateCall(
             template_gen.cmptime_values.append(template_gen.bl.arena(), vl) catch unreachable;
             slot.value = @intCast(template_gen.cmptime_values.items.len - 1);
 
-            params.append(tmp.arena.allocator(), .{
-                .flags = .{ .is_any = false },
-                .ty = ty,
-                .value = vl,
-            }) catch unreachable;
+            params.append(tmp.arena.allocator(), .{ .value = vl }) catch unreachable;
         } else {
             if (is_any) {
-                params.append(tmp.arena.allocator(), .{
-                    .flags = .{ .is_any = true },
-                    .ty = ty,
-                    .value = undefined,
-                }) catch unreachable;
-
                 _ = try template_gen.pushVariable(
                     ident,
                     .ptr(ty, template_gen.bl.addStub(self.sloc(ps), .i64)),
@@ -3905,9 +4005,9 @@ pub fn emitTemplateCall(
             if (caller_vl != null or is_any) {
                 _ = try self.passArg(&call, .{ .computed = .{ .value = value, .pos = ps } });
             }
-
-            args.append(tmp.arena.allocator(), value.ty) catch unreachable;
         }
+
+        args.append(tmp.arena.allocator(), value.ty) catch unreachable;
 
         template_gen.frozen_vars = template_gen.vars.len;
         round_errored = false;
@@ -3999,12 +4099,7 @@ pub fn emitConcreteCall(
         break :b .{ .{ .sym = @intFromEnum(fid) }, fid.get(self.types).sig() };
     };
 
-    var call = self.bl.addCall(
-        tmp.arena,
-        self.sloc(pos),
-        self.types.abi.cc,
-        fid,
-    );
+    var call = self.bl.addCall(tmp.arena, self.sloc(pos), self.types.abi.cc, fid);
 
     var buf = Abi.Buf{};
     const ret_cata = self.types.abi.categorize(func.ret, self.types, &buf);
@@ -5162,10 +5257,10 @@ pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
     defer tmp.deinit();
 
     var self: Codegen = undefined;
-    self.init(types, root.root_sope, .never, tmp.allocator());
+    self.init(types, .nany(root.root_sope), .never, tmp.allocator());
     _ = self.bl.begin(.systemv, &.{}, &.{});
 
-    const main = self.lookupIdent(root.root_sope, "main") orelse {
+    const main = self.lookupIdent(.nany(root.root_sope), "main") orelse {
         if (types.loader.diagnostics) |diags| {
             try diags.writeAll(
                 \\...you can define the `main` in the mentioned file (or pass --no-entry):
@@ -5462,6 +5557,10 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     var scratch = utils.Arena.init(1024 * 1024 * 16);
     var writer = std.fs.File.stderr().writer(&.{});
 
+    errdefer {
+        //std.fs.cwd().makePath(scratch.print("failed_tests/{s}", .{name})) catch {};
+    }
+
     const asts, var kl = try parseExample(
         &scratch,
         name,
@@ -5469,7 +5568,8 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
         &writer.interface,
     );
 
-    const target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
+    const target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
+    //const target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
 
     const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();
@@ -5662,19 +5762,24 @@ pub fn parseExample(
     }
 
     var kl = KnownLoader{ .files = files.items };
-    const asts = scratch.alloc(File, files.items.len);
-    for (asts, files.items, 0..) |*ast, fr, i| {
+    var len: usize = 0;
+    const asts = scratch.alloc(File, files.items.len + 1);
+    for (files.items, 0..) |fr, i| {
         if (std.mem.endsWith(u8, fr.path, ".hb") or i == 0) {
             kl.loader.path = fr.path;
             kl.loader.from = @enumFromInt(i);
             kl.loader.diagnostics = output;
             kl.loader.colors = .escape_codes;
 
-            ast.* = try .init(fr.source, &kl.loader, scratch);
+            asts[len] = try .init(fr.source, &kl.loader, scratch);
+            len += 1;
         }
     }
 
-    return .{ asts, kl };
+    asts[len] = try .builtin(scratch);
+    len += 1;
+
+    return .{ asts[0..len], kl };
 }
 
 pub fn gatherScope(self: *Codegen) Types.Scope {

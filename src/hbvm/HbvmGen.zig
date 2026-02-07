@@ -18,7 +18,6 @@ ctx: *Ctx = undefined,
 emit_global_reloc_offsets: bool = false,
 push_uninit_globals: bool = false,
 align_globlals: bool = false,
-comptime_only_fn: ?u32 = null,
 
 pub const Ctx = struct {
     local_relocs: std.ArrayList(BlockReloc),
@@ -36,6 +35,7 @@ const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
 
 pub const eca = root.backend.Machine.max_func;
+pub const min_eca = eca - 5;
 pub const tmp_registers = 2;
 pub const max_alloc_regs = @intFromEnum(isa.Reg.stack_addr) - 1 - tmp_registers;
 pub const biased_regs: u64 = 0;
@@ -607,7 +607,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         std.debug.assert(no.data_type == .f64);
                         self.emit(.fc32t64, .{ self.getReg(no), self.getReg(inps[0]) });
                     },
-                    .ired, .cast => unreachable,
+                    .ired => {
+                        if (self.getReg(no) != self.getReg(inps[0])) {
+                            self.emit(.cp, .{ self.getReg(no), self.getReg(inps[0]) });
+                        }
+                    },
+                    .cast => unreachable,
                 }
             },
             .ImmBinOp => |extra| {
@@ -655,7 +660,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.jeq, .{ self.getReg(inps[0]), .null, 0 });
             },
             .Call => |extra| {
-                if (extra.id == eca or extra.id == self.comptime_only_fn) {
+                if (extra.id >= min_eca) {
                     self.emit(.eca, .{});
                 } else if (extra.id == graph.indirect_call) {
                     self.emit(.jala, .{ .ret_addr, self.getReg(inps[0]), 0 });
@@ -827,8 +832,9 @@ pub fn doInterrupt(
 ) Mach.RunError!void {
     switch (vm.regs.get(.arg(0))) {
         100 => {
-            std.debug.assert(vm.regs.get(.arg(1)) == 1);
-            std.debug.assert(vm.regs.get(.arg(2)) == 2);
+            const stru: [2]u64 = @bitCast(ctx.memory[vm.regs.get(.arg(1))..][0..16].*);
+            std.debug.assert(stru[0] == 1);
+            std.debug.assert(stru[1] == 2);
             vm.regs.set(.ret(0), 3);
         },
         3 => switch (vm.regs.get(.arg(1))) {

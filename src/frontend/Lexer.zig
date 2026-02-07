@@ -905,8 +905,12 @@ pub fn skipUnitExpr(lex: *Lexer) SkipError!void {
             lex.eatUntilClosingDelimeter();
             try lex.skipExprPrec(1);
         },
-        .@"~", .@"-", .@"!", .@"&", .@"#", .@"^" => lex.skipExprPrec(1),
-        .@"struct" => {
+        .@"?", .@"~", .@"-", .@"!", .@"&", .@"#", .@"^" => lex.skipExprPrec(1),
+        .@"enum", .@"union", .@"struct" => {
+            if (lex.eatMatch(.@"(")) {
+                lex.eatUntilClosingDelimeter();
+            }
+
             if (lex.eatMatch(.@"align")) {
                 _ = try lex.expect(.@"(");
                 lex.eatUntilClosingDelimeter();
@@ -921,7 +925,9 @@ pub fn skipUnitExpr(lex: *Lexer) SkipError!void {
 
             _ = try lex.expect(.@":");
             try lex.skipExpr();
-            try lex.skipExpr();
+            if (lex.peekNext().kind.canStartExpression()) {
+                try lex.skipExpr();
+            }
         },
         .@"if", .@"$if" => {
             try lex.skipExpr();

@@ -50,6 +50,9 @@ abi: Abi = .systemv,
 func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
     .initFill(.empty),
 errored: usize = 0,
+builtins: struct {
+    type_union: UnionId,
+},
 
 ct_backend: HbvmGen,
 
@@ -1338,11 +1341,6 @@ pub const Func = struct {
     linkage: Machine.Data.Linkage = .local,
 
     pub const Param = extern struct {
-        flags: packed struct {
-            is_any: bool,
-            _padd: u31 = 0,
-        },
-        ty: Id,
         value: ComptimeValue,
     };
 
@@ -1366,6 +1364,9 @@ pub const Func = struct {
         var hasher = std.hash.Wyhash.init(0);
 
         hasher.update(@ptrCast(&self.scope));
+        // TODO: showe these into a single array
+        hasher.update(@ptrCast(self.args));
+        hasher.update(@ptrCast(&self.ret));
         hasher.update(@ptrCast(self.params));
 
         return hasher.final();
@@ -1381,19 +1382,40 @@ pub const Func = struct {
 
         try self.scope.format_(types.funcs.ptrToIndex(self), types, writer);
 
-        if (self.params.len != 0) {
-            try writer.writeByte('[');
-            for (self.params, 0..) |p, i| {
-                if (i != 0) try writer.writeAll(", ");
-                if (p.ty != .type) {
-                    try writer.print("{f}(TODO)", .{p.ty.fmt(types)});
+        try writer.writeByte('[');
+
+        var param_idx: usize = 0;
+        var arg_idx: usize = 0;
+        var lex = Lexer.init(self.scope.file.get(types).source, self.pos);
+        var iter = lex.list(.@",", .@")");
+
+        while (iter.next()) : (arg_idx += 1) {
+            if (arg_idx != 0) try writer.writeAll(", ");
+
+            _, const cmptime = lex.eatIdent().?;
+            _ = lex.slit(.@":");
+            lex.skipExpr() catch unreachable;
+
+            const ty = self.args[arg_idx];
+            try ty.format_(types, writer);
+
+            if (cmptime) {
+                try writer.writeByte('=');
+
+                const p = self.params[param_idx];
+                if (ty != .type) {
+                    try writer.writeAll("(TODO)");
                 } else {
-                    const ty: Id = @enumFromInt(p.value.@"inline");
-                    try ty.format_(types, writer);
+                    const t: Id = @enumFromInt(p.value.@"inline");
+                    try t.format_(types, writer);
                 }
+
+                param_idx += 1;
             }
-            try writer.writeByte(']');
         }
+
+        try writer.writeAll("]:");
+        try self.ret.format_(types, writer);
     }
 
     pub const fmt = Fmt(*Func).fmt;
@@ -1465,13 +1487,13 @@ pub fn init(
             .gpa = gpa,
             .push_uninit_globals = true,
             .emit_global_reloc_offsets = true,
-            .comptime_only_fn = Codegen.comptime_only_fn,
         },
         .loader = loader,
         .backend = backend,
         .target = target,
         .tmp = undefined,
         .arena = arena,
+        .builtins = undefined,
     };
 
     self.tmp = self.arena.subslice(1024 * 1024);
@@ -1492,7 +1514,7 @@ pub fn init(
     backend.out.files = out_files;
 
     for (self.files, 0..) |*f, i| {
-        f.root_sope = .nany(self.structs.push(
+        f.root_sope = self.structs.push(
             &self.arena,
             Struct{
                 .scope = .{
@@ -1503,8 +1525,10 @@ pub fn init(
                 .captures = .empty,
                 .decls = &f.decls,
             },
-        ));
+        );
     }
+
+    //const builtins = self.files[self.files.len - 1];
 
     return self;
 }

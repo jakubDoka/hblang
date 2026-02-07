@@ -1138,7 +1138,7 @@ expectations := .{
 
 main := fn(): uint {
     string_to_array := fn($str: []u8): [str.len]u8 {
-        vl: [str.len]u8 = idk
+        vl: [str.len]u8 = #idk
         for i := 0..str.len {
             vl[i] = str[i]
         }
@@ -1587,7 +1587,7 @@ main := fn(): uint {
     sum := 0
     i := 0
     loop if i == linarr.len break else {
-        sum += linarr[i]
+        sum += linarr.*[i]
         i += 1
     }
 
@@ -1927,8 +1927,8 @@ expectations := .{
 main := fn(): uint {
     $if @target("hbvm-ableos") return @ecall(
         100,
-        struct{.a: uint; .b: uint}.(1, 2),
-        struct{.a: uint; .b: uint; .c: uint}.(3, 4, 5),
+        &struct{.a: uint; .b: uint}.(1, 2),
+        &struct{.a: uint; .b: uint; .c: uint}.(3, 4, 5),
     )
     $if @target("x86_64-linux") return @syscall(60, 3)
 
@@ -1980,7 +1980,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    vl := 1
+    vl := #1
     return deref(^uint, &vl)
 }
 
@@ -1989,16 +1989,15 @@ deref := fn($T: type, arg: T): @ChildOf(T) {
 }
 ```
 
-TODO: fix this but not a priority right now
 #### directives 9 (@embed)
-```!hb
+```hb
 expectations := .{
     return_value: 69,
 }
 
 main := fn(): uint {
     val: ^[1]u8 = &@embed("mbed.txt")
-    return val[0]
+    return val.*[0]
 }
 
 // in: mbed.txt
@@ -2198,7 +2197,7 @@ use_slice := fn(slice: []u8): uint {
 produce_memcpy := fn(vl: [4]u8): void {}
 
 main := fn(): uint {
-    vl: u8 = 0
+    vl: u8 = #0
     slc := (&vl)[..1]
 
     arr := u8.[1, 2, 3, 4]
