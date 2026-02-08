@@ -7,6 +7,8 @@ const Arry = std.ArrayList;
 const Error = error{RegallocFailed};
 const Regalloc = @This();
 
+// TODO: there are some poor choices of regallocs
+
 // NOTE: so that it does not show up in the grep
 const print = (std.debug).print;
 

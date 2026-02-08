@@ -391,18 +391,25 @@ pub const Data = struct {
             opts.uuid,
         );
 
-        if (opts.value == .init) {
-            try self.code.appendSlice(gpa, opts.value.init);
-            try self.initGlobalRelocs(gpa, opts.relocs, opts.value.init.len, opts.id, func_addend);
-        } else {
-            if (push_uninit) {
-                try self.code.appendNTimes(gpa, 0, opts.value.uninit);
-            }
+        switch (opts.value) {
+            .init => |i| {
+                try self.code.appendSlice(gpa, i);
+                try self.initGlobalRelocs(gpa, opts.relocs, i.len, opts.id, func_addend);
+            },
+            .uninit => |u| {
+                if (push_uninit) {
+                    std.debug.assert(self.code.items.len + u <= self.code.capacity);
+                    self.code.items.len += u;
+                }
+            },
         }
 
         self.endDefineSym(self.globals.items[opts.id]);
         self.syms.items[@intFromEnum(self.globals.items[opts.id])].size =
-            if (opts.value == .init) @intCast(opts.value.init.len) else @intCast(opts.value.uninit);
+            @intCast(switch (opts.value) {
+                .init => |i| i.len,
+                .uninit => |u| u,
+            });
     }
 
     pub fn lateInitGlobalRelocs(
@@ -413,7 +420,7 @@ pub const Data = struct {
         func_addend: u32,
         make_global: bool,
     ) !void {
-        const sym = self.getGlobalSym(id);
+        const sym = self.getGlobalSym(id).?;
         sym.offset = @intCast(self.code.items.len);
         sym.reloc_count = @intCast(relocs.len);
         try self.initGlobalRelocs(gpa, relocs, sym.size, id, func_addend);
@@ -447,11 +454,13 @@ pub const Data = struct {
         }
     }
 
-    pub fn getFuncSym(self: *Data, id: u32) *Sym {
+    pub fn getFuncSym(self: *Data, id: u32) ?*Sym {
+        if (self.funcs.items[id] == .invalid) return null;
         return &self.syms.items[@intFromEnum(self.funcs.items[id])];
     }
 
-    pub fn getGlobalSym(self: *Data, id: u32) *Sym {
+    pub fn getGlobalSym(self: *Data, id: u32) ?*Sym {
+        if (self.globals.items[id] == .invalid) return null;
         return &self.syms.items[@intFromEnum(self.globals.items[id])];
     }
 

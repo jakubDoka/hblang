@@ -1,10 +1,10 @@
 Type := union(enum) {
-	.builtin: Builtin;
+	.builtin: void;
 	.option: Option;
 	.pointer: Pointer;
 	.slice: Slice;
 	.array: Array;
-	.funcTy: FuncTy;
+	.func_ty: FuncTy;
 	.@struct: Struct;
 	.@enum: Enum;
 	.@union: Union
@@ -66,7 +66,7 @@ Type := union(enum) {
 
 		Field := struct {
 			.name: []u8;
-			.value: int;
+			.value: i64;
 		}
 	}
 }

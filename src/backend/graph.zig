@@ -1675,6 +1675,14 @@ pub fn Func(comptime Backend: type) type {
 
             threadlocal var arna: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
 
+            pub fn lockTmp(self: *Node) void {
+                self.tmp_rc += 1;
+            }
+
+            pub fn unlockTmp(self: *Node) void {
+                self.tmp_rc -= 1;
+            }
+
             pub fn lock(self: *Node) Lock {
                 if (is_debug and (!self.isLocked() or true)) {
                     self.lock_at = arna.allocator().create(Lock.Meta) catch unreachable;

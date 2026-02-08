@@ -41,6 +41,62 @@ pub fn deinit(self: *Builder) void {
     self.* = undefined;
 }
 
+pub const Signature = struct {
+    scratch: *utils.Arena,
+    cc: graph.CallConv,
+    abi_params: std.ArrayList(graph.AbiParam) = .empty,
+    ccbl: graph.CcBuilder = .{},
+
+    pub fn addParam(
+        self: *Signature,
+        bl: *Builder,
+        sloc: graph.Sloc,
+        abi: graph.AbiParam,
+        debug_ty: u32,
+    ) *BuildNode {
+        const node = switch (abi) {
+            .Reg => |r| b: {
+                const ab = self.ccbl.handleReg(self.cc, r);
+                if (ab == .Stack) {
+                    return self.addParam(bl, sloc, ab, debug_ty);
+                }
+
+                break :b bl.func.addNode(
+                    .Arg,
+                    sloc,
+                    r,
+                    &.{bl.func.start},
+                    .{ .index = self.abi_params.items.len },
+                );
+            },
+            .Stack => |s| bl.func.addNode(
+                .StructArg,
+                sloc,
+                .i64,
+                &.{bl.func.start},
+                .{
+                    .base = .{ .index = self.abi_params.items.len },
+                    .spec = s,
+                    .debug_ty = debug_ty,
+                },
+            ),
+        };
+
+        self.abi_params.append(self.scratch.allocator(), abi) catch unreachable;
+
+        return node;
+    }
+
+    pub fn end(self: *Signature, bl: *Builder, rets: ?[]const graph.AbiParam) void {
+        var rts = rets;
+        if (rts) |r| if (r.len == 1 and r[0] == .Stack or r.len == 2 and self.cc == .systemv) {
+            rts = &.{};
+        };
+        bl.func.signature = .init(self.cc, self.abi_params.items, rts, bl.arena());
+        self.* = undefined;
+    }
+};
+
 pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
 
 /// Begins a build of a function, returns a token to end the build body building.
@@ -48,45 +104,19 @@ pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.
 pub fn begin(
     self: *Builder,
     call_conv: graph.CallConv,
-    params: []const graph.AbiParam,
-    return_values: ?[]const graph.AbiParam,
-) BuildToken {
+    scratch: *utils.Arena,
+) struct { Signature, BuildToken } {
     const ctrl = self.func.addNode(.Entry, .none, .top, &.{self.func.start}, .{});
     self.root_mem = self.func.addNode(.Mem, .none, .top, &.{self.func.start}, .{});
     _ = self.func.addNode(.Syms, .none, .top, &.{self.func.start}, .{});
     self.scope = self.func.addNode(.Scope, .none, .top, &.{ ctrl, self.root_mem }, .{});
     self.func.end = self.func.addNode(.Return, .none, .top, &.{ null, null, null }, .{});
 
-    self.func.signature = .init(call_conv, params, return_values, self.func.arena.allocator());
-
-    return @enumFromInt(0);
+    return .{ .{ .cc = call_conv, .scratch = scratch }, @enumFromInt(0) };
 }
 
 pub fn arena(self: *Builder) std.mem.Allocator {
     return self.func.arena.allocator();
-}
-
-pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize, debug_ty: u32) SpecificNode(.Arg) {
-    return switch (self.func.signature.params()[idx]) {
-        .Reg => |ty| self.func.addNode(
-            .Arg,
-            sloc,
-            ty,
-            &.{self.func.start},
-            .{ .index = idx },
-        ),
-        .Stack => |spec| self.func.addNode(
-            .StructArg,
-            sloc,
-            .i64,
-            &.{self.func.start},
-            .{
-                .base = .{ .index = idx },
-                .spec = spec,
-                .debug_ty = debug_ty,
-            },
-        ),
-    };
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {

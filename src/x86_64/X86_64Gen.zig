@@ -735,7 +735,9 @@ pub fn regMask(
     }
 
     if (node.kind == .Return) {
-        std.debug.assert(idx == 3);
+        if (idx != 3) {
+            utils.panic("{} != 3", .{idx});
+        }
         return singleReg(Reg.retForDt(node.inputs()[idx].?.data_type), arena);
     }
 
@@ -830,6 +832,8 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     defer self.mach.out.endDefineFunc(opts.id);
 
     if (opts.linkage == .imported) return;
+
+    std.debug.assert(func.signature.call_conv == .systemv); // TODO: allow others
 
     const allocs = opts.optimizations.apply(X86_64Gen, func, self, opts.id) orelse {
         //if (std.mem.indexOf(u8, name, "main") != null) {

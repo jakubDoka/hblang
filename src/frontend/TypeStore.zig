@@ -52,6 +52,7 @@ func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
 errored: usize = 0,
 builtins: struct {
     type_union: UnionId,
+    enum_field: StructId,
 },
 
 ct_backend: HbvmGen,
@@ -393,7 +394,7 @@ pub const Data = union(enum(u8)) {
             .Builtin => |b| b.alignment(types),
             .FuncTy => 4,
             .Pointer => 8,
-            .Slice => 16,
+            .Slice => 8,
             .Array => |a| a.get(types).elem.alignment(types),
             inline .Option, .Struct, .Enum, .Union => |e| e.get(types)
                 .getLayout(types).spec.alignmentBytes(),
@@ -1016,7 +1017,7 @@ pub const Struct = struct {
             tmp.allocator(),
         );
 
-        _ = gen.bl.begin(.systemv, &.{}, &.{});
+        _ = gen.bl.begin(.systemv, undefined);
 
         var hard_align: ?Size = null;
         haling: {
@@ -1245,7 +1246,7 @@ pub const Union = struct {
             .never,
             tmp.allocator(),
         );
-        _ = gen.bl.begin(.systemv, &.{}, &.{});
+        _ = gen.bl.begin(.systemv, undefined);
 
         var lex = Lexer.init(file.source, self.decls.start);
         _ = lex.slit(.@"union");
@@ -1357,6 +1358,8 @@ pub const Func = struct {
 
     pub fn eql(self: *Func, other: *Func, _: *Types) bool {
         return std.meta.eql(self.scope, other.scope) and
+            std.mem.eql(Id, self.args, other.args) and
+            self.ret == other.ret and
             std.mem.eql(u8, @ptrCast(self.params), @ptrCast(other.params));
     }
 
@@ -1447,7 +1450,9 @@ pub const Global = struct {
 
         pub fn sym(self: *@This(), types: *Types) *Machine.Data.Sym {
             const parent: *Global = @alignCast(@fieldParentPtr("data", self));
-            return types.ct_backend.mach.out.getGlobalSym(@intFromEnum(types.globals.ptrToIndex(parent)));
+            return types.ct_backend.mach.out.getGlobalSym(
+                @intFromEnum(types.globals.ptrToIndex(parent)),
+            ).?;
         }
     } = .{},
     readonly: bool,
@@ -1498,7 +1503,10 @@ pub fn init(
 
     self.tmp = self.arena.subslice(1024 * 1024);
 
-    self.ct_backend.mach.out.code.resize(gpa, stack_size) catch unreachable;
+    // NOTE: god for now, will be configured later
+    self.ct_backend.mach.out.code = .initBuffer(self.arena.subslice(1024 * 1024 * 16).asSlice());
+
+    self.ct_backend.mach.out.code.items.len = stack_size;
     self.ct_backend.mach.out.code.items[self.ct_backend.mach.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
     self.ct_backend.mach.out.code.items[self.ct_backend.mach.out.code.items.len - 2] = @intFromEnum(isa.Op.eca);
     self.vm.regs.set(.stack_addr, stack_size - 8);
@@ -1528,12 +1536,43 @@ pub fn init(
         );
     }
 
-    //const builtins = self.files[self.files.len - 1];
+    const builtins: File.Id = @enumFromInt(self.files.len - 1);
+
+    {
+        var tmp = self.tmpCheckpoint();
+        defer tmp.deinit();
+
+        var gen: Codegen = undefined;
+        gen.init(&self, .nany(builtins.get(&self).root_sope), .never, tmp.allocator());
+        _ = gen.bl.begin(.systemv, undefined);
+
+        var value = gen.lookupIdent(gen.scope, "Type").?;
+        const type_union = gen.peval(0, value, Types.Id) catch unreachable;
+
+        value = gen.lookupIdent(
+            type_union.data().downcast(Types.AnyScope).?.pack(),
+            "Enum",
+        ).?;
+        const type_union_enum = gen.peval(0, value, Types.Id) catch unreachable;
+
+        value = gen.lookupIdent(
+            type_union_enum.data().downcast(Types.AnyScope).?.pack(),
+            "Field",
+        ).?;
+        const type_union_enum_field = gen.peval(0, value, Types.Id) catch unreachable;
+
+        self.builtins = .{
+            .type_union = type_union.data().Union,
+            .enum_field = type_union_enum_field.data().Struct,
+        };
+    }
 
     return self;
 }
 
 pub fn deinit(self: *Types) void {
+    self.ct_backend.mach.out.code = .empty;
+
     inline for (std.meta.fields(Types)) |f| {
         if (f.type == utils.Arena) continue;
 
@@ -1738,7 +1777,7 @@ pub fn collectRelocsRecur(
             if (self.collectPointer(
                 ctx.sloc,
                 false,
-                offset,
+                offset + Slice.ptr_offset,
                 len * s.get(self).elem.size(self),
                 ctx.bytes,
                 ctx.allow_null,
@@ -1808,7 +1847,7 @@ pub fn collectPointer(
 
     if (is_func) {
         for (0..self.funcs.meta.len) |i| {
-            const sim = self.ct_backend.mach.out.getFuncSym(@intCast(i));
+            const sim = self.ct_backend.mach.out.getFuncSym(@intCast(i)) orelse continue;
             if (sim.offset == value) {
                 std.debug.assert(size == 0);
                 return .{
@@ -1826,13 +1865,13 @@ pub fn collectPointer(
         }
     } else {
         for (0..self.globals.meta.len) |i| {
-            const sim = self.ct_backend.mach.out.getGlobalSym(@intCast(i));
+            const sim = self.ct_backend.mach.out.getGlobalSym(@intCast(i)) orelse continue;
             if (sim.offset == value) {
                 if (size > sim.size) {
                     self.reportSloc(
                         sloc,
-                        "global contains an invlaid pointer (size overflow)",
-                        .{},
+                        "global contains an invlaid pointer (size overflow) (offset: {}) ({} > {})",
+                        .{ sim.offset, size, sim.size },
                     );
 
                     break;

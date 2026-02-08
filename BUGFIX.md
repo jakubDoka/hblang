@@ -61,7 +61,7 @@ main := fn(): int {
 #### type_info error 1
 ```hb
 main := fn(): uint {
-    $info := @type_info(@TypeOf(main)).@fn
+    $info := @type_info(@TypeOf(main)).func_ty
     $if info.ret == uint return 0
     return 1
 }
@@ -1665,7 +1665,7 @@ expectations := .{
 }
 
 $inlined := fn(): []u8 {
-    buf: [4]u8 = idk
+    buf: [4]u8 = #idk
     return buf[..]
 }
 
@@ -1804,7 +1804,7 @@ main := fn(): uint {
 broken1 := fn(): uint {
     $if @target("hbvm-ableos") {
         AllocEcall := struct align(1){.pad: u8; .pages_new: uint; .zeroed: bool}
-        @ecall(3, 2, AllocEcall.(0, 1, false), @size_of(AllocEcall))
+        @ecall(3, 2, &AllocEcall.(0, 1, false), @size_of(AllocEcall))
     } else if @target("x86_64-linux") {
         @syscall(1, 2, "".ptr, 0)
     }

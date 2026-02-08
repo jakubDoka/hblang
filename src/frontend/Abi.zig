@@ -45,55 +45,6 @@ pub fn isMultivalue(_: Abi, self: Spec) bool {
     return pr.len == 2 or (pr.len == 1 and pr[0] == .Stack);
 }
 
-pub fn categorizeSignature(
-    abi: Abi,
-    args: []const Types.Id,
-    ret: Types.Id,
-    types: *Types,
-    scratch: *utils.Arena,
-) ?struct {
-    []const graph.AbiParam,
-    ?[]const graph.AbiParam,
-    bool,
-} {
-    errdefer unreachable;
-
-    var ret_buf = Buf{};
-    var ret_abi = if (categorize(abi, ret, types, &ret_buf)) |ab|
-        scratch.dupe(graph.AbiParam, ab)
-    else
-        null;
-
-    var params = scratch.makeArrayList(graph.AbiParam, args.len * max_elems + 1);
-    var cursor: usize = 0;
-    var ret_by_ref = false;
-
-    if (ret_abi) |r| {
-        if (abi.isRetByRef(r)) {
-            params.appendAssumeCapacity(.{ .Reg = .i64 });
-            cursor += 1;
-            ret_abi = &.{};
-            ret_by_ref = true;
-        }
-    }
-
-    for (args) |ty| {
-        var buf = Buf{};
-        const arg_abi = categorize(abi, ty, types, &buf) orelse return null;
-        params.appendSliceAssumeCapacity(arg_abi);
-    }
-
-    var ccbl = graph.CcBuilder{};
-
-    for (params.items) |*par| {
-        if (par.* == .Reg) {
-            par.* = ccbl.handleReg(abi.cc, par.Reg);
-        }
-    }
-
-    return .{ params.items, ret_abi, ret_by_ref };
-}
-
 pub fn tryCategorizeReg(self: Abi, ty: Id, types: *Types) ?graph.DataType {
     var buf = Buf{};
     const params = categorize(self, ty, types, &buf) orelse unreachable;

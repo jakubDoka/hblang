@@ -328,7 +328,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     //func.fmtScheduledLog();
 
-    const sym = self.mach.out.getFuncSym(opts.id);
+    const sym = self.mach.out.getFuncSym(opts.id).?;
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
