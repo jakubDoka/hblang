@@ -1292,28 +1292,34 @@ expectations := .{
 }
 
 NameMap := fn($Enum: type): type {
-    sum := 0
-    i: u8 = 0
-    loop if i == @len_of(Enum) break else {
-        sum += @int_cast(@name_of(@as(Enum, @bit_cast(i))).len)
-        i += 1
-    }
+    $info := @type_info(Enum)
 
-    StrBuf := [sum]u8
-    IndexBuf := [@len_of(Enum) + 1]uint
+    $sum := (fn(): uint {
+        sum := 0
+        i := 0
+        loop if i == info.@enum.fields.len break else {
+            sum += info.@enum.fields[i].name.len
+            i += 1
+        }
+        return sum
+    })()
+
+    $StrBuf := [sum]u8
+    $IndexBuf := [@len_of(Enum) + 1]uint
+
     return struct {
         .buf: StrBuf;
         .index: IndexBuf
 
         new := fn(): @CurrentScope() {
-            buf: StrBuf = idk
+            buf: StrBuf = #idk
             index: IndexBuf = idk
             index[0] = 0
 
             ii: u8 = 0
             bi := 0
             loop if ii == @len_of(Enum) break else {
-                name := @name_of(@as(Enum, @bit_cast(ii)))
+                name := info.@enum.fields[ii].name
                 ij := 0
                 loop if ij == name.len break else {
                     buf[bi + ij] = name[ij]
@@ -2064,14 +2070,14 @@ func := fn(a: @Any(), b: @TypeOf(a)): uint {
 }
 ```
 
-#### directives 14 (@name_of)
+#### directives 14 (@type_name)
 ```hb
 expectations := .{
-    return_value: 7,
+    return_value: 4,
 }
 
 main := fn(): uint {
-    return @name_of(uint).len + @name_of(enum{.foo}.foo).len
+    return @type_name(uint).len
 }
 ```
 
@@ -2229,7 +2235,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    return @field_name(struct{.Edward: void}, 0)[0]
+    return @eval(@type_info(struct{.Edward: void}).@struct.fields[0].name[0])
 }
 ```
 
@@ -2341,16 +2347,13 @@ main := fn(): uint {
 #### directives 25 (@Type)
 ```hb
 main := fn(): uint {
-    $Tuple := @Type(.{tuple: &.[u8, u8]})
-    $if Tuple != @TypeOf(.(@as(u8, 0), @as(u8, 0))) return 1
-
-    $Ptr := @Type(.{pointer: u8})
+    $Ptr := @Type(.{pointer: .{ty: u8}})
     $if Ptr != ^u8 return 2
 
-    $Slice := @Type(.{slice: u8})
+    $Slice := @Type(.{slice: .{elem: u8}})
     $if Slice != []u8 return 3
 
-    $Nullable := @Type(.{nullable: u8})
+    $Nullable := @Type(.{option: .{inner: u8}})
     $if Nullable != ?u8 return 4
 
     $Array := @Type(.{array: .{elem: u8, len: 1}})

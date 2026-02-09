@@ -35,6 +35,7 @@ pub const undeclared_prefix: u8 = 0;
 pub const ComptimeEca = enum {
     alloc_global,
     type_info,
+    Type,
 };
 
 pub const Loop = struct {
@@ -160,18 +161,8 @@ pub const Value = struct {
                 return switch (slot.meta.kind) {
                     .empty => .empty,
                     .cmptime => {
-                        if (slot.ty.size(gen.types) > @sizeOf(Types.ComptimeValue)) {
-                            return .{ .ptr = gen.bl.addGlobalAddr(
-                                gen.sloc(pos),
-                                @intFromEnum(gen.cmptime_values.items[slot.value].spilled),
-                            ) };
-                        } else {
-                            return .{ .value = gen.bl.addIntImm(
-                                gen.sloc(pos),
-                                cata.Scalar,
-                                gen.cmptime_values.items[slot.value].@"inline",
-                            ) };
-                        }
+                        const val = gen.cmptime_values.items[slot.value];
+                        return gen.ctValueToNorm(pos, slot.ty, val);
                     },
                     .value => .{ .value = if (gen.frozen_vars > i)
                         gen.bl.addStub(gen.sloc(pos), cata.Scalar)
@@ -670,6 +661,18 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
         .tx => break,
         .eca => {
             switch (@as(ComptimeEca, @enumFromInt(regs.get(.arg(0))))) {
+                .Type => {
+                    const tyun = self.types.builtins.type_union;
+                    const size = Types.Id.nany(tyun).size(self.types);
+                    const slot = regs.get(.stack_addr) - size;
+                    const tag_layout = tyun.get(self.types).getLayout(self.types).tagLayout().?;
+
+                    var mem = vm_ctx.memory[slot..][0..@intCast(size)];
+
+                    switch (@as(ComptimeEca, @enumFromInt(mem[tag_layout.offset..][0]))) {
+                        else => |e| utils.panic("{}", .{e}),
+                    }
+                },
                 .type_info => {
                     const slot = regs.get(.arg(1));
                     const ty: Types.Id = @enumFromInt(regs.get(.arg(2)));
@@ -703,7 +706,31 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
 
                             mem[16..][0..4].* = std.mem.toBytes(f.get(self.types).ret);
                         },
-                        .Struct => {},
+                        .Struct => |s| {
+                            const layout = s.get(self.types).getLayout(self.types);
+                            mem[0..][0..8].* = std.mem.toBytes(@as(u64, layout.spec.alignmentBytes()));
+
+                            const struct_field = self.types.builtins.struct_field;
+                            _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
+
+                            for (0..layout.fields.len) |i| {
+                                const base = i * Types.Id.nany(struct_field).size(self.types);
+                                const field = layout.fields[i];
+
+                                const field_off: u32 = s.get(self.types).decls.fields.items(.offset)[i];
+                                const field_name = Lexer.peekStr(s.get(self.types)
+                                    .scope.file.get(self.types).source, field_off);
+
+                                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
+                                @memcpy(name_mem, field_name);
+
+                                fields_mem[base..][16..][0..4].* = std.mem.toBytes(field.ty);
+                                fields_mem[base..][24..][0..8].* = std.mem.toBytes(@as(u64, field.offset));
+                                fields_mem[base..][32..][0..8].* = std.mem.toBytes(@as(u64, 0));
+                            }
+
+                            self.addDecls(s, mem[24..][0..16]);
+                        },
                         .Enum => |e| {
                             const layout = e.get(self.types).getLayout(self.types);
 
@@ -726,24 +753,35 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
                                 fields_mem[base..][16..][0..8].* = std.mem.toBytes(field);
                             }
 
-                            const edecls = e.get(self.types).decls;
-                            _, const decl_mem = self.addSliceGlobal(
-                                self.types.sliceOf(.u8),
-                                edecls.entries.len,
-                                mem[24..][0..16],
-                            );
-
-                            for (0..edecls.entries.len) |i| {
-                                const base = i * 16;
-                                const decl_off = edecls.entries.get(i).offset.offset;
-                                const decl_name = Lexer.peekStr(e.get(self.types)
-                                    .scope.file.get(self.types).source, decl_off);
-
-                                _, const name_mem = self.addSliceGlobal(.u8, decl_name.len, decl_mem[base..][0..16]);
-                                @memcpy(name_mem, decl_name);
-                            }
+                            self.addDecls(e, mem[24..][0..16]);
                         },
-                        .Union => {},
+                        .Union => |u| {
+                            const layout = u.get(self.types).getLayout(self.types);
+                            mem[0..][0..8].* = std.mem.toBytes(@as(u64, 0));
+                            if (layout.tag) |t| {
+                                mem[0..][0..4].* = std.mem.toBytes(Types.Id.nany(t));
+                                mem[4..][0] = 1;
+                            }
+
+                            const struct_field = self.types.builtins.struct_field;
+                            _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
+
+                            for (0..layout.fields.len) |i| {
+                                const base = i * Types.Id.nany(struct_field).size(self.types);
+                                const field = layout.fields[i];
+
+                                const field_off: u32 = u.get(self.types).decls.fields.items(.offset)[i];
+                                const field_name = Lexer.peekStr(u.get(self.types)
+                                    .scope.file.get(self.types).source, field_off);
+
+                                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
+                                @memcpy(name_mem, field_name);
+
+                                fields_mem[base..][16..][0..4].* = std.mem.toBytes(field);
+                            }
+
+                            self.addDecls(u, mem[24..][0..16]);
+                        },
                     }
                 },
                 .alloc_global => {
@@ -760,6 +798,21 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
         },
         else => unreachable, // TODO
     };
+}
+
+pub fn addDecls(self: *Codegen, e: anytype, slot: *[16]u8) void {
+    const edecls = e.get(self.types).decls;
+    _, const decl_mem = self.addSliceGlobal(self.types.sliceOf(.u8), edecls.entries.len, slot);
+
+    for (0..edecls.entries.len) |i| {
+        const base = i * 16;
+        const decl_off = edecls.entries.get(i).offset.offset;
+        const decl_name = Lexer.peekStr(e.get(self.types)
+            .scope.file.get(self.types).source, decl_off);
+
+        _, const name_mem = self.addSliceGlobal(.u8, decl_name.len, decl_mem[base..][0..16]);
+        @memcpy(name_mem, decl_name);
+    }
 }
 
 pub fn addSliceGlobal(self: *Codegen, elem: Types.Id, len: usize, dest: *[16]u8) struct { Types.GlobalId, []u8 } {
@@ -952,6 +1005,8 @@ pub fn emitToBackend(
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
+    const prev_err_count = self.types.errored;
+
     if (fnid.get(self.types).linkage != .imported) {
         for (self.bl.func.getSyms().outputs()) |sym| {
             switch (sym.get().extra2()) {
@@ -1008,6 +1063,8 @@ pub fn emitToBackend(
             }
         }
     }
+
+    if (prev_err_count < self.types.errored) return;
 
     backend.emitFunc(&self.bl.func, .{
         .id = @intFromEnum(fnid),
@@ -1205,39 +1262,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 },
             };
 
-            // TODO: interinig
-            const global = self.types.globals.push(&self.types.arena, .{
-                .scope = self.gatherScope(),
-                .ty = self.types.arrayOf(.u8, @intCast(bytes.len)),
-                .readonly = true,
-            });
-
-            self.types.ct_backend.emitData(.{
-                .id = @intFromEnum(global),
-                .readonly = true,
-                .value = .{ .init = bytes },
-                .thread_local = false,
-                .uuid = @splat(0),
-            });
-
-            const ty = self.types.sliceOf(.u8);
-            const slot = self.emitLoc(tok.pos, ty, ctx);
-            self.bl.addFieldStore(
-                self.sloc(tok.pos),
-                slot,
-                Types.Slice.len_offset,
-                .i64,
-                self.bl.addIntImm(self.sloc(tok.pos), .i64, @intCast(bytes.len)),
-            );
-            self.bl.addFieldStore(
-                self.sloc(tok.pos),
-                slot,
-                Types.Slice.ptr_offset,
-                .i64,
-                self.bl.addGlobalAddr(self.sloc(tok.pos), @intFromEnum(global)),
-            );
-
-            break :lit .ptr(ty, slot);
+            break :lit self.emitString(tok.pos, ctx, bytes);
         },
         .@"'" => lit: {
             const view = tok.view(lex.source);
@@ -1704,7 +1729,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
                 loop.state.cmptime.kind = .falltrough;
 
-                if (prev_erred < self.types.errored) return self.silentReport();
+                if (prev_erred < self.types.errored) break;
             }
 
             if (fuel == 0) {
@@ -2159,6 +2184,41 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
     };
 }
 
+pub fn emitString(self: *Codegen, pos: u32, ctx: Ctx, bytes: []const u8) Value {
+    const global = self.types.globals.push(&self.types.arena, .{
+        .scope = self.gatherScope(),
+        .ty = self.types.arrayOf(.u8, @intCast(bytes.len)),
+        .readonly = true,
+    });
+
+    self.types.ct_backend.emitData(.{
+        .id = @intFromEnum(global),
+        .readonly = true,
+        .value = .{ .init = bytes },
+        .thread_local = false,
+        .uuid = @splat(0),
+    });
+
+    const ty = self.types.sliceOf(.u8);
+    const slot = self.emitLoc(pos, ty, ctx);
+    self.bl.addFieldStore(
+        self.sloc(pos),
+        slot,
+        Types.Slice.len_offset,
+        .i64,
+        self.bl.addIntImm(self.sloc(pos), .i64, @intCast(bytes.len)),
+    );
+    self.bl.addFieldStore(
+        self.sloc(pos),
+        slot,
+        Types.Slice.ptr_offset,
+        .i64,
+        self.bl.addGlobalAddr(self.sloc(pos), @intFromEnum(global)),
+    );
+
+    return .ptr(ty, slot);
+}
+
 pub fn loopControl(self: *Codegen, lex: *Lexer, kind: BBuilder.Loop.Control, label: []const u8) !Value {
     var cursor = self.loops;
     var seen_runtime = false;
@@ -2213,6 +2273,40 @@ pub fn directive(
     const slc = self.sloc(pos);
 
     const value: Value = d: switch (d) {
+        .Type => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            var call = self.bl.addCall(
+                tmp.arena,
+                slc,
+                .ablecall,
+                .{ .sym = comptime_only_fn },
+            );
+
+            const generic_return = self.types.builtins.type_union;
+            var buf = Abi.Buf{};
+            const ret_cata = Abi.ableos.categorize(.type, self.types, &buf);
+
+            const op_cnst = self.bl.addIntImm(slc, .i64, @intFromEnum(ComptimeEca.Type));
+            call.pushArg(&self.bl, slc, .{ .Reg = .i64 }, op_cnst);
+
+            _ = try self.passArg(&call, .{ .to_compute = .{ .lex = lex, .inferred = .nany(generic_return) } });
+
+            var bf: [2]*BNode = undefined;
+            const bls = call.end(&self.bl, slc, ret_cata, &bf);
+
+            return .value(.type, bls[0]);
+        },
+        .type_name => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const ty = try self.typ(lex);
+            const bytes = ty.fmt(self.types).toString(tmp.arena);
+
+            break :d self.emitString(tok.pos, ctx, bytes);
+        },
         .type_info => {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -2221,7 +2315,7 @@ pub fn directive(
                 tmp.arena,
                 slc,
                 .ablecall,
-                .{ .special = comptime_only_fn },
+                .{ .sym = comptime_only_fn },
             );
 
             const generic_return = self.types.builtins.type_union;
@@ -2477,7 +2571,7 @@ pub fn directive(
                     .ptr(res, p),
             };
         },
-        .len_of, .align_of, .size_of, .kind_of => {
+        .len_of, .align_of, .size_of, .kind_of, .decl_count_of => {
             var res = ctx.ty orelse .uint;
             if (!res.isBuiltin(.isInteger)) res = .uint;
 
@@ -2491,6 +2585,11 @@ pub fn directive(
                     .align_of => ty.alignment(self.types),
                     .len_of => ty.len(self.types),
                     .kind_of => @intFromEnum(ty.data()),
+                    .decl_count_of => if (ty.data()
+                        .downcast(Types.UnorderedScope)) |v|
+                        @intCast(v.decls(self.types).entries.len)
+                    else
+                        0,
                     else => unreachable,
                 },
             ));
@@ -2580,7 +2679,7 @@ pub fn directive(
                 tmp.arena,
                 slc,
                 .ablecall,
-                .{ .special = comptime_only_fn },
+                .{ .sym = comptime_only_fn },
             );
 
             const generic_return = self.types.sliceOf(.u8);
@@ -2675,14 +2774,25 @@ test "sanity match triple" {
 }
 
 pub fn ctValueToValue(self: *Codegen, pos: u32, ty: Types.Id, ct: Types.ComptimeValue) Value {
-    if (ty.size(self.types) <= @sizeOf(Types.ComptimeValue)) {
-        return .value(ty, self.bl.addIntImm(
+    return switch (self.ctValueToNorm(pos, ty, ct)) {
+        .empty => .unit(ty),
+        .value => |v| .value(ty, v),
+        .ptr => |p| .ptr(ty, p),
+    };
+}
+
+pub fn ctValueToNorm(self: *Codegen, pos: u32, ty: Types.Id, ct: Types.ComptimeValue) NormalizedNode {
+    if (ty.size(self.types) > @sizeOf(Types.ComptimeValue)) {
+        return .{ .ptr = self.bl.addBinOp(
             self.sloc(pos),
-            self.types.abi.tryCategorizeReg(ty, self.types) orelse return .unit(ty),
-            ct.@"inline",
-        ));
+            .iadd,
+            .i64,
+            self.bl.addGlobalAddr(self.sloc(pos), @intFromEnum(ct.spilled.id)),
+            self.bl.addIntImm(self.sloc(pos), .i64, ct.spilled.off),
+        ) };
     } else {
-        return .ptr(ty, self.bl.addGlobalAddr(self.sloc(pos), @intFromEnum(ct.spilled)));
+        const cata = self.types.abi.tryCategorizeReg(ty, self.types) orelse return .empty;
+        return .{ .value = self.bl.addIntImm(self.sloc(pos), cata, ct.@"inline") };
     }
 }
 
@@ -2927,7 +3037,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             _ = try self.expect(lex, .@"]", "to close the indexing");
 
             const can_be_indexed = switch (res.value.ty.data()) {
-                .Builtin, .FuncTy, .Enum, .Option, .Union => false,
+                .Builtin, .FuncTy, .Enum, .Option, .Union => res.value.ty == .type,
                 .Pointer, .Slice, .Array => true,
                 .Struct => !is_slice,
             };
@@ -3027,7 +3137,36 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 res.set(.ptr(ty, slot));
             } else switch (res.value.ty.data()) {
                 .Builtin, .FuncTy, .Enum, .Option, .Union => {
-                    return self.report(top.pos, "{} can not be indexed", .{res.value.ty});
+                    std.debug.assert(res.value.ty == .type);
+
+                    const ty = try self.peval(top.pos, res.value, Types.Id);
+                    const idx = try self.peval(index.?.pos, index.?.value, i64);
+
+                    const unor = ty.data().downcast(Types.UnorderedScope) orelse {
+                        return self.report(
+                            top.pos,
+                            "{} can not be indexed for declarations",
+                            .{ty},
+                        );
+                    };
+
+                    const decls = unor.decls(self.types);
+                    if (idx < 0 or idx >= decls.entries.len) {
+                        return self.report(
+                            top.pos,
+                            "{} only has {} declarations",
+                            .{ ty, decls.entries.len },
+                        );
+                    }
+
+                    const decl_off = decls.entries.get(@intCast(idx)).offset.offset;
+                    const decl_name = Lexer.peekStr(unor.scope(self.types)
+                        .file.get(self.types).source, decl_off);
+
+                    res.set(self.lookupIdent(
+                        unor.upcast(Types.AnyScope).pack(),
+                        decl_name,
+                    ).?);
                 },
                 .Pointer => |p| {
                     res.set(.ptr(
@@ -4590,7 +4729,7 @@ pub fn peval(self: *Codegen, pos: u32, value: Value, comptime T: type) !T {
     if (T == Types.ComptimeValue) {
         if (value.ty.size(self.types) <= @sizeOf(Types.ComptimeValue)) {
             const res = try self.partialEval(value.load(pos, self));
-            return .{ .@"inline" = @intCast(res.extra(.CInt).value) };
+            return .{ .@"inline" = res.extra(.CInt).value };
         }
 
         const res = switch (value.normalized(pos, self)) {
@@ -4601,18 +4740,23 @@ pub fn peval(self: *Codegen, pos: u32, value: Value, comptime T: type) !T {
             return self.report(pos, "...the comptime evaluation failed", .{});
         };
 
-        const spill: Types.GlobalId = switch (res.extra2()) {
-            .CInt => |extra| spill: {
-                const global = self.createComptimeSpill(value.ty);
-                const mem = global.get(self.types).data.get(self.types);
-                @memcpy(mem, std.mem.asBytes(extra)[0..value.ty.size(self.types)]);
-                break :spill global;
+        const spill: Types.GlobalId, const offset = d: switch (res.extra2()) {
+            .GlobalAddr => |extra| .{ @enumFromInt(extra.id), 0 },
+            .BinOp => {
+                const base, const offset = res.knownOffset();
+                if (base.kind != .GlobalAddr) return self.report(pos, "can't fold the vlaue (debug: {})", .{base.kind});
+                break :d .{ @enumFromInt(base.extra(.GlobalAddr).id), offset };
             },
-            .GlobalAddr => |extra| @enumFromInt(extra.id),
             else => return self.report(pos, "TODO: handle this spill (debug: {})", .{res}),
         };
 
-        return .{ .spilled = spill };
+        if (offset < 0 or offset + value.ty.size(self.types) >
+            spill.get(self.types).data.get(self.types).len)
+        {
+            return self.report(pos, "pointer offset from global is ont of bounds", .{});
+        }
+
+        return .{ .spilled = .{ .id = spill, .off = @intCast(offset) } };
     }
 
     const res = self.partialEval(value.load(pos, self)) catch {
@@ -4705,7 +4849,8 @@ pub fn validateType(self: *Codegen, slc: graph.Sloc, value: i64) !Types.Id {
     return ty;
 }
 
-pub fn partialEval(self: *Codegen, value: *BNode) error{Report}!*BNode {
+pub fn partialEval(self: *Codegen, vl: *BNode) error{Report}!*BNode {
+    var value = vl;
     switch (value.extra2()) {
         .Stub => return self.reportSloc(value.sloc, "can not access the value, only its type", .{}),
         .GlobalAddr => {
@@ -4713,19 +4858,18 @@ pub fn partialEval(self: *Codegen, value: *BNode) error{Report}!*BNode {
             return try self.partialEvalGlobal(value);
         },
         .CInt => return value,
-        .BinOp => |extra| {
-            const lhs = try self.partialEval(value.inputs()[1].?);
-            const rhs = try self.partialEval(value.inputs()[2].?);
+        .BinOp => {
+            value.lockTmp();
+            _ = try self.partialEval(value.inputs()[1].?);
+            _ = try self.partialEval(value.inputs()[2].?);
+            value.unlockTmp();
 
-            if (lhs.kind == .CInt and rhs.kind == .CInt) {
-                const res = self.bl.addIntImm(lhs.sloc, lhs.data_type, extra.op.eval(
-                    value.data_type,
-                    lhs.extra(.CInt).value,
-                    rhs.extra(.CInt).value,
-                ));
-                self.bl.func.subsume(res, value, .intern);
-                return res;
-            }
+            value = self.bl.peep(value);
+
+            if (value.kind != .BinOp) return self.partialEval(value);
+
+            const lhs = value.inputs()[1].?;
+            const rhs = value.inputs()[2].?;
 
             if (lhs.kind == .GlobalAddr and rhs.kind == .CInt) {
                 return value;
@@ -4739,7 +4883,9 @@ pub fn partialEval(self: *Codegen, value: *BNode) error{Report}!*BNode {
                 error.InProgress => unreachable,
             };
         },
-        .Local => {
+        inline .Local, .StackArgOffset => |ext, t| {
+            _ = ext; // autofix
+            _ = t; // autofix
             const allc = value.inputs()[1].?;
 
             std.debug.assert(allc.outputs().len == 1);
@@ -5696,7 +5842,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     var writer = std.fs.File.stderr().writer(&.{});
 
     errdefer {
-        //std.fs.cwd().makePath(scratch.print("failed_tests_hbvm/{s}", .{name})) catch {};
+        std.fs.cwd().makePath(scratch.print("failed_tests_hbvm/{s}", .{name})) catch {};
     }
 
     const asts, var kl = try parseExample(
@@ -5718,7 +5864,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     try collectExports(&types, gpa);
 
     const opt_mode = Machine.OptOptions{
-        .mode = .debug,
+        .mode = .release,
         .error_collector = .{ .data = &types, .collect_ = Types.collectAnalError },
     };
 

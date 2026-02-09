@@ -61,7 +61,7 @@ main := fn(): int {
 #### type_info error 1
 ```hb
 main := fn(): uint {
-    $info := @type_info(@TypeOf(main)).func_ty
+    $info := @type_info(@TypeOf(main)).fnty
     $if info.ret == uint return 0
     return 1
 }
@@ -2641,7 +2641,8 @@ main := fn(): uint {
         if false & abc[0] != 0 {
             n := 0
             loop if n == 0 break else {
-                n *= 0
+                // n *= 0 // the compiler was to smart here
+                n += 1
             }
         }
         i += 1

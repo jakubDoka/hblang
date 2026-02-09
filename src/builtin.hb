@@ -4,7 +4,7 @@ Type := union(enum) {
 	.pointer: Pointer;
 	.slice: Slice;
 	.array: Array;
-	.func_ty: FuncTy;
+	.fnty: FuncTy;
 	.@struct: Struct;
 	.@enum: Enum;
 	.@union: Union
@@ -39,11 +39,11 @@ Type := union(enum) {
 		Field := struct {
 			.name: []u8;
 			.ty: type;
-			.default: u32
+			.offset: uint;
+			.default: ?^void
 
-			get_default := fn($self: ^Field): ^self.ty {
-				$if @size_of(self.ty) <= 4 return @bit_cast(&self.default)
-				return @bit_cast(@as(uint, self.default))
+			get_default := fn($self: ^Field): ?^self.ty {
+				return @bit_cast(self.default || return null)
 			}
 		}
 	}

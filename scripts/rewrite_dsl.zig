@@ -89,7 +89,7 @@ pub fn formatPattern(root_node: []const u8, tag: []const u8, pattern: *Ast.Expr,
                 if (arg.* == .Field) {
                     try formatPattern(name, pat.name, arg, writer);
                 } else {
-                    const postfix = if (arg.* == .Binding and arg.Binding.optional) "" else ".?";
+                    const postfix = if (arg.* == .Binding and arg.Binding.optional) "" else " orelse break :rule";
                     const arg_name = try std.fmt.allocPrint(arena, "{s}.inputs()[{}]{s}", .{ name, i, postfix });
                     try formatPattern(arg_name, pat.name, arg, writer);
                     i += 1;

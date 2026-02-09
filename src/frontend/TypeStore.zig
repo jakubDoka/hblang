@@ -53,13 +53,15 @@ errored: usize = 0,
 builtins: struct {
     type_union: UnionId,
     enum_field: StructId,
+    union_field: StructId,
+    struct_field: StructId,
 },
 
 ct_backend: HbvmGen,
 
 pub const ComptimeValue = extern union {
-    spilled: GlobalId,
-    @"inline": u32,
+    spilled: extern struct { id: GlobalId, off: u32 },
+    @"inline": i64,
 };
 
 pub const TmpCheckpoint = struct {
@@ -1542,28 +1544,34 @@ pub fn init(
         var tmp = self.tmpCheckpoint();
         defer tmp.deinit();
 
+        const fns = struct {
+            fn getField(gen: *Codegen, type_union: Id, scope: []const u8) StructId {
+                var value = gen.lookupIdent(
+                    type_union.data().downcast(Types.AnyScope).?.pack(),
+                    scope,
+                ).?;
+                const type_union_enum = gen.peval(0, value, Types.Id) catch unreachable;
+
+                value = gen.lookupIdent(
+                    type_union_enum.data().downcast(Types.AnyScope).?.pack(),
+                    "Field",
+                ).?;
+                return (gen.peval(0, value, Types.Id) catch unreachable).data().Struct;
+            }
+        };
+
         var gen: Codegen = undefined;
         gen.init(&self, .nany(builtins.get(&self).root_sope), .never, tmp.allocator());
         _ = gen.bl.begin(.systemv, undefined);
 
-        var value = gen.lookupIdent(gen.scope, "Type").?;
+        const value = gen.lookupIdent(gen.scope, "Type").?;
         const type_union = gen.peval(0, value, Types.Id) catch unreachable;
-
-        value = gen.lookupIdent(
-            type_union.data().downcast(Types.AnyScope).?.pack(),
-            "Enum",
-        ).?;
-        const type_union_enum = gen.peval(0, value, Types.Id) catch unreachable;
-
-        value = gen.lookupIdent(
-            type_union_enum.data().downcast(Types.AnyScope).?.pack(),
-            "Field",
-        ).?;
-        const type_union_enum_field = gen.peval(0, value, Types.Id) catch unreachable;
 
         self.builtins = .{
             .type_union = type_union.data().Union,
-            .enum_field = type_union_enum_field.data().Struct,
+            .enum_field = fns.getField(&gen, type_union, "Enum"),
+            .union_field = fns.getField(&gen, type_union, "Union"),
+            .struct_field = fns.getField(&gen, type_union, "Struct"),
         };
     }
 

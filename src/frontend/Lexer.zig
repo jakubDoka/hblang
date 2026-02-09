@@ -15,8 +15,10 @@ pub const Lexeme = enum(u16) {
     Comment,
     Float,
 
-    @"unterminated string",
-
+    // TODO: this should be a cached function call that points to a comptime
+    // value basically equivalent to using an @eval but better because the
+    // resulting value is cached
+    @"$fn",
     @"fn",
     @"return",
     @"defer",
@@ -74,6 +76,8 @@ pub const Lexeme = enum(u16) {
     @"`" = '`',
     @"|" = '|',
     @"~" = '~',
+
+    @"unterminated string",
 
     BinInteger = 128 | 2,
     OctInteger = 128 | 8,
@@ -149,8 +153,7 @@ pub const Lexeme = enum(u16) {
     @"@inline",
     @"@len_of",
     @"@kind_of",
-    @"@field_name",
-    @"@name_of",
+    @"@type_name",
     @"@is_comptime",
     @"@Any",
     @"@error",
@@ -360,7 +363,8 @@ const keyword_map = b: {
         .{ "@lenof", .@"@len_of" },
         .{ "@kindof", .@"@kind_of" },
         .{ "@intcast", .@"@int_cast" },
-        .{ "@nameof", .@"@name_of" },
+        .{ "@nameof", .@"@type_name" },
+        .{ "@name_of", .@"@type_name" },
         .{ "@itf", .@"@int_to_float" },
         .{ "@fti", .@"@float_to_int" },
         .{ "@floatcast", .@"@float_cast" },

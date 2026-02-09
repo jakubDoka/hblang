@@ -591,7 +591,7 @@ pub const builtin = enum {
     // ===== VALUES ====
     pub const LocalAlloc = extern struct {
         size: u64,
-        meta: u32 = std.math.maxInt(u32),
+        meta: LocalMeta = undefined,
         debug_ty: u32,
 
         pub const is_floating = true;
@@ -668,6 +668,12 @@ pub const builtin = enum {
     pub const Syms = extern struct {
         pub const is_pinned = true;
     };
+};
+
+pub const LocalKind = enum(u2) { variable, argument, parameter };
+pub const LocalMeta = packed struct(u32) {
+    kind: LocalKind,
+    index: u30,
 };
 
 pub const Arg = extern struct {
@@ -3129,8 +3135,8 @@ pub fn Func(comptime Backend: type) type {
 
             std.debug.assert(node.kind != .Load or node.data_type.size() != 0);
 
-            if (node.kind == .Phi) {
-                const l, const r = .{ inps[1].?, inps[2].? };
+            if (node.kind == .Phi) phi: {
+                const l, const r = .{ inps[1].?, inps[2] orelse break :phi };
 
                 if (l == r and !node.cfg0().base.preservesIdentityPhys()) {
                     return l;
