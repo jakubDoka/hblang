@@ -68,9 +68,6 @@
 (Load ?c m bs @ (Local _ LocalAlloc:l) dis = {bs.knownOffset()}) :
   (StackLoad (:dis {@intCast(dis)}) c m l)
 
-(Load ?c m bs @ (StructArg:a) dis = {bs.knownOffset()}) :
-  (StackLoad (:dis {@intCast(dis)}) c m a)
-
 (Load ?c m bs @ (LocalAlloc:l) dis = {bs.knownOffset()}) :
   (StackLoad (:dis {@intCast(dis)}) c m l)
 

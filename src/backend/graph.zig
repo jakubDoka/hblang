@@ -506,14 +506,16 @@ pub const Signature = extern struct {
         return (self.ret_base orelse return null)[0..self.ret_count];
     }
 
-    pub fn stackSize(self: @This()) u64 {
+    pub fn stackSize(self: Signature, comptime B: type, call: *Func(B).Node) u64 {
         switch (self.call_conv) {
             .systemv, .ablecall, .wasmcall => {
                 var size: u64 = 0;
-                for (self.params()) |par| {
+                const is_indirect = call.extra(.Call).id == indirect_call;
+                for (self.params(), call.dataDeps()[@intFromBool(is_indirect)..]) |par, dp| {
                     if (par == .Stack) {
                         size = std.mem.alignForward(u64, size, @as(u64, 1) <<
                             par.Stack.alignment);
+                        dp.extra(.LocalAlloc).size = size;
                         size += par.Stack.size;
                     }
                 }
@@ -619,15 +621,6 @@ pub const builtin = enum {
         };
     };
     pub const Arg = mod.Arg;
-    pub const StructArg = extern struct {
-        base: mod.Arg,
-        spec: AbiParam.StackSpec,
-        no_address: bool = false,
-        debug_ty: u32,
-    };
-    pub const StackArgOffset = extern struct {
-        offset: u64, // from eg. rsp
-    };
     pub const BinOp = extern struct {
         op: mod.BinOp,
     };
@@ -1020,7 +1013,6 @@ pub fn Func(comptime Backend: type) type {
                         (idepth(cfg) > idepth(best) or
                             best.base.isBasicBlockEnd() or
                             (to_sched.kind != .MachSplit and
-                                !to_sched.isCheap() and
                                 func.gcm.loopDepthOf(cfg) <
                                     func.gcm.loopDepthOf(best)));
                 }
@@ -1293,12 +1285,6 @@ pub fn Func(comptime Backend: type) type {
                 return off;
             }
 
-            // TODO: this is a hack, its here because otherwise everithing gets
-            // pulled out of the loop and cloggs the register allocator
-            pub fn isCheap(self: *Node) bool {
-                return self.kind == .StackArgOffset;
-            }
-
             pub fn dataDeps(self: *Node) []*Node {
                 if ((self.kind == .Phi and !self.isDataPhi())) return &.{};
                 const start = self.dataDepOffset();
@@ -1454,16 +1440,14 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn ptrsNoAlias(self: *Node, other: *Node) bool {
-                return ((self.kind == .Local or self.kind == .StructArg or
-                    self.kind == .Arg) and
-                    (other.kind == .Local or other.kind == .StructArg or
-                        other.kind == .Arg)) and
+                return ((self.kind == .Local or self.kind == .Arg) and
+                    (other.kind == .Local or other.kind == .Arg)) and
                     (self != other and
                         (self.kind != .Arg or other.kind != .Arg));
             }
 
             pub fn isStack(self: *Node) bool {
-                return self.kind == .Local or self.kind == .StructArg or
+                return self.kind == .Local or
                     self.kind == .LocalAlloc;
             }
 
@@ -1725,7 +1709,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
-                if (self.kind == .Call and def.kind == .StackArgOffset) {
+                if (self.kind == .Call and def.kind == .LocalAlloc) {
                     return false;
                 }
                 return self.dataDepOffset() <= idx and
@@ -2548,8 +2532,6 @@ pub fn Func(comptime Backend: type) type {
 
             self.next_id += 1;
 
-            //if (node.id == 22 and node.kind == .CInt) unreachable;
-
             @memcpy(@as([*]u64, @ptrCast(&node.edata)), extra);
 
             for (node.ordInps(), 0..) |on, i| if (on) |def| {
@@ -3195,7 +3177,9 @@ pub fn Func(comptime Backend: type) type {
 
                 const base, _ = node.base().knownOffset();
 
-                if (base.kind == .Local) eliminate_stack: {
+                if (base.kind == .Local and
+                    base.inputs()[1].?.extra(.LocalAlloc).meta.kind == .variable)
+                eliminate_stack: {
                     for (base.outputs()) |o| {
                         _ = o.get().knownStore(base) orelse {
                             break :eliminate_stack;
@@ -3384,19 +3368,26 @@ pub fn Func(comptime Backend: type) type {
         pub fn computeStructArgLayout(self: *Self) void {
             var stack_arg_offset: u64 = 0;
             for (self.signature.params(), 0..) |par, j| {
-                const argn = for (self.gcm.postorder[0].base.outputs()) |o| {
-                    if (o.get().subclass(Arg)) |sub| if (sub.ext.index == j)
-                        break o.get();
-                } else continue; // is dead
-
                 if (par == .Stack) {
+                    const argn = for ((self.getMem() orelse return).outputs()) |o| {
+                        switch (o.get().extra2()) {
+                            .LocalAlloc => |extra| {
+                                if (extra.meta.kind == .parameter and extra.meta.index == j) {
+                                    break o.get();
+                                }
+                            },
+                            else => {},
+                        }
+                    } else {
+                        continue; // is dead
+                    };
+
                     stack_arg_offset = std.mem.alignForward(
                         u64,
                         stack_arg_offset,
                         par.Stack.alignmentBytes(),
                     );
-                    argn.extra(.StructArg).spec.size =
-                        @intCast(stack_arg_offset);
+                    argn.extra(.LocalAlloc).size = @intCast(stack_arg_offset);
                     stack_arg_offset += par.Stack.size;
                 }
             }
@@ -3411,7 +3402,7 @@ pub fn Func(comptime Backend: type) type {
                     const call = bb.base.inputs()[0].?;
                     const signature: *Signature = &call.extra(.Call).signature;
                     call_slot_size =
-                        @max(signature.stackSize(), call_slot_size);
+                        @max(signature.stackSize(Backend, call), call_slot_size);
                     has_call = true;
                 }
             }
@@ -3444,7 +3435,9 @@ pub fn Func(comptime Backend: type) type {
                     } else true);
                     break;
                 }
+
                 const extra = o.get().extra(.LocalAlloc);
+                if (extra.meta.kind != .variable) continue;
                 const size = extra.size;
                 extra.size = @bitCast(local_size);
                 local_size += @intCast(size);

@@ -4883,9 +4883,7 @@ pub fn partialEval(self: *Codegen, vl: *BNode) error{Report}!*BNode {
                 error.InProgress => unreachable,
             };
         },
-        inline .Local, .StackArgOffset => |ext, t| {
-            _ = ext; // autofix
-            _ = t; // autofix
+        .Local => {
             const allc = value.inputs()[1].?;
 
             std.debug.assert(allc.outputs().len == 1);

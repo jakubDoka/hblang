@@ -69,17 +69,10 @@ pub const Signature = struct {
                     .{ .index = self.abi_params.items.len },
                 );
             },
-            .Stack => |s| bl.func.addNode(
-                .StructArg,
-                sloc,
-                .i64,
-                &.{bl.func.start},
-                .{
-                    .base = .{ .index = self.abi_params.items.len },
-                    .spec = s,
-                    .debug_ty = debug_ty,
-                },
-            ),
+            .Stack => |s| bl.addLocalWithMeta(sloc, .{
+                .kind = .parameter,
+                .index = @intCast(self.abi_params.items.len),
+            }, s.size, debug_ty),
         };
 
         self.abi_params.append(self.scratch.allocator(), abi) catch unreachable;
@@ -155,8 +148,13 @@ pub fn peep(self: *Builder, node: *BuildNode) *BuildNode {
 // #MEM ========================================================================
 
 pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64, debug_ty: u32) SpecificNode(.Local) {
+    return self.addLocalWithMeta(sloc, .{ .kind = .variable, .index = undefined }, size, debug_ty);
+}
+
+pub fn addLocalWithMeta(self: *Builder, sloc: graph.Sloc, meta: graph.LocalMeta, size: u64, debug_ty: u32) SpecificNode(.Local) {
     const alloc = self.func.addNode(.LocalAlloc, sloc, .i64, &.{self.root_mem}, .{
         .size = size,
+        .meta = meta,
         .debug_ty = debug_ty,
     });
     return self.func.addNode(.Local, sloc, .i64, &.{ null, alloc }, .{});
@@ -715,7 +713,6 @@ pub const Call = struct {
     scratch: *utils.Arena,
     cc: graph.CallConv,
     abi_params: std.ArrayList(graph.AbiParam) = .empty,
-    stack_size: u64 = 0,
     ccbl: graph.CcBuilder = .{},
 
     pub const Slot = union(enum) {
@@ -757,19 +754,12 @@ pub const Call = struct {
                     self.scratch.allocator(),
                     param,
                 ) catch unreachable;
-                self.stack_size = std.mem.alignForward(
-                    u64,
-                    self.stack_size,
-                    s.alignmentBytes(),
-                );
-                const location = bl.func.addNode(
-                    .StackArgOffset,
+                const location = bl.addLocalWithMeta(
                     sloc,
-                    .i64,
-                    &.{null},
-                    .{ .offset = self.stack_size },
+                    .{ .kind = .argument, .index = undefined },
+                    s.size,
+                    0,
                 );
-                self.stack_size += s.size;
                 return .{ .Stack = location };
             },
             .Reg => |r| {
@@ -795,8 +785,8 @@ pub const Call = struct {
                 _ = pushToScope(bl, self.call, s.filled);
             },
             .Stack => |s| {
-                std.debug.assert(s.kind == .StackArgOffset);
-                _ = pushToScope(bl, self.call, s);
+                std.debug.assert(s.kind == .Local);
+                _ = pushToScope(bl, self.call, s.inputs()[1].?);
             },
         }
     }

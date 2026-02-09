@@ -1160,7 +1160,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .Local => {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
-                const dis = instr.inputs()[1].?.extra(.LocalAlloc).size + self.ctx.local_base;
+                const dis = self.stackBaseOf(instr, 1);
                 self.emitStackLea(dst, @intCast(dis));
             },
             .IndexLea => {
@@ -1178,27 +1178,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .StackLea => {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
-                const dis = @as(i32, @intCast(instr.inputs()[1].?.extra(.LocalAlloc).size + self.ctx.local_base)) +
-                    instr.extra(.StackLea).dis;
+                const dis = instr.extra(.StackLea).dis + self.stackBaseOf(instr, 1);
                 self.emitStackLea(dst, dis);
-            },
-            .StructArg => |extra| if (!extra.no_address) {
-                // lea dst, [rsp+dis]
-                const dst = self.getReg(instr);
-                const dis = instr.extra(.StructArg).spec.size + self.ctx.arg_base;
-                self.emitStackLea(dst, @intCast(dis));
-            },
-            .StackArgOffset => {
-                // lea dst, [rsp+dis]
-                const dst = self.getReg(instr);
-                const dis = instr.extra(.StackArgOffset).offset;
-                self.emitStackLea(dst, @intCast(dis));
             },
             inline .OffsetLoad, .StackLoad => |extra, t| {
                 // mov dst, [bse+dis]
                 const dst = self.getReg(instr);
                 const bse = if (t == .OffsetLoad) self.getReg(inps[0]) else .rsp;
-                const dis: i32 = if (t == .OffsetLoad) extra.dis else (extra.dis + self.stackBaseOf(instr));
+                const dis: i32 = if (t == .OffsetLoad) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 self.emitMemStoreOrLoad(instr.data_type, dst, bse, dis, false);
             },
@@ -1206,7 +1193,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // mov [dst+dis], vl
                 const dst = if (t == .OffsetStore) self.getReg(inps[0]) else .rsp;
                 const vl = if (t == .OffsetStore) self.getReg(inps[1]) else self.getReg(inps[0]);
-                const dis: i32 = if (t == .OffsetStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
+                const dis: i32 = if (t == .OffsetStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 self.emitMemStoreOrLoad(instr.data_type, vl, dst, dis, true);
             },
@@ -1214,7 +1201,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // mov [dst+dis], $vl
                 const dst = if (t == .ConstStore) self.getReg(inps[0]) else .rsp;
                 const vl = extra.imm;
-                const dis: i32 = if (t == .ConstStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
+                const dis: i32 = if (t == .ConstStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 self.emitMemConstStore(instr.data_type, vl, dst, dis);
             },
@@ -1296,7 +1283,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dst = self.getReg(instr);
                 const lhs = if (t == .OpLoad) self.getReg(inps[1]) else self.getReg(inps[0]);
                 const base = if (t == .OpLoad) self.getReg(inps[0]) else .rsp;
-                const dis = if (t == .OpLoad) extra.dis else (extra.dis + self.stackBaseOf(instr));
+                const dis = if (t == .OpLoad) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 switch (op) {
                     .iadd, .isub, .bor, .band, .bxor => {
@@ -1322,7 +1309,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const op = extra.op;
                 const base = if (t == .OpStore) self.getReg(inps[0]) else .rsp;
                 const rhs = if (t == .OpStore) self.getReg(inps[1]) else self.getReg(inps[0]);
-                const dis = if (t == .OpStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
+                const dis = if (t == .OpStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 switch (op) {
                     .iadd, .isub, .bor, .band, .bxor => {
@@ -1347,7 +1334,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const base = if (t == .ConstOpStore) self.getReg(inps[0]) else .rsp;
                 const rhs = extra.imm;
                 const crhs = std.math.cast(i8, rhs);
-                const dis = if (t == .ConstOpStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
+                const dis = if (t == .ConstOpStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 switch (op) {
                     .iadd, .isub, .bor, .band, .bxor => {
@@ -1839,10 +1826,13 @@ pub fn ensureInstrSpace(self: *X86_64Gen) void {
     ) catch unreachable;
 }
 
-pub fn stackBaseOf(self: *X86_64Gen, instr: *Func.Node) i32 {
-    return @intCast(switch (instr.inputs()[2].?.extra2()) {
-        .LocalAlloc => |n| n.size + self.ctx.local_base,
-        .StructArg => |n| n.spec.size + self.ctx.arg_base,
+pub fn stackBaseOf(self: *X86_64Gen, instr: *Func.Node, inp: usize) i32 {
+    return @intCast(switch (instr.inputs()[inp].?.extra2()) {
+        .LocalAlloc => |n| n.size + switch (n.meta.kind) {
+            .variable => self.ctx.local_base,
+            .parameter => self.ctx.arg_base,
+            .argument => 0,
+        },
         else => utils.panic("{f}", .{instr.inputs()[2].?}),
     });
 }

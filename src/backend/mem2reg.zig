@@ -139,6 +139,7 @@ pub fn Mixin(comptime Backend: type) type {
                 const ov = n.get();
                 if (ov.kind != .LocalAlloc or ov.outputs().len != 1) continue :outer;
                 const o = ov.outputs()[0].get();
+                if (o.kind != .Local) continue :outer;
                 ov.schedule = std.math.maxInt(u16);
 
                 // collect all loads and stores, bail on something else

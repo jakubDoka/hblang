@@ -139,20 +139,6 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         }
     }
 
-    if (node.kind == .StructArg) elim_local: {
-        for (node.outputs()) |us| {
-            const use = us.get();
-            if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
-                break :elim_local;
-            }
-        }
-
-        switch (node.extra2()) {
-            .StructArg => |n| n.no_address = true,
-            else => unreachable,
-        }
-    }
-
     return null;
 }
 
@@ -471,14 +457,17 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
-            .StructArg => {
-                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.extra(.StructArg).spec.size + self.ctx.stack_size });
-            },
-            .StackArgOffset => {
-                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.extra(.StackArgOffset).offset });
-            },
             .Local => {
-                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.inputs()[1].?.extra(.LocalAlloc).size + self.ctx.local_base });
+                const alloc: *graph.builtin.LocalAlloc = no.inputs()[1].?.extra(.LocalAlloc);
+                self.emit(.addi64, .{
+                    self.getReg(no),
+                    .stack_addr,
+                    alloc.size + switch (alloc.meta.kind) {
+                        .variable => self.ctx.local_base,
+                        .parameter => self.ctx.stack_size,
+                        .argument => 0,
+                    },
+                });
             },
             .Ld => |extra| {
                 const size: u16 = @intCast(no.data_type.size());

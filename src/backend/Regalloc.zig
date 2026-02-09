@@ -153,6 +153,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             while (cursor.schedule == no_def_sentinel and cursor.kind == .MachSplit) {
                 cursor = cursor.inputs()[1].?;
             }
+            std.debug.assert(cursor.schedule != no_def_sentinel);
             return lrg_table[cursor.schedule] == self;
         }
 
@@ -357,7 +358,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
             for (instr.outputs()) |us| {
                 const use = us.get();
-                if (instr.kind == .Call and use.kind == .StackArgOffset) {
+                if (instr.kind == .Call and use.kind == .LocalAlloc) {
                     continue;
                 }
                 const idx = us.pos();
@@ -451,7 +452,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                             .collectLoopDepth(func, dep, cfg.?.cfg0(), min, max);
                     }
                 } else {
-                    for (member.dataDeps()) |dep| {
+                    for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
+                        if (!member.hasUseFor(j, dep)) continue;
                         if (lrg.isSame(dep, lrg_table)) {
                             min, max = LiveRange
                                 .collectLoopDepth(func, member, member.cfg0(), min, max);
@@ -504,6 +506,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     }
                 } else {
                     for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
+                        if (!member.hasUseFor(j, dep)) continue;
                         if (!lrg.isSame(dep, lrg_table)) continue;
 
                         if (min != max and func.loopDepth(member) > min and

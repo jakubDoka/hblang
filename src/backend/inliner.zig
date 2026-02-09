@@ -277,7 +277,14 @@ pub fn Mixin(comptime Backend: type) type {
             if (entry_mem != null) {
                 for (tmp.arena.dupe(Func.Node.Out, entry_mem.?.outputs())) |use| {
                     if (use.get().kind == .LocalAlloc) {
-                        func.setInputNoIntern(use.get(), 0, into_entry_mem);
+                        const local: *graph.builtin.LocalAlloc = use.get().extra(.LocalAlloc);
+                        if (local.meta.kind == .parameter) {
+                            const repl = dest.dataDeps()[local.meta.index];
+                            repl.extra(.LocalAlloc).meta.kind = .variable;
+                            func.subsume(repl, use.get(), .intern);
+                        } else {
+                            func.setInputNoIntern(use.get(), 0, into_entry_mem);
+                        }
                     }
                 }
             }
@@ -293,25 +300,6 @@ pub fn Mixin(comptime Backend: type) type {
                     const o = n.get();
                     if (o.kind == .Arg and o.extra(.Arg).index == j) {
                         func.subsume(dep, o, .intern);
-                        break;
-                    }
-                    if (o.kind == .StructArg and o.extra(.StructArg).base.index == j) {
-                        // we need to copy to preserve the semantics of a call
-                        // TODO: decide if we need this based on the call
-                        // convention of the inlined function since the default
-                        // call convention should be a bit customized
-                        //
-                        const sarg = o.extra(.StructArg);
-                        const alloc = func.addNode(
-                            .LocalAlloc,
-                            o.sloc,
-                            .i64,
-                            &.{ null, into_entry_mem },
-                            .{ .size = sarg.spec.size, .debug_ty = sarg.debug_ty },
-                        );
-                        const copy = func.addNode(.Local, o.sloc, .i64, &.{ null, alloc }, .{});
-                        func.subsume(copy, dep, .intern);
-                        func.subsume(copy, o, .intern);
                         break;
                     }
                 }

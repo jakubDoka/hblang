@@ -385,7 +385,7 @@ const Stacker = struct {
             i -= 1;
             defer instr.input_ordered_len -= 1;
 
-            if (def.kind == .StackArgOffset and instr.kind == .Call) continue;
+            if (def.kind == .LocalAlloc and instr.kind == .Call) continue;
 
             var appended: usize = 0;
 
@@ -1222,35 +1222,13 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             self.emitLocalStore(instr);
         },
-        .StackArgOffset => |extra| {
-            const offset = extra.offset;
-
-            try self.ctx.buf.writer.writeByte(opb(.i64_const));
-            try self.ctx.buf.writer.writeSleb128(offset);
-
-            try self.ctx.buf.writer.writeByte(opb(.global_get));
-            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
-
-            try self.ctx.buf.writer.writeByte(opb(.i64_add));
-
-            self.emitLocalStore(instr);
-        },
         .Local => {
-            const offset = inps[0].extra(.LocalAlloc).size +
-                self.ctx.stack_base;
-
-            try self.ctx.buf.writer.writeByte(opb(.i64_const));
-            try self.ctx.buf.writer.writeSleb128(offset);
-
-            try self.ctx.buf.writer.writeByte(opb(.global_get));
-            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
-
-            try self.ctx.buf.writer.writeByte(opb(.i64_add));
-
-            self.emitLocalStore(instr);
-        },
-        .StructArg => |extra| {
-            const offset = extra.spec.size + self.ctx.arg_base;
+            const alloc: *graph.builtin.LocalAlloc = inps[0].extra(.LocalAlloc);
+            const offset = alloc.size + switch (alloc.meta.kind) {
+                .variable => self.ctx.stack_base,
+                .parameter => self.ctx.arg_base,
+                .argument => 0,
+            };
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
             try self.ctx.buf.writer.writeSleb128(offset);
