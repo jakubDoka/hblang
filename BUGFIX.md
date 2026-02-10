@@ -2,6 +2,23 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### float spill spill 1
+```hb
+main := fn(): int {
+    value := opaque_float(0.0)
+    _ = opaque_float(1.0)
+    return @float_to_int(value)
+}
+
+opaque_float := fn(v: f32): f32 {
+    other_ff()
+    return v
+}
+
+other_f := fn(v: f32): void {}
+other_ff := fn(): void other_f(1.1)
+```
+
 #### const folding between func args 1
 ```hb
 expectations := .{

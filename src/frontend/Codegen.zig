@@ -5850,7 +5850,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
 
     var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
     target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
-    target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
+    //target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
 
     const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();

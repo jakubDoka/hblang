@@ -1,5 +1,4 @@
 const std = @import("std");
-pub const Set = std.DynamicBitSetUnmanaged;
 
 const matcher = @import("hbvm.HbvmGen");
 const root = @import("hb");
@@ -176,51 +175,46 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
 }
 
 // ================== REGALLOC ==================
-pub const set_cap = 254 + 32;
-pub fn setMasks(set: *Set) []Set.MaskInt {
-    return graph.setMasks(set.*);
+pub const set_cap = 512; // might not be the best idea
+
+pub const RegTag = enum(u0) {
+    generic,
+
+    pub fn overlapps(self: RegTag, other: RegTag) usize {
+        return if (self == other) Set.bit_length else 0;
+    }
+};
+
+pub const Set = Regalloc.RegMask(RegTag, set_cap);
+
+pub fn readMask(_: *utils.Arena) Set {
+    return Set.initFull(.generic);
 }
 
-pub fn setIntersects(a: Set, b: Set) bool {
-    return for (graph.setMasks(a), graph.setMasks(b)) |aa, bb| {
-        if (aa & bb != 0) return true;
-    } else false;
+pub fn writeMask(_: *utils.Arena) Set {
+    return Set.initBits(.generic, Regalloc.fieldMask(Set.Mask, max_alloc_regs - 1, 1));
 }
 
-pub fn readMask(arena: *utils.Arena) Set {
-    var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    set.setRangeValue(.{ .start = 0, .end = 256 }, true);
-    return set;
-}
-
-pub fn writeMask(arena: *utils.Arena) Set {
-    var mask = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    mask.setRangeValue(.{ .start = 1, .end = max_alloc_regs }, true);
-    return mask;
-}
-
-pub fn splitMask(arena: *utils.Arena) Set {
-    var mask = Set.initFull(arena.allocator(), set_cap) catch unreachable;
+pub fn splitMask(_: *utils.Arena) Set {
+    var mask = Set.initFull(.generic);
+    mask.mask &= ~Regalloc.fieldMask(Set.Mask, @as(usize, 256) - max_alloc_regs, max_alloc_regs);
     mask.unset(0);
-    mask.setRangeValue(.{ .start = max_alloc_regs, .end = 256 }, false);
     return mask;
 }
 
-pub fn readSplitMask(arena: *utils.Arena) Set {
-    return Set.initFull(arena.allocator(), set_cap) catch unreachable;
+pub fn readSplitMask(_: *utils.Arena) Set {
+    return Set.initFull(.generic);
 }
 
-pub fn singleMask(arena: *utils.Arena, reg: isa.Reg) Set {
-    var mask = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    mask.set(@intFromEnum(reg));
-    return mask;
+pub fn singleMask(_: *utils.Arena, reg: isa.Reg) Set {
+    return Set.initBits(.generic, @as(Set.Mask, 1) << @intFromEnum(reg));
 }
 
 pub fn inPlaceSlot(_: *Func.Node) ?usize {
     return null;
 }
 
-pub fn clobbers(node: *Func.Node) u64 {
+pub fn clobbers(node: *Func.Node, _: RegTag) u64 {
     return switch (node.kind) {
         .Call => ((1 << 31) - 1) << 1,
         else => 0,
@@ -261,10 +255,7 @@ pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set 
     }
 
     if (node.kind == .FramePointer) {
-        std.debug.assert(idx == 0);
-        var set = try Set.initEmpty(arena.allocator(), set_cap);
-        set.set(@intFromEnum(isa.Reg.stack_addr));
-        return set;
+        return singleMask(arena, isa.Reg.stack_addr);
     }
 
     if (node.kind == .MachSplit) {
@@ -274,22 +265,6 @@ pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set 
 
     if (idx == 0) return writeMask(arena);
     return readMask(arena);
-}
-
-pub fn oldRegMask(node: *Func.Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
-    errdefer unreachable;
-
-    if (node.kind == .FramePointer) {
-        std.debug.assert(idx == 0);
-        var set = try Set.initEmpty(tmp.allocator(), set_cap);
-        set.set(@intFromEnum(isa.Reg.stack_addr));
-        return set;
-    }
-
-    var set = try Set.initFull(tmp.allocator(), set_cap);
-    set.unset(0);
-    set.setRangeValue(.{ .start = max_alloc_regs, .end = 256 }, false);
-    return set;
 }
 
 // ================== EMIT ==================

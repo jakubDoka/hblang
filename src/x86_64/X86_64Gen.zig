@@ -119,6 +119,10 @@ pub const Reg = enum(u8) {
     pub const rip = Reg.rbp;
     pub const no_op_rex = rex(.rax, .rax, .rax, false);
 
+    pub fn maskIdx(self: Reg) usize {
+        return @intFromEnum(self) & 0xf;
+    }
+
     pub fn isScalar(self: Reg) bool {
         return @intFromEnum(self) <= @intFromEnum(Reg.r15);
     }
@@ -127,17 +131,8 @@ pub const Reg = enum(u8) {
         return self == .rsp or self == .rbp or self == .rsi or self == .rdi;
     }
 
-    pub fn isXmm(self: Reg) bool {
-        return @intFromEnum(Reg.xmm0) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Reg.xmm15);
-    }
-
-    pub fn normalizeXmm(self: Reg) Reg {
-        std.debug.assert(self.isXmm());
-        return @enumFromInt(@intFromEnum(self) - 16);
-    }
-
     pub fn isStack(self: Reg) bool {
-        return @intFromEnum(self) > @intFromEnum(Reg.xmm15);
+        return @intFromEnum(self) > 16;
     }
 
     pub fn retForDt(dt: graph.DataType) Reg {
@@ -533,90 +528,80 @@ pub fn idealize(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.Wo
 }
 
 // ================== REGALLOC ==================
-pub const Set = struct {
-    bits: Mask,
-    comptime bit_length: usize = @bitSizeOf(Mask),
+pub const RegTag = enum(u3) {
+    int,
+    f32,
+    f64,
 
-    const Mask = u128;
-
-    const spill_mask = ~@as(Mask, (1 << 32) - 1);
-
-    pub fn init(bits: Mask) Set {
-        return .{ .bits = bits };
+    pub fn isXmm(self: RegTag) bool {
+        return self == .f32 or self == .f64;
     }
 
-    pub fn setIntersection(a: *Set, b: Set) void {
-        a.bits &= b.bits;
-    }
-
-    pub fn count(s: Set) u16 {
-        return @popCount(s.bits);
-    }
-
-    pub fn findFirstSet(s: Set) ?u16 {
-        if (s.bits == 0) return null;
-        return @ctz(s.bits);
-    }
-
-    pub fn unset(s: *Set, idx: usize) void {
-        s.bits &= ~(@as(Mask, 1) << @intCast(idx));
-    }
-
-    pub fn clone(s: Set, _: anytype) !Set {
-        return s;
+    pub fn overlapps(a: RegTag, b: RegTag) usize {
+        if (a == b) return Set.bit_length;
+        if (a.isXmm() and b.isXmm()) return 16;
+        return 0;
     }
 };
 
-pub fn setIntersects(a: Set, b: Set) bool {
-    return a.bits & b.bits != 0;
+pub const Set = Regalloc.RegMask(RegTag, 128);
+
+pub fn floatMask32(_: *utils.Arena) Set {
+    return .initBits(.f32, 0xFFFF);
 }
 
-pub fn setMasks(s: *Set) []u64 {
-    return @ptrCast((&s.bits)[0..1]);
-}
-
-pub fn floatMask(_: *utils.Arena) Set {
-    return .init(0xFFFF_0000);
+pub fn floatMask64(_: *utils.Arena) Set {
+    return .initBits(.f64, 0xFFFF);
 }
 
 pub fn readIntMask(_: *utils.Arena) Set {
-    return .init(0xFFFF);
+    return .initBits(.int, 0xFFFF);
 }
+
+pub const rsp_bit = (@as(Set.Mask, 1) << @intFromEnum(Reg.rsp));
 
 pub fn writeIntMask(_: *utils.Arena) Set {
-    return .init(0xFFFF & ~(@as(Set.Mask, 1) << @intFromEnum(Reg.rsp)));
+    return .initBits(.int, 0xFFFF & ~rsp_bit);
 }
 
-pub fn splitFloatMask(arena: *utils.Arena) Set {
-    return .init(Set.spill_mask | floatMask(arena).bits);
+pub fn splitFloatMask32(_: *utils.Arena) Set {
+    return .initFull(.f32);
 }
 
-pub fn splitIntMask(arena: *utils.Arena) Set {
-    return .init(Set.spill_mask | writeIntMask(arena).bits);
+pub fn splitFloatMask64(_: *utils.Arena) Set {
+    return .initFull(.f32);
 }
 
-pub fn readSplitIntMask(arena: *utils.Arena) Set {
-    return .init(Set.spill_mask | readIntMask(arena).bits);
+pub fn splitIntMask(_: *utils.Arena) Set {
+    return .initBits(.int, std.math.maxInt(Set.Mask) & ~rsp_bit);
 }
 
-pub fn singleReg(reg: Reg, _: *utils.Arena) Set {
-    return .init(@as(Set.Mask, 1) << @intCast(@intFromEnum(reg)));
+pub fn readSplitIntMask(_: *utils.Arena) Set {
+    return .initFull(.int);
 }
 
-pub fn clobbers(node: *Func.Node) u64 {
+pub fn singleReg(reg: Reg, tag: RegTag, _: *utils.Arena) Set {
+    return .initBits(tag, @as(Set.Mask, 1) << @intCast(reg.maskIdx()));
+}
+
+pub fn clobbers(node: *Func.Node, tag: RegTag) u64 {
     return switch (node.kind) {
-        .Call, .MemCpy => comptime b: {
-            var vl: u64 = 0;
-            for (Reg.system_v.caller_saved) |r| {
-                vl |= @as(u64, 1) << @intFromEnum(r);
+        .Call, .MemCpy => b: {
+            switch (tag) {
+                .int => {
+                    comptime {
+                        var vl: u64 = 0;
+                        for (Reg.system_v.caller_saved) |r| {
+                            vl |= @as(u64, 1) << @intFromEnum(r);
+                        }
+                        break :b vl;
+                    }
+                },
+                .f32, .f64 => break :b 0xffff,
             }
-            for (Reg.system_v.caller_saved_float) |r| {
-                vl |= @as(u64, 1) << @intFromEnum(r);
-            }
-            break :b vl;
         },
-        .RepStosb => @as(u64, 1) << @intFromEnum(Reg.rdi),
-        .BinOp => switch (node.extra(.BinOp).op) {
+        .RepStosb => if (tag == .int) @as(u64, 1) << @intFromEnum(Reg.rdi) else 0,
+        .BinOp => if (tag == .int) switch (node.extra(.BinOp).op) {
             .udiv, .sdiv, .umod, .smod => {
                 var base = @as(u64, 1) << @intFromEnum(Reg.rax);
                 if (node.data_type.size() != 1) {
@@ -625,7 +610,7 @@ pub fn clobbers(node: *Func.Node) u64 {
                 return base;
             },
             else => 0,
-        },
+        } else 0,
         else => 0,
     };
 }
@@ -639,8 +624,9 @@ pub fn regMask(
     errdefer unreachable;
 
     if (node.kind == .MachSplit or node.kind == .Phi) {
-        if (node.data_type.isFloat() or
-            node.data_type.isSse()) return splitFloatMask(arena);
+        std.debug.assert(!node.data_type.isSse()); // TODO
+        if (node.data_type == .f32) return splitFloatMask32(arena);
+        if (node.data_type == .f64) return splitFloatMask64(arena);
         if (idx == 0) return splitIntMask(arena);
         return readSplitIntMask(arena);
     }
@@ -665,24 +651,27 @@ pub fn regMask(
 
         if (params[index].Reg.isSse()) {
             std.debug.assert(node.data_type.isSse());
-            return singleReg(Reg.system_v.float_args[xmm_idx], arena);
-        } else if (params[index].Reg.isFloat()) {
+            unreachable; // TODO
+        } else if (params[index].Reg == .f32) {
             std.debug.assert(node.data_type.isFloat());
-            return singleReg(Reg.system_v.float_args[xmm_idx], arena);
+            return singleReg(Reg.system_v.float_args[xmm_idx], .f32, arena);
+        } else if (params[index].Reg == .f64) {
+            std.debug.assert(node.data_type.isFloat());
+            return singleReg(Reg.system_v.float_args[xmm_idx], .f64, arena);
         } else {
             std.debug.assert(node.data_type.isInt());
-            return singleReg(Reg.system_v.args[reg_idx], arena);
+            return singleReg(Reg.system_v.args[reg_idx], .int, arena);
         }
     }
 
     if (node.kind == .FramePointer) {
         std.debug.assert(idx == 0);
-        return singleReg(.rsp, arena);
+        return singleReg(.rsp, .int, arena);
     }
 
     if (node.kind == .MemCpy) {
         std.debug.assert(idx >= 2);
-        return singleReg(Reg.system_v.args[idx - 2], arena);
+        return singleReg(Reg.system_v.args[idx - 2], .int, arena);
     }
 
     if (node.kind == .Call) {
@@ -690,7 +679,7 @@ pub fn regMask(
         std.debug.assert(idx >= dep_offset);
         const extra = node.extra(.Call);
         if (extra.id == syscall) {
-            return singleReg(Reg.system_v.syscall_args[idx - dep_offset], arena);
+            return singleReg(Reg.system_v.syscall_args[idx - dep_offset], .int, arena);
         } else {
             if (extra.id == graph.indirect_call and idx == dep_offset) {
                 return readIntMask(arena);
@@ -713,22 +702,25 @@ pub fn regMask(
 
             if (params[ix].Reg.isSse()) {
                 std.debug.assert(node.inputs()[idx].?.data_type.isSse());
-                return singleReg(Reg.system_v.float_args[xmm_idx], arena);
-            } else if (params[ix].Reg.isFloat()) {
+                unreachable; // TODO
+            } else if (params[ix].Reg == .f32) {
                 std.debug.assert(node.inputs()[idx].?.data_type.isFloat());
-                return singleReg(Reg.system_v.float_args[xmm_idx], arena);
+                return singleReg(Reg.system_v.float_args[xmm_idx], .f32, arena);
+            } else if (params[ix].Reg == .f64) {
+                std.debug.assert(node.inputs()[idx].?.data_type.isFloat());
+                return singleReg(Reg.system_v.float_args[xmm_idx], .f64, arena);
             } else {
                 std.debug.assert(node.inputs()[idx].?.data_type.isInt());
-                return singleReg(Reg.system_v.args[reg_idx], arena);
+                return singleReg(Reg.system_v.args[reg_idx], .int, arena);
             }
         }
     }
 
     if (node.kind == .RepStosb) {
         switch (idx) {
-            2 => return singleReg(Reg.rdi, arena),
-            3 => return singleReg(Reg.rax, arena),
-            4 => return singleReg(Reg.rcx, arena),
+            2 => return singleReg(Reg.rdi, .int, arena),
+            3 => return singleReg(Reg.rax, .int, arena),
+            4 => return singleReg(Reg.rcx, .int, arena),
             else => unreachable,
         }
     }
@@ -737,17 +729,27 @@ pub fn regMask(
         if (idx != 3) {
             utils.panic("{} != 3", .{idx});
         }
-        return singleReg(Reg.retForDt(node.inputs()[idx].?.data_type), arena);
+
+        const ret = node.inputs()[idx].?.data_type;
+        if (ret == .f32) return singleReg(.xmm0, .f32, arena);
+        if (ret == .f64) return singleReg(.xmm0, .f64, arena);
+
+        return singleReg(.rax, .int, arena);
     }
 
     if (node.kind == .Ret) {
         std.debug.assert(idx == 0);
-        return singleReg(Reg.retForDt(node.data_type), arena);
+
+        const ret = node.data_type;
+
+        if (ret == .f32) return singleReg(.xmm0, .f32, arena);
+        if (ret == .f64) return singleReg(.xmm0, .f64, arena);
+
+        return singleReg(.rax, .int, arena);
     }
 
-    if ((node.data_type.isFloat() or node.data_type.isSse()) and idx == 0) {
-        return floatMask(arena);
-    }
+    if (node.data_type == .f32 and idx == 0) return floatMask32(arena);
+    if (node.data_type == .f64 and idx == 0) return floatMask64(arena);
 
     if (node.subclass(graph.builtin.BinOp)) |b| {
         const op = b.ext.op;
@@ -757,11 +759,12 @@ pub fn regMask(
                     0 => {
                         return singleReg(
                             if (op == .udiv or op == .sdiv) .rax else .rdx,
+                            .int,
                             arena,
                         );
                     },
                     1 => {
-                        return singleReg(.rax, arena);
+                        return singleReg(.rax, .int, arena);
                     },
                     2 => {
                         var set = readIntMask(arena);
@@ -774,7 +777,7 @@ pub fn regMask(
                 else => unreachable,
             },
             .ishl, .ushr, .sshr => switch (idx) {
-                2 => return singleReg(.rcx, arena),
+                2 => return singleReg(.rcx, .int, arena),
                 else => {},
             },
             else => {},
@@ -782,11 +785,9 @@ pub fn regMask(
     }
 
     if (idx == 0) return writeIntMask(arena);
-    if (node.inputs()[idx].?.data_type.isFloat() or
-        node.inputs()[idx].?.data_type.isSse())
-    {
-        return floatMask(arena);
-    }
+    if (node.inputs()[idx].?.data_type == .f32) return floatMask32(arena);
+    if (node.inputs()[idx].?.data_type == .f64) return floatMask64(arena);
+
     return readIntMask(arena);
 }
 
@@ -1044,7 +1045,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const sym = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "s");
 
                 const ty = @field(graph.DataType, @typeName(@TypeOf(extra.imm)));
-                self.emitMemStoreOrLoad(ty, self.getReg(instr), .rip, null, false);
+                self.emitMemStoreOrLoad(ty, self.getReg(instr), .rip, null, .load);
                 const res = try idx.getOrPut(self.gpa, extra.imm);
                 const dis: i31 = @intCast(@intFromPtr(res.key_ptr) - @intFromPtr(idx.entries.bytes));
                 try self.mach.out.addReloc(self.gpa, sym, .@"4", dis - 4, 4);
@@ -1064,15 +1065,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 var lhs, var rhs = .{ self.getReg(instr), self.getReg(inps[0]) };
                 if (lhs == rhs) continue;
 
-                if (lhs.isScalar() and rhs.isScalar()) {
+                if (instr.data_type.isInt()) {
                     // mov dst, src
                     self.emitRegOp(0x89, rhs, lhs);
-                } else if (lhs.isXmm() and rhs.isXmm()) {
+                } else if (instr.data_type.isFloat()) {
                     // movs[s/d] dst, src
                     self.emitByte(if (instr.data_type == .f32) 0xf3 else 0xf2);
                     self.emitRex(rhs, lhs, .rax, instr.data_type.size());
                     self.emitBytes(&.{ 0x0f, 0x11, Reg.Mod.direct.rm(rhs, lhs) });
                 } else b: {
+                    std.debug.assert(lhs.isStack() or rhs.isStack());
+
                     const lhs_stack = lhs.isStack();
 
                     if (lhs_stack and rhs.isStack()) {
@@ -1093,7 +1096,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         std.mem.swap(Reg, &lhs, &rhs);
                     }
 
-                    if (lhs.isXmm()) {
+                    if (instr.data_type.isFloat()) {
                         self.emitByte(if (instr.data_type == .f32) 0xf3 else 0xf2);
                         self.emitRex(lhs, .rsp, .rax, instr.data_type.size());
                         self.emitBytes(&.{ 0x0f, if (lhs_stack) 0x11 else 0x10 });
@@ -1147,14 +1150,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .GlobalStore => |extra| {
                 // mov [rip+dis+offset], src
                 const src = self.getReg(inps[0]);
-                self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, true);
+                self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, .store);
                 const dis: i31 = @intCast(extra.dis);
                 try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", dis - 4, 4);
             },
             .GlobalLoad => |extra| {
                 // mov dst, [rip+dis+offset]
                 const dst = self.getReg(instr);
-                self.emitMemStoreOrLoad(instr.data_type, dst, .rip, null, false);
+                self.emitMemStoreOrLoad(instr.data_type, dst, .rip, null, .load);
                 const dis: i31 = @intCast(extra.dis);
                 try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", dis - 4, 4);
             },
@@ -1189,7 +1192,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const bse = if (t == .OffsetLoad) self.getReg(inps[0]) else .rsp;
                 const dis: i32 = if (t == .OffsetLoad) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
-                self.emitMemStoreOrLoad(instr.data_type, dst, bse, dis, false);
+                self.emitMemStoreOrLoad(instr.data_type, dst, bse, dis, .load);
             },
             inline .OffsetStore, .StackStore => |extra, t| {
                 // mov [dst+dis], vl
@@ -1197,7 +1200,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const vl = if (t == .OffsetStore) self.getReg(inps[1]) else self.getReg(inps[0]);
                 const dis: i32 = if (t == .OffsetStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
-                self.emitMemStoreOrLoad(instr.data_type, vl, dst, dis, true);
+                self.emitMemStoreOrLoad(instr.data_type, vl, dst, dis, .store);
             },
             inline .ConstStore, .ConstStackStore => |extra, t| {
                 // mov [dst+dis], $vl
@@ -1886,7 +1889,7 @@ pub fn emitMemStoreOrLoad(
     reg: Reg,
     bse: Reg,
     dis: ?i64,
-    is_store: bool,
+    kind: enum { store, load },
 ) void {
     switch (dt) {
         .i16 => self.emitByte(0x66),
@@ -1896,9 +1899,9 @@ pub fn emitMemStoreOrLoad(
     }
     self.emitRex(reg, bse, .no_index, dt.size());
     self.emitBytes(switch (dt) {
-        .i16, .i64, .i32 => &.{if (is_store) 0x89 else 0x8b},
-        .i8 => &.{if (is_store) 0x88 else 0x8a},
-        .f32, .f64 => &.{ 0x0f, if (is_store) 0x11 else 0x10 },
+        .i16, .i64, .i32 => &.{if (kind == .store) 0x89 else 0x8b},
+        .i8 => &.{if (kind == .store) 0x88 else 0x8a},
+        .f32, .f64 => &.{ 0x0f, if (kind == .store) 0x11 else 0x10 },
         else => utils.panic("{f}", .{dt}),
     });
     self.emitIndirectAddr(reg, bse, .no_index, 1, dis);

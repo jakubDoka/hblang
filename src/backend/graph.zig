@@ -3,6 +3,7 @@ pub const utils = @import("utils-lib");
 const Machine = @import("Machine.zig");
 const matcher = @import("graph.IdealGen");
 const Builder = @import("Builder.zig");
+const Regalloc = @import("Regalloc.zig");
 pub const is_debug = @import("builtin").mode == .Debug;
 
 const print = (std.debug).print;
@@ -369,6 +370,10 @@ pub const DataType = enum(u8) {
             .f32, .f64 => true,
             else => false,
         };
+    }
+
+    pub fn isXmm(self: DataType) bool {
+        return self.isSse() or self.isFloat();
     }
 
     pub fn size(self: DataType) u8 {
@@ -1359,19 +1364,16 @@ pub fn Func(comptime Backend: type) type {
                 func: *Self,
                 idx: usize,
                 tmp: *utils.Arena,
-            ) if (@hasDecl(Backend, "Set"))
-                Backend.Set
-            else
-                std.DynamicBitSetUnmanaged {
+            ) Regalloc.ReinferRegMask(Backend.Set) {
                 return if (comptime optApi("regMask", @TypeOf(regMask)))
                     Backend.regMask(self, func, idx, tmp)
                 else
                     unreachable;
             }
 
-            pub fn clobbers(self: *Node) u64 {
+            pub fn clobbers(self: *Node, tag: Backend.Set.tag_) u64 {
                 return if (@hasDecl(Backend, "clobbers"))
-                    Backend.clobbers(self)
+                    Backend.clobbers(self, tag)
                 else
                     0;
             }
@@ -1771,7 +1773,11 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn kills(self: *Node) bool {
-                return self.clobbers() != 0;
+                inline for (std.meta.fields(Backend.Set.tag_)) |f| {
+                    if (self.clobbers(@field(Backend.Set.tag_, f.name)) != 0) return true;
+                }
+
+                return false;
             }
 
             pub fn getStaticOffset(self: *Node) i64 {
@@ -2035,7 +2041,7 @@ pub fn Func(comptime Backend: type) type {
                     s + use.dataDepOffset() != idx
                 else
                     true) and
-                Backend.setIntersects(mask, def.regMask(self, 0, tmp.arena)))
+                mask.setIntersects(def.regMask(self, 0, tmp.arena)))
             {
                 return;
             }

@@ -18,13 +18,78 @@ max_blocks: usize = 0,
 max_instructions: usize = 0,
 inserted_splits: usize = 0,
 
+pub fn fieldMask(comptime Int: type, width: usize, offset: usize) Int {
+    if (width == 0) return 0;
+    return (@as(Int, std.math.maxInt(Int)) >>
+        @intCast(@bitSizeOf(Int) - width)) << @intCast(offset);
+}
+
 pub fn RegMask(comptime Tag: type, comptime cap: usize) type {
     return packed struct {
         mask: Mask,
         tag: Tag,
 
-        const Mask = std.meta.Int(.unsigned, cap - @bitSizeOf(Tag));
+        pub const bit_length = @bitSizeOf(Mask);
+        pub const tag_ = Tag;
+        pub const cap_ = cap;
+        const Self = @This();
+
+        pub const Mask = std.meta.Int(.unsigned, cap - @bitSizeOf(Tag));
+
+        pub fn initBits(tag: Tag, bits: Mask) Self {
+            return .{ .tag = tag, .mask = bits };
+        }
+
+        pub fn initFull(tag: Tag) Self {
+            return .{ .tag = tag, .mask = std.math.maxInt(Mask) };
+        }
+
+        pub fn initEmpty(tag: Tag) Self {
+            return .{ .tag = tag, .mask = 0 };
+        }
+
+        pub fn set(self: *Self, pos: usize) void {
+            self.mask |= @as(Mask, 1) << @intCast(pos);
+        }
+
+        pub fn unset(self: *Self, pos: usize) void {
+            self.mask &= ~(@as(Mask, 1) << @intCast(pos));
+        }
+
+        pub fn isSet(self: *Self, pos: usize) bool {
+            return self.mask & (@as(Mask, 1) << @intCast(pos)) != 0;
+        }
+
+        pub fn intersectionMask(a: Self, b: Self) Mask {
+            const ov = a.tag.overlapps(b.tag);
+            return fieldMask(Mask, ov, 0);
+        }
+
+        pub fn setIntersects(a: Self, b: Self) bool {
+            return (a.mask & b.mask & a.intersectionMask(b)) != 0;
+        }
+
+        pub fn setIntersection(a: *Self, b: Self) void {
+            a.mask &= b.mask & a.intersectionMask(b);
+        }
+
+        pub fn count(self: Self) usize {
+            return @popCount(self.mask);
+        }
+
+        pub fn findFirstSet(self: Self) ?usize {
+            if (self.mask == 0) return null;
+            return @ctz(self.mask);
+        }
+
+        pub fn clone(self: Self, _: std.mem.Allocator) !Self {
+            return self;
+        }
     };
+}
+
+pub fn ReinferRegMask(comptime T: type) type {
+    return RegMask(T.tag_, T.cap_);
 }
 
 pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
@@ -51,9 +116,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     const Func = graph.Func(Backend);
     const Node = Func.Node;
     const CfgNode = Func.CfgNode;
-    const Set = Backend.Set;
-    const setIntersects = Backend.setIntersects;
-    const setMasks = Backend.setMasks;
+    const Set = ReinferRegMask(Backend.Set);
 
     const unresolved_reg = std.math.maxInt(u16);
     const no_def_sentinel = std.math.maxInt(u16);
@@ -74,10 +137,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             try self.def.format(writer);
             try writer.writeAll(", ");
             try writer.writeAll("mask: ");
-            var mask = self.mask;
-            for (setMasks(&mask)) |m| {
-                try writer.print("{x:016} ", .{m});
-            }
+            try writer.print("{x:016} ", .{self.mask.mask});
             // if (self.killed_by) |k| {
             //     try writer.writeAll("\n\tkilled by: ");
             //     try k.format(a, b, writer);
@@ -279,7 +339,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     defer tmp.deinit();
 
     func.gcm.instr_count = 0;
-    const should_log = 1 == 1;
+    const should_log = 1 == 0;
     for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |instr| {
             if (instr.get().isDef()) {
@@ -401,7 +461,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 if (instr.isDef()) {
                     print("  [{}] {x:08} {f}\n", .{
                         lrg_table[instr.schedule].index(lrgs),
-                        setMasks(&lrg_table[instr.schedule].mask)[0],
+                        lrg_table[instr.schedule].mask.mask,
                         instr,
                     });
                 } else {
@@ -453,8 +513,6 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 if (lrg.hasDef(member, lrg_table)) {
                     min, max = LiveRange
                         .collectLoopDepth(func, member, member.cfg0(), min, max);
-                } else {
-                    std.debug.print("||| {f} {f}\n", .{ lrg, member });
                 }
 
                 if (member.kind == .Phi) {
@@ -465,14 +523,11 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 } else {
                     for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
                         if (!member.hasUseFor(j, dep)) {
-                            std.debug.print("/// {f}", .{dep});
                             continue;
                         }
                         if (lrg.isSame(dep, lrg_table)) {
                             min, max = LiveRange
                                 .collectLoopDepth(func, member, member.cfg0(), min, max);
-                        } else {
-                            std.debug.print("--- {f}\n", .{dep});
                         }
                     }
                 }
@@ -584,16 +639,15 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
             if (instr.kind == .Phi) continue;
 
-            const kills = instr.clobbers();
-            if (kills != 0) for (tmp_liveins.entries.items(.key)) |al| {
+            if (instr.kills()) for (tmp_liveins.entries.items(.key)) |al| {
                 const active_lrg: *LiveRange = &lrgs[al];
-                // we don't skip if killed_by is not null since we are going in reverse
-                std.debug.assert(active_lrg.mask.bit_length >= @bitSizeOf(@TypeOf(kills)));
 
-                @as(
-                    *align(@alignOf(usize)) @TypeOf(kills),
-                    @ptrCast(&setMasks(&active_lrg.mask)[0]),
-                ).* &= ~kills;
+                const kills = instr.clobbers(active_lrg.mask.tag);
+
+                // we don't skip if killed_by is not null since we are going in reverse
+                comptime if (Set.bit_length < @bitSizeOf(@TypeOf(kills))) unreachable;
+
+                active_lrg.mask.mask &= ~kills;
 
                 if (active_lrg.mask.count() == 0 and !active_lrg.failed) {
                     //active_lrg.killed_by = instr;
@@ -607,7 +661,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     const concu_lrg = &lrgs[id];
                     std.debug.assert(concu_lrg != instr_lrg);
 
-                    if (!setIntersects(concu_lrg.mask, instr_lrg.mask)) continue;
+                    if (!concu_lrg.mask.setIntersects(instr_lrg.mask)) continue;
 
                     if (instr_lrg.mask.count() != 1) {
                         std.debug.assert(instr_lrg.index(lrgs) != concu_lrg.index(lrgs));
@@ -637,7 +691,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         const concu_lrg = &lrgs[concu];
 
                         if (nd == def) continue;
-                        if (!setIntersects(out, nd.regMask(func, 0, tmp.arena))) continue;
+                        if (!out.setIntersects(nd.regMask(func, 0, tmp.arena))) continue;
 
                         concu_lrg.mask.unset(out.findFirstSet().?);
                         if (concu_lrg.mask.count() == 0) {
@@ -832,7 +886,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 else
                     .{ splitLrg, defLrg };
 
-                if (!setIntersects(lhs.mask, rhs.mask)) continue :coalesce;
+                if (!lhs.mask.setIntersects(rhs.mask)) continue :coalesce;
 
                 // we suffle the edges around to then be joined in bulk
                 var to_move: usize = 0;
@@ -990,14 +1044,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         }
 
         if (Func.biased_regs != 0) {
-            if (Func.biased_regs & @as(
-                *align(@alignOf(usize)) const u64,
-                @ptrCast(&setMasks(&lrg.mask)[0]),
-            ).* != 0) {
-                @as(
-                    *align(@alignOf(usize)) u64,
-                    @ptrCast(&setMasks(&lrg.mask)[0]),
-                ).* &= Func.biased_regs;
+            if (Func.biased_regs & lrg.mask.mask != 0) {
+                lrg.mask.mask &= Func.biased_regs;
             }
         }
 
@@ -1028,7 +1076,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         }
     }
 
-    if (std.debug.runtime_safety) {
+    if (std.debug.runtime_safety and false) {
         const util = struct {
             pub fn logCollision(fnc: *Func, block: *CfgNode, def: *Node, clobber: *Node, use: *Node, allc: []u16) void {
                 if (utils.freestanding) return;

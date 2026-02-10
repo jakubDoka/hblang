@@ -3,11 +3,18 @@ scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
 
 pub const max_func_id = graph.indirect_call - 1;
+pub const Set = Regalloc.RegMask(enum(u0) {
+    mm,
+    pub fn overlapps(_: @This(), _: @This()) usize {
+        return 0;
+    }
+}, 128);
 
 const std = @import("std");
 const utils = graph.utils;
 const graph = @import("graph.zig");
 const Builder = @This();
+const Regalloc = @import("Regalloc.zig");
 
 const Func = graph.Func(Builder);
 pub const i_know_the_api = {};

@@ -33,29 +33,34 @@ pub fn loadDatatype(node: *Func.Node) graph.DataType {
     };
 }
 
-pub const RegTag = enum(u2) {
-    i32,
-    i64,
-    f32,
-    f64,
+pub const set_cap = 128;
 
-    pub fn overlapps(self: RegTag, other: RegTag) bool {
-        return self != other;
+pub const RegTag = enum(u2) {
+    f64,
+    f32,
+    i64,
+    i32,
+
+    pub fn fromDt(self: graph.DataType) RegTag {
+        return switch (self) {
+            .i32, .i16, .i8 => .i32,
+            .i64 => .i64,
+            .f32 => .f32,
+            .f64 => .f64,
+            else => utils.panic("{f}", .{self}),
+        };
+    }
+
+    pub fn toWasmType(self: RegTag) object.Type {
+        return @enumFromInt(@intFromEnum(self) + @intFromEnum(object.Type.f64));
+    }
+
+    pub fn overlapps(self: RegTag, other: RegTag) usize {
+        return if (self == other) Set.bit_length else 0;
     }
 };
 
-//pub const Set = Regalloc.RegMask(RegTag, 128);
-pub const Set = std.DynamicBitSetUnmanaged;
-
-pub fn setMasks(set: *Set) []Set.MaskInt {
-    return graph.setMasks(set.*);
-}
-
-pub fn setIntersects(a: Set, b: Set) bool {
-    return for (graph.setMasks(a), graph.setMasks(b)) |aa, bb| {
-        if (aa & bb != 0) return true;
-    } else false;
-}
+pub const Set = Regalloc.RegMask(RegTag, set_cap);
 
 pub const i_know_the_api = {};
 
@@ -216,27 +221,10 @@ pub fn idealizeMach(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.W
     return null;
 }
 
-const set_cap = 256;
 const group_cap: usize = 64;
 
-pub fn typeMaskOffset(ty: graph.DataType) usize {
-    return group_cap * @as(usize, switch (dataTypeToWasmType(ty)) {
-        .i32 => 0,
-        .i64 => 1,
-        .f32 => 2,
-        .f64 => 3,
-        else => unreachable,
-    });
-}
-
-pub fn typeMask(ty: graph.DataType, arena: *utils.Arena) Set {
-    errdefer unreachable;
-
-    var mask = try Set.initEmpty(arena.allocator(), set_cap);
-
-    mask.setRangeValue(.{ .start = typeMaskOffset(ty), .end = typeMaskOffset(ty) + group_cap }, true);
-
-    return mask;
+pub fn typeMask(ty: graph.DataType, _: *utils.Arena) Set {
+    return Set.initFull(.fromDt(ty));
 }
 
 pub fn regMask(
@@ -250,7 +238,7 @@ pub fn regMask(
     if (node.kind == .Arg) {
         std.debug.assert(idx == 0);
 
-        var mask = try Set.initEmpty(arena.allocator(), set_cap);
+        var mask = Set.initEmpty(.fromDt(node.data_type));
 
         var pos: usize = 0;
         for (func.signature.params()[0..node.extra(.Arg).index]) |param| {
@@ -259,7 +247,7 @@ pub fn regMask(
             }
         }
 
-        mask.set(pos + typeMaskOffset(node.data_type));
+        mask.set(pos);
 
         return mask;
     }
@@ -269,7 +257,7 @@ pub fn regMask(
         return typeMask(node.data_type, arena);
     }
 
-    return try Set.initFull(arena.allocator(), set_cap);
+    return Set.initFull(.fromDt(node.inputs()[idx].?.data_type));
 }
 
 pub fn dataTypeToWasmType(ty: graph.DataType) object.Type {
@@ -519,7 +507,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
     }
 
-    func.fmtScheduledLog();
+    // func.fmtScheduledLog();
 
     var ctx = Ctx{
         .start_pos = self.mach.out.code.items.len,
@@ -589,23 +577,17 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    const LocalCounts = struct {
-        i32: usize = 0,
-        i64: usize = 0,
-        f32: usize = 0,
-        f64: usize = 0,
+    const LocalCounts = std.EnumArray(RegTag, usize);
 
-        pub fn get(slf: *@This(), ty: graph.DataType) *usize {
-            return switch (dataTypeToWasmType(ty)) {
-                .vec, .fnc => unreachable,
-                inline else => |t| &@field(slf, @tagName(t)),
-            };
-        }
-    };
-
-    var param_counts: LocalCounts = .{};
-    var seen = try Set.initEmpty(tmp.arena.allocator(), set_cap);
-    const new_allocs = tmp.arena.alloc(u16, set_cap);
+    var param_counts: LocalCounts = .initFill(0);
+    var seen = std.EnumArray(RegTag, Set).init(.{
+        .i32 = .initEmpty(.i32),
+        .i64 = .initEmpty(.i64),
+        .f32 = .initEmpty(.f32),
+        .f64 = .initEmpty(.f64),
+    });
+    var new_allocs = std.EnumArray(RegTag, []u16).initUndefined();
+    for (&new_allocs.values) |*v| v.* = tmp.arena.alloc(u16, set_cap);
 
     var params_len: u32 = 0;
     for (func.signature.params(), 0..) |param, i| {
@@ -617,16 +599,18 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 }
             }
 
-            const cnt = param_counts.get(param.Reg);
-            seen.set(typeMaskOffset(param.Reg) + cnt.*);
-            new_allocs[typeMaskOffset(param.Reg) + cnt.*] = @intCast(params_len);
+            const reg_tag = RegTag.fromDt(param.Reg);
+
+            const cnt = param_counts.getPtr(reg_tag);
+            seen.getPtr(reg_tag).set(cnt.*);
+            new_allocs.get(reg_tag)[cnt.*] = @intCast(params_len);
             cnt.* += 1;
 
             params_len += 1;
         }
     }
 
-    var counters: LocalCounts = .{};
+    var counters: LocalCounts = .initFill(0);
 
     func.gcm.instr_count = 0;
 
@@ -642,35 +626,36 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
             if (instr.kind == .Arg) continue;
 
-            if (seen.isSet(alloc)) continue;
-            seen.set(alloc);
+            const reg_tag = RegTag.fromDt(instr.data_type);
 
-            const cnt = counters.get(instr.data_type);
-            new_allocs[alloc] = @intCast(cnt.*);
+            if (seen.getPtr(reg_tag).isSet(alloc)) continue;
+            seen.getPtr(reg_tag).set(alloc);
+
+            const cnt = counters.getPtr(reg_tag);
+            new_allocs.get(reg_tag)[alloc] = @intCast(cnt.*);
             cnt.* += 1;
         }
     }
 
     var local_group_count: usize = 0;
-    inline for (std.meta.fields(@TypeOf(counters))) |field| {
-        local_group_count += @intFromBool(@field(counters, field.name) != 0);
-    }
+    for (counters.values) |v| local_group_count += @intFromBool(v != 0);
 
     try self.ctx.buf.writer.writeUleb128(local_group_count);
-    inline for (std.meta.fields(@TypeOf(counters))) |field| {
-        if (@field(counters, field.name) != 0) {
+    var iter = counters.iterator();
+    while (iter.next()) |e| {
+        if (e.value.* != 0) {
             try self.ctx.buf.writer
-                .writeUleb128(@field(counters, field.name));
+                .writeUleb128(e.value.*);
             try self.ctx.buf.writer
-                .writeByte(@field(object.Type, field.name).raw());
+                .writeByte(e.key.toWasmType().raw());
         }
     }
 
     var cursor: usize = 0;
-    inline for (std.meta.fields(@TypeOf(counters))) |field| {
-        const fld = @field(counters, field.name);
-        @field(counters, field.name) = cursor;
-        cursor += fld;
+    for (&counters.values) |*fld| {
+        const vl = fld.*;
+        fld.* = cursor;
+        cursor += vl;
     }
 
     for (func.gcm.postorder) |block| {
@@ -683,13 +668,15 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 continue;
             }
 
-            const base = counters.get(instr.data_type).*;
-            const param_count = param_counts.get(instr.data_type).*;
+            const dt = RegTag.fromDt(instr.data_type);
+
+            const base = counters.get(dt);
+            const param_count = param_counts.get(dt);
             const alloc = self.ctx.allocs[instr.schedule];
 
-            const prefix = if (alloc - typeMaskOffset(instr.data_type) < param_count) 0 else params_len + base;
+            const prefix = if (alloc < param_count) 0 else params_len + base;
 
-            self.ctx.allocs[instr.schedule] = @intCast(prefix + new_allocs[self.ctx.allocs[instr.schedule]]);
+            self.ctx.allocs[instr.schedule] = @intCast(prefix + new_allocs.get(dt)[self.ctx.allocs[instr.schedule]]);
         }
     }
 
