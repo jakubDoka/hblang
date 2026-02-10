@@ -33,7 +33,7 @@ pub const Ctx = struct {
     local_relocs: std.ArrayList(Reloc),
     block_offsets: []u32,
     stack_layout: graph.StackLayout,
-    slot_base: c_int,
+    slot_bases: std.EnumArray(RegTag, u32),
     code_base: u32,
     builtins: Mach.Builtins,
     lpe_writer: *std.Io.Writer,
@@ -132,7 +132,7 @@ pub const Reg = enum(u8) {
     }
 
     pub fn isStack(self: Reg) bool {
-        return @intFromEnum(self) > 16;
+        return @intFromEnum(self) >= 16;
     }
 
     pub fn retForDt(dt: graph.DataType) Reg {
@@ -230,10 +230,6 @@ pub const Reg = enum(u8) {
         vex_bytes[2] |= (@intFromEnum(prefix) & 0x03);
 
         return vex_bytes;
-    }
-
-    pub fn stackOffset(self: Reg, slot_offset: u64) u64 {
-        return @as(u64, (@intFromEnum(self) - @intFromEnum(Reg.xmm15) - 1)) * 8 + slot_offset;
     }
 };
 
@@ -533,6 +529,13 @@ pub const RegTag = enum(u3) {
     f32,
     f64,
 
+    pub fn size(self: RegTag) u16 {
+        return switch (self) {
+            .int, .f64 => 8,
+            .f32 => 4,
+        };
+    }
+
     pub fn isXmm(self: RegTag) bool {
         return self == .f32 or self == .f64;
     }
@@ -541,6 +544,15 @@ pub const RegTag = enum(u3) {
         if (a == b) return Set.bit_length;
         if (a.isXmm() and b.isXmm()) return 16;
         return 0;
+    }
+
+    pub fn fromDt(dt: graph.DataType) RegTag {
+        return switch (dt) {
+            .i8, .i16, .i32, .i64 => .int,
+            .f32 => .f32,
+            .f64 => .f64,
+            else => unreachable,
+        };
     }
 };
 
@@ -589,13 +601,13 @@ pub fn clobbers(node: *Func.Node, tag: RegTag) u64 {
         .Call, .MemCpy => b: {
             switch (tag) {
                 .int => {
-                    comptime {
+                    break :b comptime f: {
                         var vl: u64 = 0;
                         for (Reg.system_v.caller_saved) |r| {
                             vl |= @as(u64, 1) << @intFromEnum(r);
                         }
-                        break :b vl;
-                    }
+                        break :f vl;
+                    };
                 },
                 .f32, .f64 => break :b 0xffff,
             }
@@ -843,7 +855,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         return;
     };
 
-    func.fmtScheduledLog();
+    //func.fmtScheduledLog();
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -876,11 +888,34 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     const local_size: i64 = func.computeStackLayout(0);
 
-    const spill_slot_count = if (allocs.len == 0) 0 else std.mem.max(u16, allocs) -| 31;
+    var spill_slot_counts = std.EnumArray(RegTag, u32).initFill(0);
+    for (func.gcm.postorder) |c| {
+        for (c.base.outputs()) |inst| {
+            if (inst.get().schedule != std.math.maxInt(u16)) {
+                const tag = RegTag.fromDt(inst.get().data_type);
+                const slt = spill_slot_counts.getPtr(tag);
+                slt.* = @max(slt.*, allocs[inst.get().schedule] -| (16 - 1));
+            }
+        }
+    }
+
+    var spill_slot_size: u32 = 0;
+    {
+        var iter = spill_slot_counts.iterator();
+        while (iter.next()) |e| {
+            const elem_size = e.key.size();
+            const prev = e.value.*;
+            e.value.* = spill_slot_size;
+            spill_slot_size += elem_size * prev;
+        }
+    }
+
     var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) +
-        spill_slot_count * 8;
+        spill_slot_size;
 
     const has_call, const call_slot_size = func.computeCallSlotSize();
+
+    for (&spill_slot_counts.values) |*v| v.* += @intCast(call_slot_size);
 
     stack_size += @intCast(call_slot_size);
 
@@ -910,9 +945,9 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),
         .local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10)),
         .block_offsets = tmp.arena.alloc(u32, postorder.len),
-        .slot_base = @intCast(call_slot_size),
+        .slot_bases = spill_slot_counts,
         .stack_layout = .{
-            .local_base = @intCast(call_slot_size + spill_slot_count * 8),
+            .local_base = @intCast(call_slot_size + spill_slot_size),
             .arg_base = @intCast(stack_size),
         },
     };
@@ -1003,6 +1038,10 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     }
 }
 
+pub fn stackOffset(self: *X86_64Gen, reg: Reg, tag: RegTag) u64 {
+    return @as(u64, (@intFromEnum(reg) - 16)) * tag.size() + self.ctx.slot_bases.get(tag);
+}
+
 pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
     errdefer unreachable;
 
@@ -1065,10 +1104,10 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 var lhs, var rhs = .{ self.getReg(instr), self.getReg(inps[0]) };
                 if (lhs == rhs) continue;
 
-                if (instr.data_type.isInt()) {
+                if (instr.data_type.isInt() and !rhs.isStack() and !lhs.isStack()) {
                     // mov dst, src
                     self.emitRegOp(0x89, rhs, lhs);
-                } else if (instr.data_type.isFloat()) {
+                } else if (instr.data_type.isFloat() and !rhs.isStack() and !lhs.isStack()) {
                     // movs[s/d] dst, src
                     self.emitByte(if (instr.data_type == .f32) 0xf3 else 0xf2);
                     self.emitRex(rhs, lhs, .rax, instr.data_type.size());
@@ -1078,15 +1117,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                     const lhs_stack = lhs.isStack();
 
+                    const tag = RegTag.fromDt(instr.data_type);
+
                     if (lhs_stack and rhs.isStack()) {
                         // push [rsp+dis]
                         self.emitByte(0xff);
-                        const lhs_off = lhs.stackOffset(@intCast(self.ctx.slot_base));
+                        const lhs_off = self.stackOffset(lhs, tag);
                         self.emitIndirectAddr(@enumFromInt(0b110), .rsp, .no_index, 1, @intCast(lhs_off));
 
                         // pop [rsp+dis]
                         self.emitByte(0x8f);
-                        const rhs_off = rhs.stackOffset(@intCast(self.ctx.slot_base));
+                        const rhs_off = self.stackOffset(rhs, tag);
                         self.emitIndirectAddr(@enumFromInt(0b000), .rsp, .no_index, 1, @intCast(rhs_off));
 
                         break :b;
@@ -1105,7 +1146,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitByte(if (lhs_stack) 0x89 else 0x8b);
                     }
 
-                    const offset = rhs.stackOffset(@intCast(self.ctx.slot_base));
+                    const offset = self.stackOffset(rhs, tag);
                     self.emitIndirectAddr(lhs, .rsp, .no_index, 1, @intCast(offset));
                 }
             },
