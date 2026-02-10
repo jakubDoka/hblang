@@ -899,7 +899,7 @@ pub const OptOptions = struct {
     pub const Mode = enum { release, debug };
 
     pub fn shouldDefer(
-        self: @This(),
+        self: OptOptions,
         id: u32,
         comptime Backend: type,
         func: *graph.Func(Backend),
@@ -1181,7 +1181,7 @@ pub const EmitOptions = struct {
         allocs: []const u16,
 
         pub fn apply(
-            self: @This(),
+            self: Optimizations,
             comptime Backend: type,
             func: *graph.Func(Backend),
             backend: *Backend,

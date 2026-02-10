@@ -33,6 +33,18 @@ pub fn loadDatatype(node: *Func.Node) graph.DataType {
     };
 }
 
+pub const RegTag = enum(u2) {
+    i32,
+    i64,
+    f32,
+    f64,
+
+    pub fn overlapps(self: RegTag, other: RegTag) bool {
+        return self != other;
+    }
+};
+
+//pub const Set = Regalloc.RegMask(RegTag, 128);
 pub const Set = std.DynamicBitSetUnmanaged;
 
 pub fn setMasks(set: *Set) []Set.MaskInt {
@@ -77,8 +89,7 @@ pub const Ctx = struct {
     buf: std.Io.Writer.Allocating,
     allocs: []u16 = undefined,
     scope_stack: std.ArrayList(ScopeRange) = undefined,
-    stack_base: u64 = undefined,
-    arg_base: u32 = undefined,
+    stack_layout: graph.StackLayout = undefined,
 };
 
 pub const classes = enum {
@@ -508,6 +519,8 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
     }
 
+    func.fmtScheduledLog();
+
     var ctx = Ctx{
         .start_pos = self.mach.out.code.items.len,
         .buf = .fromArrayList(self.gpa, &self.mach.out.code),
@@ -687,9 +700,9 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     _, const call_slot_size = func.computeCallSlotSize();
 
-    self.ctx.stack_base = call_slot_size;
+    self.ctx.stack_layout.local_base = @intCast(call_slot_size);
     stack_size += @intCast(call_slot_size);
-    self.ctx.arg_base = @intCast(stack_size);
+    self.ctx.stack_layout.arg_base = @intCast(stack_size);
 
     if (stack_size != 0) {
         try self.ctx.buf.writer.writeByte(opb(.global_get));
@@ -971,7 +984,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             self.emitLocalStore(instr);
         },
-        .UnOp => |extra| {
+        .UnOp => |extra| up: {
             //self.emitLocalLoad(inps[0]);
             const op_ty = dataTypeToWasmType(inps[0].data_type);
             const op_code: u8 = switch (extra.op) {
@@ -1000,6 +1013,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                         .i32, .i16, .i8 => opb(.i32_wrap_i64),
                         else => utils.panic("{f} {f}", .{ instr.data_type, inps[0].data_type }),
                     },
+                    .i32, .i16, .i8 => break :up,
                     else => unreachable,
                 },
                 .uext => switch (inps[0].data_type) {
@@ -1171,8 +1185,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitMemArg(instr.data_type, extra.offset);
         },
         .StackStore => |extra| {
-            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
-                self.ctx.stack_base)) + extra.offset;
+            const offset = instr.base().extra(.LocalAlloc).getOffset(self.ctx.stack_layout) + extra.offset;
 
             try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
             self.emitMemArg(instr.data_type, offset);
@@ -1196,8 +1209,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .StackLoad => |extra| {
-            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
-                self.ctx.stack_base)) + extra.offset;
+            const offset = instr.base().extra(.LocalAlloc).getOffset(self.ctx.stack_layout) + extra.offset;
 
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
             self.emitMemArg(instr.data_type, offset);
@@ -1205,8 +1217,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .UnsignedStackLoad => |extra| {
-            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
-                self.ctx.stack_base)) + extra.offset;
+            const offset = instr.base().extra(.LocalAlloc).getOffset(self.ctx.stack_layout) + extra.offset;
 
             try self.ctx.buf.writer.writeByte(selectUnsignedLoadOp(extra.src_ty));
             self.emitMemArg(extra.src_ty, offset);
@@ -1214,8 +1225,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .SignedStackLoad => |extra| {
-            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
-                self.ctx.stack_base)) + extra.offset;
+            const offset = instr.base().extra(.LocalAlloc).getOffset(self.ctx.stack_layout) + extra.offset;
 
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
             self.emitMemArg(extra.src_ty, offset);
@@ -1223,12 +1233,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .Local => {
-            const alloc: *graph.builtin.LocalAlloc = inps[0].extra(.LocalAlloc);
-            const offset = alloc.size + switch (alloc.meta.kind) {
-                .variable => self.ctx.stack_base,
-                .parameter => self.ctx.arg_base,
-                .argument => 0,
-            };
+            const offset = inps[0].extra(.LocalAlloc).getOffset(self.ctx.stack_layout);
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
             try self.ctx.buf.writer.writeSleb128(offset);

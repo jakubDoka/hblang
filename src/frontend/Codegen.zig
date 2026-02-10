@@ -1092,8 +1092,6 @@ pub fn emitReachable(types: *Types, gpa: std.mem.Allocator, opts: Machine.OptOpt
         self.emitFunc(fnid) catch continue;
 
         self.emitToBackend(fnid, types.backend, opts);
-
-        std.debug.assert(!self.bl.func.keep);
     }
 }
 
@@ -5850,8 +5848,9 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
         &writer.interface,
     );
 
-    //const target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
-    const target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
+    var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
+    target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
+    target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
 
     const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();

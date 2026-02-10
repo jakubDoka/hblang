@@ -32,8 +32,7 @@ pub const Ctx = struct {
     ret_count: usize,
     local_relocs: std.ArrayList(Reloc),
     block_offsets: []u32,
-    arg_base: u32,
-    local_base: u32,
+    stack_layout: graph.StackLayout,
     slot_base: c_int,
     code_base: u32,
     builtins: Mach.Builtins,
@@ -843,7 +842,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         return;
     };
 
-    //func.fmtScheduledLog();
+    func.fmtScheduledLog();
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -911,12 +910,15 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         .local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10)),
         .block_offsets = tmp.arena.alloc(u32, postorder.len),
         .slot_base = @intCast(call_slot_size),
-        .local_base = @intCast(call_slot_size + spill_slot_count * 8),
-        .arg_base = @intCast(stack_size),
+        .stack_layout = .{
+            .local_base = @intCast(call_slot_size + spill_slot_count * 8),
+            .arg_base = @intCast(stack_size),
+        },
     };
+
     self.ctx = &ctx;
 
-    self.ctx.arg_base += 8; // call adress
+    self.ctx.stack_layout.arg_base += 8; // call adress
 
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
@@ -924,11 +926,11 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
                 self.ensureInstrSpace();
                 // push r
                 self.emitSingleOp(0x50, r);
-                self.ctx.arg_base += 8;
+                self.ctx.stack_layout.arg_base += 8;
             }
         }
 
-        sym.stack_size = @intCast(self.ctx.arg_base);
+        sym.stack_size = @intCast(self.ctx.stack_layout.arg_base);
 
         if (stack_size != 0) {
             // sub rsp, stack_size
@@ -1828,11 +1830,7 @@ pub fn ensureInstrSpace(self: *X86_64Gen) void {
 
 pub fn stackBaseOf(self: *X86_64Gen, instr: *Func.Node, inp: usize) i32 {
     return @intCast(switch (instr.inputs()[inp].?.extra2()) {
-        .LocalAlloc => |n| n.size + switch (n.meta.kind) {
-            .variable => self.ctx.local_base,
-            .parameter => self.ctx.arg_base,
-            .argument => 0,
-        },
+        .LocalAlloc => |n| n.getOffset(self.ctx.stack_layout),
         else => utils.panic("{f}", .{instr.inputs()[2].?}),
     });
 }

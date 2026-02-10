@@ -40,6 +40,11 @@ pub const Sloc = packed struct(i64) {
     };
 };
 
+pub const StackLayout = struct {
+    arg_base: u32,
+    local_base: u32,
+};
+
 pub const BinOp = enum(u8) {
     iadd,
     isub,
@@ -511,10 +516,9 @@ pub const Signature = extern struct {
             .systemv, .ablecall, .wasmcall => {
                 var size: u64 = 0;
                 const is_indirect = call.extra(.Call).id == indirect_call;
-                for (self.params(), call.dataDeps()[@intFromBool(is_indirect)..]) |par, dp| {
+                for (self.params(), call.dataDeps().ptr + @intFromBool(is_indirect)) |par, dp| {
                     if (par == .Stack) {
-                        size = std.mem.alignForward(u64, size, @as(u64, 1) <<
-                            par.Stack.alignment);
+                        size = std.mem.alignForward(u64, size, par.Stack.alignmentBytes());
                         dp.extra(.LocalAlloc).size = size;
                         size += par.Stack.size;
                     }
@@ -598,6 +602,14 @@ pub const builtin = enum {
 
         pub const is_floating = true;
         pub const is_pinned = true;
+
+        pub fn getOffset(self: *LocalAlloc, layout: StackLayout) u31 {
+            return @intCast(self.size + switch (self.meta.kind) {
+                .variable => layout.local_base,
+                .parameter => layout.arg_base,
+                .argument => 0,
+            });
+        }
     };
     pub const Local = extern struct {
         pub const is_clone = true;
@@ -788,7 +800,6 @@ pub fn Func(comptime Backend: type) type {
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
-        keep: bool = false, // TODO: remove at some point
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++
@@ -2666,7 +2677,7 @@ pub fn Func(comptime Backend: type) type {
             outs[outs.len - 1] = undefined;
             def.output_len -= 1;
 
-            if (def.output_len == 0 and !self.keep) {
+            if (def.output_len == 0) {
                 self.kill(def);
             }
         }

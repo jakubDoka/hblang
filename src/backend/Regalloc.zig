@@ -18,6 +18,15 @@ max_blocks: usize = 0,
 max_instructions: usize = 0,
 inserted_splits: usize = 0,
 
+pub fn RegMask(comptime Tag: type, comptime cap: usize) type {
+    return packed struct {
+        mask: Mask,
+        tag: Tag,
+
+        const Mask = std.meta.Int(.unsigned, cap - @bitSizeOf(Tag));
+    };
+}
+
 pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
 }
@@ -270,7 +279,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     defer tmp.deinit();
 
     func.gcm.instr_count = 0;
-    const should_log = 1 == 0;
+    const should_log = 1 == 1;
     for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |instr| {
             if (instr.get().isDef()) {
@@ -444,6 +453,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 if (lrg.hasDef(member, lrg_table)) {
                     min, max = LiveRange
                         .collectLoopDepth(func, member, member.cfg0(), min, max);
+                } else {
+                    std.debug.print("||| {f} {f}\n", .{ lrg, member });
                 }
 
                 if (member.kind == .Phi) {
@@ -453,10 +464,15 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     }
                 } else {
                     for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
-                        if (!member.hasUseFor(j, dep)) continue;
+                        if (!member.hasUseFor(j, dep)) {
+                            std.debug.print("/// {f}", .{dep});
+                            continue;
+                        }
                         if (lrg.isSame(dep, lrg_table)) {
                             min, max = LiveRange
                                 .collectLoopDepth(func, member, member.cfg0(), min, max);
+                        } else {
+                            std.debug.print("--- {f}\n", .{dep});
                         }
                     }
                 }

@@ -25,8 +25,7 @@ pub const Ctx = struct {
     block_offsets: []i32,
     allocs: []const u16,
     spill_base: usize,
-    local_base: u32,
-    stack_size: u32,
+    stack_layout: graph.StackLayout,
 };
 
 const Func = graph.Func(HbvmGen);
@@ -349,8 +348,10 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         .local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.postorder.len * 2)),
         .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),
         .spill_base = @intCast(used_reg_size + local_size),
-        .local_base = @intCast(call_slot_size),
-        .stack_size = @intCast(stack_size),
+        .stack_layout = .{
+            .local_base = @intCast(call_slot_size),
+            .arg_base = @intCast(stack_size),
+        },
     };
     self.ctx = &ctx;
 
@@ -462,11 +463,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.addi64, .{
                     self.getReg(no),
                     .stack_addr,
-                    alloc.size + switch (alloc.meta.kind) {
-                        .variable => self.ctx.local_base,
-                        .parameter => self.ctx.stack_size,
-                        .argument => 0,
-                    },
+                    alloc.getOffset(self.ctx.stack_layout),
                 });
             },
             .Ld => |extra| {
@@ -481,12 +478,14 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .StackLd => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.ctx.local_base;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc)
+                    .getOffset(self.ctx.stack_layout))) + extra.offset;
                 self.emit(.ld, .{ self.getReg(no), .stack_addr, off, size });
             },
             .StackSt => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.ctx.local_base;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc)
+                    .getOffset(self.ctx.stack_layout))) + extra.offset;
                 self.emit(.st, .{ self.getReg(inps[0]), .stack_addr, off, size });
             },
             .BlockCpy => {

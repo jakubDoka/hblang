@@ -81,14 +81,23 @@ pub const Signature = struct {
     }
 
     pub fn end(self: *Signature, bl: *Builder, rets: ?[]const graph.AbiParam) void {
-        var rts = rets;
-        if (rts) |r| if (r.len == 1 and r[0] == .Stack or r.len == 2 and self.cc == .systemv) {
-            rts = &.{};
-        };
-        bl.func.signature = .init(self.cc, self.abi_params.items, rts, bl.arena());
+        bl.func.signature = .init(
+            self.cc,
+            self.abi_params.items,
+            normalizeRets(self.cc, rets),
+            bl.arena(),
+        );
         self.* = undefined;
     }
 };
+
+pub fn normalizeRets(cc: graph.CallConv, rts: ?[]const graph.AbiParam) ?[]const graph.AbiParam {
+    if (rts) |r| if ((r.len == 1 and r[0] == .Stack) or (r.len == 2 and cc == .systemv)) {
+        return &.{};
+    };
+
+    return rts;
+}
 
 pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
 
@@ -829,9 +838,11 @@ pub const Call = struct {
         self: *Call,
         bl: *Builder,
         sloc: graph.Sloc,
-        return_params: ?[]const graph.AbiParam,
+        ret_params: ?[]const graph.AbiParam,
         ret_buf: *[2]*BuildNode,
     ) []*BuildNode {
+        const return_params = normalizeRets(self.cc, ret_params);
+
         const scope = bl.scope orelse {
             if (return_params) |rp| {
                 @memset(ret_buf, bl.addStub(sloc, .i64));
