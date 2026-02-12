@@ -23,7 +23,7 @@ Type := union(enum) {
 
 	Array := struct {
 		.elem: type;
-		.size: u64;
+		.len: u64;
 	}
 
 	FuncTy := struct {
@@ -69,4 +69,10 @@ Type := union(enum) {
 			.value: i64;
 		}
 	}
+}
+
+SrcLoc := struct{
+	.file: []u8;
+	.line: u32;
+	.col: u32;
 }

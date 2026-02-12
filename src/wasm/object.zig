@@ -122,10 +122,14 @@ pub fn flush(
                 reloc_ids[i] = @intCast(global_count + 1);
                 global_count += 1;
             },
-            .prealloc, .tls_prealloc => {},
+            .prealloc, .tls_prealloc => {
+                global_count += 1;
+            },
             .invalid => {},
         }
     }
+
+    global_count = 0;
 
     var total_prealloc_size = data_section_size;
     for (self.syms.items, 0..) |s, i| {
@@ -140,6 +144,8 @@ pub fn flush(
             total_prealloc_size += s.size;
 
             reloc_ids[i] = @intCast(global_count + 1);
+            global_count += 1;
+        } else if (s.kind == .data) {
             global_count += 1;
         }
     }
@@ -300,6 +306,7 @@ pub fn flush(
 
         for (self.syms.items, global_offsets) |s, off| {
             if (s.kind != .data and s.kind != .prealloc and s.kind != .tls_prealloc) continue;
+
             try out.writeByte(Type.i64.raw());
             try out.writeByte(0);
 

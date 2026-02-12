@@ -33,6 +33,21 @@ pub fn loadDatatype(node: *Func.Node) graph.DataType {
     };
 }
 
+pub fn getStaticOffset(node: *Func.Node) i64 {
+    return switch (node.extra2()) {
+        inline .WStore,
+        .StackStore,
+        .WLoad,
+        .UnsignedLoad,
+        .SignedLoad,
+        .StackLoad,
+        .UnsignedStackLoad,
+        .SignedStackLoad,
+        => |extra| extra.offset,
+        else => 0,
+    };
+}
+
 pub const set_cap = 128;
 
 pub const RegTag = enum(u2) {
@@ -507,7 +522,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
     }
 
-    // func.fmtScheduledLog();
+    //func.fmtScheduledLog();
 
     var ctx = Ctx{
         .start_pos = self.mach.out.code.items.len,
@@ -523,10 +538,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.ctx = &ctx;
 
     func.computeStructArgLayout();
-
-    // NOTE: this is inneficient and we make more locals then we need but its
-    // also simple and lets me focus on one problem at a time, just generate
-    // wasm that works.
 
     // backpatch later
     try self.ctx.buf.writer.writeInt(u32, 0, .little);

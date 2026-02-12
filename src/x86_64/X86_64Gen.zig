@@ -82,6 +82,7 @@ pub const Reg = enum(u8) {
     r13,
     r14,
     r15,
+    // THIS is kind of a lie, we project these to the bottom halv of this enum anyway
     xmm0,
     xmm1,
     xmm2,
@@ -106,13 +107,13 @@ pub const Reg = enum(u8) {
         const args: []const Reg = &.{ .rdi, .rsi, .rdx, .rcx, .r8, .r9 };
         const caller_saved: []const Reg = &.{ .rax, .rcx, .rdx, .rsi, .rdi, .r8, .r9, .r10, .r11 };
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
-        const caller_saved_float: []const Reg = &.{
+        const caller_saved_xmm: []const Reg = &.{
             .xmm0,  .xmm1,  .xmm2,  .xmm3,
             .xmm4,  .xmm5,  .xmm6,  .xmm7,
             .xmm8,  .xmm9,  .xmm10, .xmm11,
             .xmm12, .xmm13, .xmm14, .xmm15,
         };
-        const callee_saved_float: []const Reg = &.{};
+        const callee_saved_xmm: []const Reg = &.{};
     };
 
     pub const no_index = Reg.rsp;

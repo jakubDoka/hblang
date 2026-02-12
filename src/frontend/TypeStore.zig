@@ -40,7 +40,8 @@ slice_index: Interner(SliceId) = .empty,
 options: utils.SegmentedList(Option, OptionId, 1024, 1024 * 1024) = .empty,
 option_index: Interner(OptionId) = .empty,
 
-files: []File,
+files: []const File,
+roots: []StructId,
 line_indexes: []const hb.LineIndex,
 loader: *Loader,
 backend: *Machine,
@@ -55,9 +56,19 @@ builtins: struct {
     enum_field: StructId,
     union_field: StructId,
     struct_field: StructId,
+    source_loc: StructId,
 },
-
+handlers: std.EnumArray(Handler, FuncId) = .initFill(.invalid),
+handler_signatures: std.EnumArray(Handler, FuncTyId),
 ct_backend: HbvmGen,
+
+pub const Handler = enum {
+    slice_ioob,
+    null_unwrap,
+    memcpy,
+    entry,
+    for_loop_length_mismatch,
+};
 
 pub const ComptimeValue = extern union {
     spilled: extern struct { id: GlobalId, off: u32 },
@@ -72,6 +83,7 @@ pub const TmpCheckpoint = struct {
     }
 
     pub fn deinit(self: *TmpCheckpoint) void {
+        self.types.tmp_depth -= 1;
         if (self.types.tmp_depth == 0) {
             self.types.tmp.reset();
         }
@@ -94,6 +106,11 @@ pub fn EntId(comptime T: type, comptime field: []const u8) type {
 
         pub fn get(self: @This(), types: *Types) *T {
             return @field(types, data.field).at(self);
+        }
+
+        pub fn asOpt(self: @This()) ?@This() {
+            if (self == .invalid) return null;
+            return self;
         }
     };
 }
@@ -164,7 +181,7 @@ pub const UnorderedScope = union(enum(u8)) {
     pub const downcast = generic.downcast;
     pub const scope = generic.scope;
 
-    pub fn decls(self: @This(), types: *Types) *DeclIndex {
+    pub fn decls(self: @This(), types: *Types) *const DeclIndex {
         return switch (self) {
             inline else => |v| v.get(types).decls,
         };
@@ -235,7 +252,7 @@ pub const AnyScope = union(enum(u8)) {
         };
     }
 
-    pub fn decls(self: AnyScope, types: *Types) *DeclIndex {
+    pub fn decls(self: AnyScope, types: *Types) *const DeclIndex {
         return switch (self) {
             inline .Func, .Template => |f| f.get(types).scope.parent
                 .data().downcast(AnyScope).?.decls(types),
@@ -764,7 +781,6 @@ pub const Scope = extern struct {
     pub const NamePos = enum(u32) {
         tuple = std.math.maxInt(u32) - 3,
         file,
-        import,
         empty,
         _,
 
@@ -773,7 +789,6 @@ pub const Scope = extern struct {
                 .file => 0,
                 .empty => 0,
                 .tuple => 0,
-                .import => |v| @intFromEnum(v),
                 _ => |v| @intFromEnum(v),
             };
         }
@@ -783,11 +798,11 @@ pub const Scope = extern struct {
                 .file => file.get(types).path,
                 .empty => "",
                 .tuple => "tuple",
-                .import => |v| {
-                    const str = file.get(types).tokenStr(@intFromEnum(v));
-                    return str[1 .. str.len - 1];
+                _ => |v| {
+                    var str = file.get(types).tokenStr(@intFromEnum(v));
+                    if (str[0] == '"') str = str[1 .. str.len - 1];
+                    return str;
                 },
-                _ => |v| file.get(types).tokenStr(@intFromEnum(v)),
             };
         }
     };
@@ -958,7 +973,7 @@ pub const StructId = EntId(Struct, "structs");
 pub const Struct = struct {
     scope: Scope,
     captures: Captures,
-    decls: *DeclIndex,
+    decls: *const DeclIndex,
     layout: ?Layout = null,
 
     pub const Layout = struct {
@@ -1102,7 +1117,7 @@ pub const EnumId = EntId(Enum, "enums");
 pub const Enum = struct {
     scope: Scope,
     captures: Captures,
-    decls: *DeclIndex,
+    decls: *const DeclIndex,
     layout: ?Layout = null,
 
     pub const Layout = struct {
@@ -1202,7 +1217,7 @@ pub const UnionId = EntId(Union, "unions");
 pub const Union = struct {
     scope: Scope,
     captures: Captures,
-    decls: *DeclIndex,
+    decls: *const DeclIndex,
     layout: ?Layout = null,
 
     pub const Layout = struct {
@@ -1315,7 +1330,7 @@ pub const Pointer = struct {
 
 pub const FuncTyId = EntId(FuncTy, "func_tys");
 pub const FuncTy = struct {
-    args: []Id,
+    args: []const Id,
     ret: Id,
 
     pub fn hash(self: FuncTy, _: *Types) u64 {
@@ -1489,6 +1504,7 @@ pub fn init(
 ) Types {
     var self = Types{
         .files = files,
+        .roots = undefined,
         .line_indexes = undefined,
         .ct_backend = HbvmGen{
             .gpa = gpa,
@@ -1501,7 +1517,10 @@ pub fn init(
         .tmp = undefined,
         .arena = arena,
         .builtins = undefined,
+        .handler_signatures = undefined,
     };
+
+    self.roots = self.arena.alloc(StructId, files.len);
 
     self.tmp = self.arena.subslice(1024 * 1024);
 
@@ -1523,8 +1542,8 @@ pub fn init(
     }
     backend.out.files = out_files;
 
-    for (self.files, 0..) |*f, i| {
-        f.root_sope = self.structs.push(
+    for (self.files, self.roots, 0..) |*f, *r, i| {
+        r.* = self.structs.push(
             &self.arena,
             Struct{
                 .scope = .{
@@ -1558,21 +1577,38 @@ pub fn init(
                 ).?;
                 return (gen.peval(0, value, Types.Id) catch unreachable).data().Struct;
             }
+
+            pub fn fnty(types: *Types, args: []const Id, ret: Id) FuncTyId {
+                return types.funcTyOf(args, ret).data().FuncTy;
+            }
         };
 
         var gen: Codegen = undefined;
-        gen.init(&self, .nany(builtins.get(&self).root_sope), .never, tmp.allocator());
+        gen.init(&self, .nany(builtins.getScope(&self)), .never, tmp.allocator());
         _ = gen.bl.begin(.systemv, undefined);
 
-        const value = gen.lookupIdent(gen.scope, "Type").?;
+        var value = gen.lookupIdent(gen.scope, "Type").?;
         const type_union = gen.peval(0, value, Types.Id) catch unreachable;
+
+        value = gen.lookupIdent(gen.scope, "SrcLoc").?;
+        const source_loc = gen.peval(0, value, Types.Id) catch unreachable;
 
         self.builtins = .{
             .type_union = type_union.data().Union,
             .enum_field = fns.getField(&gen, type_union, "Enum"),
             .union_field = fns.getField(&gen, type_union, "Union"),
             .struct_field = fns.getField(&gen, type_union, "Struct"),
+            .source_loc = source_loc.data().Struct,
         };
+
+        const @"^u8" = self.pointerTo(.u8);
+        self.handler_signatures = .init(.{
+            .slice_ioob = fns.fnty(&self, &.{ source_loc, .uint, .uint, .uint }, .never),
+            .null_unwrap = fns.fnty(&self, &.{source_loc}, .never),
+            .memcpy = fns.fnty(&self, &.{ @"^u8", @"^u8", .uint }, .void),
+            .entry = .invalid,
+            .for_loop_length_mismatch = fns.fnty(&self, &.{source_loc}, .never),
+        });
     }
 
     return self;
@@ -1657,7 +1693,7 @@ pub fn arrayOf(self: *Types, elem: Id, len: Size) Id {
     return .nany(slot.key_ptr.*);
 }
 
-pub fn funcTyOf(self: *Types, args: []Id, ret: Id) Id {
+pub fn funcTyOf(self: *Types, args: []const Id, ret: Id) Id {
     var func_ty = FuncTy{ .args = args, .ret = ret };
     const slot = self.func_ty_index.intern(self, &func_ty);
 

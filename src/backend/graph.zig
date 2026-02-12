@@ -3055,6 +3055,10 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
+            if (node.kind == .If and node.inputs()[1].?.kind == .CInt) {
+                for (node.outputs()) |o| work.add(o.get());
+            }
+
             if (is_dead and node.data_type != .bot) {
                 node.data_type = .bot;
                 for (node.outputs()) |o| {

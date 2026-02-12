@@ -75,7 +75,7 @@ const max_file_len = std.math.maxInt(u31);
 
 var alloc = std.heap.GeneralPurposeAllocator(.{}).init;
 
-const CompileOptions = struct {
+pub const CompileOptions = struct {
     diagnostics: ?*std.Io.Writer = null,
     error_colors: std.io.tty.Config = .no_color,
     colors: std.io.tty.Config = .no_color,
@@ -89,7 +89,6 @@ const CompileOptions = struct {
 
     flag_start: void = {},
 
-    parser_mode: hb.frontend2.Ast.InitOptions.Mode = .latest,
     help: bool = false,
     fmt: bool = false,
     fmt_stdout: bool = false,
@@ -137,7 +136,6 @@ const CompileOptions = struct {
             []const u8 => "<string> =" ++ default,
             usize => "<integer> =" ++ std.fmt.comptimePrint("{d}", .{default}),
             backend.Machine.OptOptions.Mode,
-            frontend2.Ast.InitOptions.Mode,
             hb.backend.Machine.SupportedTarget,
             => {
                 var value: []const u8 = "[";
@@ -272,7 +270,6 @@ const CompileOptions = struct {
                 switch (f.type) {
                     bool => val.* = true,
                     backend.Machine.OptOptions.Mode,
-                    frontend2.Ast.InitOptions.Mode,
                     hb.backend.Machine.SupportedTarget,
                     => {
                         const str_value = args.next() orelse continue :parse;
@@ -306,7 +303,7 @@ const CompileOptions = struct {
     }
 };
 
-fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
+pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
     if (opts.help) {
         if (lane.isRoot()) if (opts.diagnostics) |d|
             try d.writeAll(CompileOptions.help_str);
@@ -336,25 +333,9 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
                 return error.Failed;
             };
 
-            const ast = hb.frontend2.Ast.init(
-                &type_system_memory,
-                type_system_memory.allocator(),
-                .{
-                    .path = opts.root_file,
-                    .code = source,
-                    .diagnostics = opts.diagnostics,
-                    .mode = opts.parser_mode,
-                    .colors = opts.error_colors,
-                },
-            ) catch |err| switch (err) {
-                error.ParsingFailed => {
-                    return error.Failed;
-                },
-                else => unreachable,
-            };
-
             if (opts.output) |o| {
-                try ast.fmt(o);
+                // TDOD: this just compatibility
+                try o.writeAll(source);
                 try o.flush();
             }
         }
@@ -362,14 +343,13 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
         return;
     }
 
-    const asts, const base = try Loader.loadAll(
+    const asts, const base, var loader = try Loader.loadAll(
         &type_system_memory,
         opts.gpa,
         opts.path_projection,
         opts.root_file,
         opts.diagnostics,
         opts.error_colors,
-        opts.parser_mode,
     ) orelse {
         return error.Failed;
     };
@@ -400,7 +380,7 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
 
             var writer = file.writer(&buf);
 
-            try ast.fmt(&writer.interface);
+            try writer.interface.writeAll(ast.source);
             try writer.interface.flush();
 
             file.setEndPos(writer.pos) catch {
@@ -413,71 +393,76 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
         return;
     }
 
-    const abi = opts.target.toCallConv();
+    const bckend = opts.target.toMachine(&type_system_memory, opts.gpa);
 
-    const types = hb.frontend2.Types.init(
-        type_system_memory,
+    var types = hb.frontend.Types.init(
         asts,
-        opts.diagnostics,
+        &loader.loader,
+        @tagName(opts.target),
+        bckend,
+        type_system_memory,
         opts.gpa,
     );
-    types.target = @tagName(opts.target);
-    types.colors = opts.error_colors;
+    types.abi = .{ .cc = opts.target.toCallConv() };
+
+    const opt_options = backend.Machine.OptOptions{
+        .mode = opts.optimizations,
+        .error_collector = .{
+            .data = &types,
+            .collect_ = hb.frontend.Types.collectAnalError,
+        },
+    };
 
     var root_tmp = utils.Arena.scrath(null);
     defer root_tmp.deinit();
 
-    const logs = if (opts.log_stats) opts.diagnostics else null;
+    //const logs = if (opts.log_stats) opts.diagnostics else null;
 
     defer lane.sync(.{});
 
-    const bckend = opts.target.toMachine(&types.pool.arena, opts.gpa);
+    hb.frontend.Codegen.collectExports(&types, opts.gpa) catch return error.Failed;
+    hb.frontend.Codegen.emitReachable(&types, opts.gpa, opt_options);
 
-    const errored = hb.frontend2.Codegen.emitReachable(
-        types,
-        bckend,
-        .{
-            .abi = .{ .cc = abi },
-            .has_main = !opts.no_entry,
-            .optimizations = opts.optimizations,
-            .logs = logs,
-        },
-    );
-
-    if (errored or types.errored) {
+    if (types.errored > 0) {
         return error.Failed;
     }
 
-    const backends = lane.productBroadcast(root_tmp.arena, bckend);
+    //const backends = lane.productBroadcast(root_tmp.arena, bckend);
 
     if (lane.isRoot()) {
         if (opts.log_stats) b: {
             const diags = opts.diagnostics orelse break :b;
 
             try diags.writeAll("type system:\n");
-            inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
-                try diags.print(
-                    "  {s:<8}: {}\n",
-                    .{ field.name, @field(types.store.rpr, field.name).meta.len },
-                );
+            inline for (std.meta.fields(@TypeOf(types))) |field| {
+                const fld = &@field(types, field.name);
+                if (@typeInfo(@TypeOf(fld.*)) != .@"struct") continue;
+                if (@hasField(@TypeOf(fld.*), "meta")) {
+                    try diags.print(
+                        "  {s:<8}: {}\n",
+                        .{ field.name, fld.meta.len },
+                    );
+                }
             }
-            try diags.print("  arena   : {}\n", .{types.pool.arena.consumed()});
+            try diags.print("  arena   : {}\n", .{types.arena.consumed()});
 
-            inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
-                try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
+            if (false) { // TODO
+                inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
+                    try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
+                }
             }
 
             var runtim_functions: usize = 0;
             var comptime_functions: usize = 0;
             var dead_functions: usize = 0;
 
-            for (0..types.store.rpr.Func.meta.len) |i| {
-                const f: *frontend2.types.Func = types.store.rpr.Func.at(i);
-                if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
-                if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
+            for (0..types.funcs.meta.len) |i| {
+                const f = types.funcs.at(@enumFromInt(i));
+                if (f.compiled.contains(.cmptime)) comptime_functions += 1;
+                if (f.compiled.contains(.runtime)) runtim_functions += 1;
 
-                if (f.completion.get(.@"comptime") == .queued and
-                    f.completion.get(.runtime) == .queued)
+                if (f.compiled.contains(.cmptime) and
+                    f.compiled.contains(.runtime))
                 {
                     dead_functions += 1;
                 }
@@ -486,23 +471,16 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
             try diags.print("  runtime functions:  {}\n", .{runtim_functions});
             try diags.print("  comptime functions: {}\n", .{comptime_functions});
             try diags.print("  dead functions:     {}\n", .{dead_functions});
-            try diags.print("  stale pool memory:  {}\n", .{types.pool.staleMemory()});
 
-            types.metrics.logStats(diags);
+            // TODO
+            if (false) types.metrics.logStats(diags);
         }
     }
 
-    var anal_errors = std.ArrayList(backend.static_anal.Error){};
-
     const options = backend.Machine.FinalizeOptionsInterface{
-        .optimizations = .{
-            .mode = opts.optimizations,
-            .error_buf = &anal_errors,
-            .arena = root_tmp.arena,
-        },
-        .builtins = types.getBuiltins(),
+        .optimizations = opt_options,
+        .builtins = .{}, // TDOD: types.getBuiltins(),
         .files = types.line_indexes,
-        .others = backends,
     };
 
     const name = try std.mem.replaceOwned(
@@ -514,8 +492,7 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
     );
 
     if (opts.dump_asm) {
-        const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
-        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+        const out = bckend.finalizeBytes(types.arena.allocator(), options);
 
         if (lane.isRoot()) {
             bckend.disasm(.{
@@ -532,10 +509,10 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
     }
 
     if (opts.vendored_test and !@import("options").dont_simulate) {
-        const expectations: frontend2.test_utils.Expectations = .init(&asts[0], &types.pool.arena);
+        const expectations: frontend.Codegen.Expectations = .init(asts[0].source);
 
-        const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
-        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+        const out = bckend.finalizeBytes(types.arena.allocator(), options);
+        if (types.errored > 0) return error.Failed;
 
         if (lane.isRoot()) {
             errdefer {
@@ -575,10 +552,10 @@ fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void 
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
         bckend.finalize(opts.output, options);
-        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+        if (types.errored > 0) return error.Failed;
     } else {
         bckend.finalize(null, options);
-        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+        if (types.errored > 0) return error.Failed;
 
         opts.logDiag("can't dump the executable to the stdout since it" ++
             " supports colors (pass --mangle-terminal if you dont care)", .{});
@@ -620,25 +597,31 @@ const Loader = struct {
     arena: *Arena,
     gpa: std.mem.Allocator,
     shared: *Shared,
+    loader: frontend.DeclIndex.Loader = .init(Loader),
 
     pub const Shared = struct {
         base: []const u8,
         path_projections: std.StringHashMapUnmanaged([]const u8),
-        files: std.ArrayList(hb.frontend2.Ast) = .{},
+        files: std.ArrayList(hb.frontend.DeclIndex.File) = .{},
         in_progress: usize = 0,
         completed: usize = 0,
-        failed: std.atomic.Value(bool) = .init(false),
         state_lock: std.Thread.Mutex = .{},
         lobby: utils.lane.Lobby = .{},
     };
 
-    pub fn load(self: *Loader, opts: hb.frontend2.Ast.Loader.LoadOptions) ?hb.frontend2.Types.File {
+    pub fn loadEmbed(self: *Loader, opts: hb.frontend.DeclIndex.Loader.LoadOptions) [:0]const u8 {
+        _ = self;
+        _ = opts;
+        unreachable;
+    }
+
+    pub fn load(self: *Loader, opts: hb.frontend.DeclIndex.Loader.LoadOptions) ?hb.frontend.DeclIndex.File.Id {
         var tmp = Arena.scrath(null);
         defer tmp.deinit();
 
         const base = self.shared.base;
         self.shared.state_lock.lock();
-        const file = self.shared.files.items[@intFromEnum(opts.from)];
+        const file = self.shared.files.items[@intFromEnum(self.loader.from)];
         self.shared.state_lock.unlock();
         const rel_base = std.fs.path.dirname(file.path) orelse "";
         const mangled_path = self.shared.path_projections.get(opts.path) orelse
@@ -648,7 +631,16 @@ const Loader = struct {
         const canon = makeRelative(tmp.arena.allocator(), path, base) catch return null;
 
         _ = std.fs.cwd().statFile(path) catch |err| {
-            file.report(opts, opts.pos, "can't stat used file: {}: {}", .{ path, @errorName(err) });
+            var types: frontend.Types = undefined;
+            types.loader = &self.loader;
+            frontend.Codegen.reportGeneric(
+                file.path,
+                file.source,
+                &types,
+                opts.pos,
+                "can't stat used file: {}: {}",
+                .{ path, @errorName(err) },
+            );
         };
 
         {
@@ -682,8 +674,7 @@ const Loader = struct {
         root: []const u8,
         diagnostics: ?*std.Io.Writer,
         colors: std.io.tty.Config,
-        parser_mode: hb.frontend2.Ast.InitOptions.Mode,
-    ) Error!?struct { []const hb.frontend2.Ast, []const u8 } {
+    ) Error!?struct { []hb.frontend.DeclIndex.File, []const u8, Loader } {
         var root_tmp = utils.Arena.scrath(scratch);
         defer root_tmp.deinit();
 
@@ -709,6 +700,7 @@ const Loader = struct {
         lane.broadcast(&shared, .{});
 
         var self = Loader{ .arena = scratch, .shared = shared, .gpa = gpa };
+        self.loader.colors = colors;
 
         while (true) {
             var tmp = root_tmp.arena.checkpoint();
@@ -739,15 +731,11 @@ const Loader = struct {
 
             self.shared.state_lock.unlock();
 
-            var failed = true;
             defer {
-                self.shared.failed.store(failed, .unordered);
                 self.shared.state_lock.lock();
                 self.shared.completed += 1;
                 self.shared.state_lock.unlock();
             }
-
-            const fid: hb.frontend2.Types.File = @enumFromInt(i);
 
             const path = try std.fs.path.join(
                 tmp.arena.allocator(),
@@ -767,41 +755,32 @@ const Loader = struct {
                 continue;
             };
 
-            var ast_res = hb.frontend2.Ast.init(self.arena, self.gpa, .{
-                .current = fid,
-                .path = slot_path,
-                .code = source,
-                .loader = .init(&self),
-                .diagnostics = diagnostics,
-                .mode = parser_mode,
-                .colors = colors,
-            });
+            self.loader.from = @enumFromInt(i);
+            self.loader.path = path;
 
-            if (ast_res) |*ast| {
-                self.shared.state_lock.lock();
-                self.shared.files.items[i] = ast.*;
-                self.shared.state_lock.unlock();
-            } else |err| {
-                switch (err) {
-                    error.ParsingFailed => {
-                        continue;
-                    },
-                    else => |e| return e,
-                }
-            }
+            const file = hb.frontend.DeclIndex.File
+                .init(source, &self.loader, self.arena);
 
-            failed = self.shared.failed.load(.unordered);
+            self.shared.state_lock.lock();
+            self.shared.files.items[i] = file;
+            self.shared.state_lock.unlock();
+        }
+
+        if (lane.isRoot()) {
+            self.shared.files.append(
+                self.arena.allocator(),
+                .builtin(self.arena),
+            ) catch unreachable;
         }
 
         lane.sync(.{});
 
         const base = self.shared.base;
         const files = self.shared.files.items;
-        if (self.shared.failed.raw) return null;
 
         lane.sync(.spinning);
 
-        return .{ files, base };
+        return .{ files, base, self };
     }
 };
 

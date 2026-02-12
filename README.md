@@ -633,6 +633,8 @@ expectations := .{
     unreaches: true,
 }
 
+bl := @Builtins()
+
 main := fn(): uint {
     sum := 0
     for i := 0..2, j := u8.[1, 2, 3][..] {
@@ -641,7 +643,7 @@ main := fn(): uint {
     return sum
 }
 
-@handler("for_loop_length_mismatch", fn(loc: @SrcLoc()): never {
+@handler("for_loop_length_mismatch", fn(loc: bl.SrcLoc): never {
     die
 })
 
@@ -2184,8 +2186,13 @@ expectations := .{
     unreaches: true,
 }
 
+bl := @Builtins()
+
+// ignored in this case
+@handler("slice_ioob", null)
+
 @handler("slice_ioob", fn(
-    loc: @SrcLoc(),
+    loc: bl.SrcLoc,
     slice_len: uint,
     start: uint,
     end: uint,
@@ -2193,8 +2200,6 @@ expectations := .{
     die
 })
 
-// ignored in this case
-@handler("slice_ioob", @disabled_handler())
 
 use_slice := fn(slice: []u8): uint {
     return slice[0]

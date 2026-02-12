@@ -742,8 +742,9 @@ pub const Call = struct {
         sloc: graph.Sloc,
         param: graph.AbiParam,
         value: *BuildNode,
+        debug_ty: u32,
     ) void {
-        var slot = self.allocArgSlot(bl, sloc, param);
+        var slot = self.allocArgSlot(bl, sloc, param, debug_ty);
         switch (slot) {
             .Stack => |s| {
                 switch (param) {
@@ -763,6 +764,7 @@ pub const Call = struct {
         bl: *Builder,
         sloc: graph.Sloc,
         param: graph.AbiParam,
+        debug_ty: u32,
     ) Slot {
         switch (param) {
             .Stack => |s| {
@@ -774,7 +776,7 @@ pub const Call = struct {
                     sloc,
                     .{ .kind = .argument, .index = undefined },
                     s.size,
-                    0,
+                    debug_ty,
                 );
                 return .{ .Stack = location };
             },
@@ -782,7 +784,7 @@ pub const Call = struct {
                 const pr = self.ccbl.handleReg(self.cc, r);
 
                 if (pr == .Stack) {
-                    return self.allocArgSlot(bl, sloc, pr);
+                    return self.allocArgSlot(bl, sloc, pr, debug_ty);
                 }
 
                 self.abi_params.append(

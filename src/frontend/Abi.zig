@@ -35,7 +35,7 @@ pub fn isRetByRef(abi: Abi, self: Spec) bool {
     const pr = self orelse return false;
     return switch (abi.cc) {
         .systemv => pr.len > 1 or (pr.len != 0 and pr[0] != .Reg),
-        .ablecall, .wasmcall => pr[0] != .Reg,
+        .ablecall, .wasmcall => pr.len == 1 and pr[0] != .Reg,
         .@"inline" => unreachable,
     };
 }

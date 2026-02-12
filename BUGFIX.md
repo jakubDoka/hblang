@@ -1580,7 +1580,9 @@ main := fn(): uint {
 
 #### cstring indexing
 ```hb
-@handler("slice_ioob", fn(sloc: @SrcLoc(), slice_len: uint, start: uint, end: uint): never {
+bl := @Builtins()
+
+@handler("slice_ioob", fn(sloc: bl.SrcLoc, slice_len: uint, start: uint, end: uint): never {
     die
 })
 
@@ -1608,7 +1610,9 @@ expectations := .{
     unreaches: true,
 }
 
-@handler("null_unwrap", fn(sloc: @SrcLoc()): never die)
+bt := @Builtins()
+
+@handler("null_unwrap", fn(sloc: bt.SrcLoc): never die)
 
 use_opt := fn(opt: ?uint): uint return opt.? + opt.?
 

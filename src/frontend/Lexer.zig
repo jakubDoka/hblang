@@ -176,8 +176,8 @@ pub const Lexeme = enum(u16) {
     @"@parent_ptr",
     @"@alloc_global",
     @"@decl_count_of",
-    @"@disabled_handler",
     @"@ReturnType",
+    @"@Builtins",
 
     const data = @typeInfo(Lexeme).@"enum";
 

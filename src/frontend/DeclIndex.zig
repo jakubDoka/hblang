@@ -8,6 +8,7 @@ entries: std.MultiArrayList(Entry),
 sub_scopes: std.MultiArrayList(Child),
 imports: std.MultiArrayList(Import),
 fields: std.MultiArrayList(Field),
+exports: []const u32,
 start: u32,
 end: u32,
 
@@ -109,7 +110,6 @@ pub const File = struct {
     source: [:0]const u8,
     decls: DeclIndex,
     lines: hb.LineIndex,
-    root_sope: Types.StructId = undefined,
 
     pub const Id = enum(u32) {
         root,
@@ -119,21 +119,25 @@ pub const File = struct {
             return @intFromEnum(self);
         }
 
-        pub fn get(self: Id, pool: *Types) *File {
+        pub fn get(self: Id, pool: *Types) *const File {
             return &pool.files[self.index()];
+        }
+
+        pub fn getScope(self: Id, pool: *Types) Types.StructId {
+            return pool.roots[self.index()];
         }
     };
 
-    pub fn init(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) !File {
+    pub fn init(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) File {
         return .{
             .path = loader.path,
             .source = source,
-            .decls = try .build(source, loader, scratch),
+            .decls = .build(source, loader, scratch),
             .lines = .init(source, scratch),
         };
     }
 
-    pub fn builtin(scratch: *utils.Arena) !File {
+    pub fn builtin(scratch: *utils.Arena) File {
         return init(
             @embedFile("../builtin.hb"),
             &Loader.noop_state.loader,
@@ -204,9 +208,9 @@ pub const Loader = struct {
     }
 };
 
-pub fn build(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) !DeclIndex {
+pub fn build(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) DeclIndex {
     var bl = Builder{ .lexer = .init(source, 0), .loader = loader };
-    const res = try buildLow(&bl, 0, scratch);
+    const res = buildLow(&bl, 0, scratch);
     std.debug.assert(bl.depth == 0);
     return res;
 }
@@ -219,7 +223,7 @@ pub fn buildLow(
     bl: *Builder,
     start: u32,
     scratch: *utils.Arena,
-) error{StupidNesting}!DeclIndex {
+) DeclIndex {
     var tmp = utils.Arena.scrath(scratch);
     defer tmp.deinit();
 
@@ -229,6 +233,7 @@ pub fn buildLow(
     var fields = std.ArrayList(u32).empty;
     var sub_scopes = std.ArrayList(Child).empty;
     var imports = std.ArrayList(Import).empty;
+    var exports = std.ArrayList(u32).empty;
     var subscope: struct { start: u32, depth: u32 } = .{
         .start = 0,
         .depth = std.math.maxInt(u32),
@@ -269,7 +274,7 @@ pub fn buildLow(
                 // parentheses
                 if (subscope.depth == bl.depth - 1) {
                     const prev_depth = bl.depth;
-                    const sub = try buildLow(bl, subscope.start, scratch);
+                    const sub = buildLow(bl, subscope.start, scratch);
                     sub_scopes.append(
                         tmp.arena.allocator(),
                         .{ .index = sub, .offset = subscope.start },
@@ -297,6 +302,10 @@ pub fn buildLow(
                     .appendAssumeCapacity(subscope);
                 subscope = .{ .depth = bl.depth, .start = tok.pos };
             },
+            .@"@handler", .@"@export" => exports.append(
+                tmp.arena.allocator(),
+                tok.pos,
+            ) catch unreachable,
             .@"@use" => {
                 if (bl.lexer.next().kind != .@"(") continue;
                 const path = bl.lexer.next();
@@ -458,6 +467,7 @@ pub fn buildLow(
         .imports = import_arr,
         .fields = field_arr,
         .start = start,
+        .exports = scratch.dupe(u32, exports.items),
         .end = bl.lexer.cursor,
     };
 }
@@ -579,7 +589,7 @@ pub fn lookupField(
     );
 }
 
-pub fn lookupScope(self: *DeclIndex, source_offset: u32) ?*DeclIndex {
+pub fn lookupScope(self: *const DeclIndex, source_offset: u32) ?*const DeclIndex {
     // TODO: add binary search since we are always sorted
     const offs = self.sub_scopes.items(.offset);
     const idx = std.mem.indexOfScalar(u32, offs, source_offset) orelse
@@ -587,7 +597,7 @@ pub fn lookupScope(self: *DeclIndex, source_offset: u32) ?*DeclIndex {
     return &self.sub_scopes.items(.index)[idx];
 }
 
-pub fn lookupImport(self: *DeclIndex, source_offset: u32) ?File.Id {
+pub fn lookupImport(self: *const DeclIndex, source_offset: u32) ?File.Id {
     // TODO: add binary search since we are always sorted
     const offs = self.imports.items(.offset);
     const idx = std.mem.indexOfScalar(u32, offs, source_offset) orelse
