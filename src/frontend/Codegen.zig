@@ -382,6 +382,20 @@ pub fn lookupIdentLow(
     const scope_meta = scope.data().scope(self.types);
     const file = scope_meta.file.get(self.types);
 
+    if (hb.frontend.DeclIndex.filePrefixLookup(
+        self.vars.items(.prefix),
+        Variable,
+        self.vars.items(.variable),
+        file.source,
+        name,
+    )) |variable| {
+        return .variable(variable.ty, utils.indexOfPtr(
+            Variable,
+            self.vars.items(.variable),
+            variable,
+        ));
+    }
+
     var dt = dotted;
     var scope_cursor = scope.data();
     while (true) {
@@ -499,20 +513,6 @@ pub fn lookupIdentLow(
 
         scope_cursor = scope_cursor.scope(self.types)
             .parent.data().downcast(Types.AnyScope) orelse break;
-    }
-
-    if (hb.frontend.DeclIndex.filePrefixLookup(
-        self.vars.items(.prefix),
-        Variable,
-        self.vars.items(.variable),
-        file.source,
-        name,
-    )) |variable| {
-        return .variable(variable.ty, utils.indexOfPtr(
-            Variable,
-            self.vars.items(.variable),
-            variable,
-        ));
     }
 
     return null;

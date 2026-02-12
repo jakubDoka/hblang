@@ -102,6 +102,23 @@ pub fn build(b: *std.Build) !void {
         break :hbc;
     }
 
+    gen_big: {
+        const gen_big_step = b.step("gen-big", "yea");
+
+        const exe = b.addExecutable(.{
+            .name = "hbc",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("scripts/gen_big.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
+        });
+        check_step.dependOn(&exe.step);
+        gen_big_step.dependOn(&b.addRunArtifact(exe).step);
+
+        break :gen_big;
+    }
+
     const test_step = b.step("test", "run tests");
     const test_filter = if (b.option(
         []const u8,
