@@ -2803,3 +2803,50 @@ main := fn(): uint {
     return 0
 }
 ```
+
+#### search decls 1
+```hb
+expectations := .{
+    return_value: 6,
+}
+
+$declares := fn($T: type, $name: ?[]u8, $D: type, $v: ?D): ?D {
+    $t_info := @type_info(T)
+    $decls: [][]u8 = &.[]
+    $match t_info {
+        .@struct => decls = @bit_cast(t_info.@struct.decls),
+        .@enum => decls = @bit_cast(t_info.@enum.decls),
+        .@union => decls = @bit_cast(t_info.@union.decls),
+        _ => return null
+    }
+
+    $i := 0 $while i < @decl_count_of(T) {
+        $if name != null {
+            $if decls[i].len != name.?.len { i += 1 continue }
+            $j := 0 $while j < name.?.len {
+                $if decls[i][j] != name.?[j] break else j += 1
+            }
+            $if j != name.?.len { i += 1 continue }
+        }
+        
+        $if @TypeOf(T[i]) != D { i += 1 continue }
+        $if v != null $if T[i] != v.? { i += 1 continue }
+        return T[i]
+    }
+    return null
+}
+
+A := struct {
+    x: i32 = 1
+    y: i32 = 2
+    z: i32 = 3
+}
+
+main := fn(): int {
+    x := declares(A, null, i32, null).?
+    y := declares(A, "y", i32, null).?
+    z := declares(A, null, i32, 3).?
+
+    return x + y + z
+}
+```

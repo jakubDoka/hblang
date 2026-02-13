@@ -3,11 +3,6 @@ const std = @import("std");
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const gpa = arena.allocator();
 
-pub fn idx(n: usize) []u8 {
-    var ids_byte: u8 = @intCast('a' + (n % 26));
-    return gpa.dupe(u8, (&ids_byte)[0..1]) catch unreachable;
-}
-
 pub fn main() !void {
     const file_count = 1000;
     const funcs_per_file = 100;
@@ -30,14 +25,14 @@ pub fn main() !void {
 
         for (0..funcs_per_file) |j| {
             try fwriter.interface.print(
-                \\{s}func{} := fn(): void {{
+                \\func{} := fn(): void {{
                 \\    i := 0
                 \\    while i < 10 {{
                 \\        j := 0
                 \\        while j < 10 {{
                 \\            k := 0
                 \\            while k < 10 {{
-                \\                {s}func{}()
+                \\                func{}()
                 \\                k += 1
                 \\            }}
                 \\            j += 1
@@ -46,17 +41,17 @@ pub fn main() !void {
                 \\    }}
                 \\}}
                 \\
-            , .{ idx(j + 1), j + 1, idx(j), j });
+            , .{ j + 1, j });
         }
 
         try fwriter.interface.print(
-            \\{s}func0 := fn(): void {{
+            \\func0 := fn(): void {{
             \\}}
             \\main := fn(): void {{
-            \\    {s}func{}()
+            \\    func{}()
             \\}}
             \\
-        , .{ idx(0), idx(funcs_per_file), funcs_per_file });
+        , .{funcs_per_file});
 
         try fwriter.interface.flush();
     }

@@ -18,11 +18,8 @@ tmp_depth: usize = 0,
 
 // TDOD: remove indexes that are actually not used
 structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .empty,
-struct_index: Interner(StructId) = .empty,
 enums: utils.SegmentedList(Enum, EnumId, 1024, 1024 * 1024) = .empty,
-enum_index: Interner(EnumId) = .empty,
 unions: utils.SegmentedList(Union, UnionId, 1024, 1024 * 1024) = .empty,
-union_index: Interner(UnionId) = .empty,
 funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .empty,
 func_index: Interner(FuncId) = .empty,
 globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .empty,
@@ -30,7 +27,6 @@ global_index: Interner(GlobalId) = .empty,
 func_tys: utils.SegmentedList(FuncTy, FuncTyId, 1024, 1024 * 1024) = .empty,
 func_ty_index: Interner(FuncTyId) = .empty,
 templates: utils.SegmentedList(Template, TemplateId, 1024, 1024 * 1024) = .empty,
-template_index: Interner(TemplateId) = .empty,
 pointers: utils.SegmentedList(Pointer, PointerId, 1024, 1024 * 1024) = .empty,
 pointer_index: Interner(PointerId) = .empty,
 arrays: utils.SegmentedList(Array, ArrayId, 1024, 1024 * 1024) = .empty,
@@ -61,6 +57,14 @@ builtins: struct {
 handlers: std.EnumArray(Handler, FuncId) = .initFill(.invalid),
 handler_signatures: std.EnumArray(Handler, FuncTyId),
 ct_backend: HbvmGen,
+//metrics: Metrics = .{},
+
+pub const Metrics = utils.TimeMetrics(enum {
+    vm,
+    lookup_ident,
+    partial_eval,
+    emit_func,
+});
 
 pub const Handler = enum {
     slice_ioob,
@@ -750,9 +754,10 @@ pub const Captures = struct {
     pub fn lookup(self: Captures, source: [:0]const u8, name: []const u8) ?struct { u32, Id, ?ComptimeValue } {
         // TODO: we can vectorize this
 
+        const pref = DeclIndex.prefixOf(name);
         var value_index: usize = 0;
         for (self.prefixes, self.variables) |prefix, variable| {
-            if (prefix == name[0] and Lexer.compareIdent(source, variable.meta.offset, name)) {
+            if (prefix == pref and Lexer.compareIdent(source, variable.meta.offset, name)) {
                 return .{ variable.meta.offset, variable.ty, if (variable.meta.is_cmptime)
                     self.values[value_index]
                 else
@@ -784,12 +789,10 @@ pub const Scope = extern struct {
         empty,
         _,
 
-        pub fn sourcePos(self: NamePos) u32 {
+        pub fn sourcePos(self: NamePos) ?u32 {
             return switch (self) {
-                .file => 0,
-                .empty => 0,
-                .tuple => 0,
                 _ => |v| @intFromEnum(v),
+                else => null,
             };
         }
 
@@ -1768,7 +1771,7 @@ pub fn collectGlobalRelocs(
 ) void {
     self.collectRelocsRecur(.{
         .sloc = .{
-            .index = id.get(self).scope.name_pos.sourcePos(),
+            .index = id.get(self).scope.name_pos.sourcePos() orelse 0,
             .namespace = id.get(self).scope.file.index(),
         },
         .bytes = id.get(self).data.get(self),
@@ -1884,7 +1887,7 @@ pub fn collectPointer(
     const value: u64 = @bitCast(bytes[offset..][0..8].*);
 
     if (allow_null and value == 0) return .{
-        .target = std.math.maxInt(u32),
+        .target = @intCast(size | 0x80000000),
         .offset = @intCast(offset),
         .is_func = is_func,
     };
@@ -1912,13 +1915,14 @@ pub fn collectPointer(
             const sim = self.ct_backend.mach.out.getGlobalSym(@intCast(i)) orelse continue;
             if (sim.offset == value) {
                 if (size > sim.size) {
-                    self.reportSloc(
-                        sloc,
-                        "global contains an invlaid pointer (size overflow) (offset: {}) ({} > {})",
-                        .{ sim.offset, size, sim.size },
-                    );
+                    continue;
+                    //self.reportSloc(
+                    //    sloc,
+                    //    "global contains an invlaid pointer (size overflow) (offset: {}) ({} > {})",
+                    //    .{ sim.offset, size, sim.size },
+                    //);
 
-                    break;
+                    //break;
                 }
 
                 return .{

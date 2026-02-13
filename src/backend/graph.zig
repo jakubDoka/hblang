@@ -305,7 +305,7 @@ pub const UnOp = enum(u8) {
                 @as(u32, @bitCast(@as(f32, @floatCast(tf(oper)))))
             else
                 @bitCast(@as(f64, @floatCast(tf32(oper)))),
-        }) & src.mask();
+        }) & dst.mask();
     }
 };
 
@@ -1687,17 +1687,17 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn lock(self: *Node) Lock {
-                if (is_debug and (!self.isLocked() or true)) {
-                    self.lock_at = arna.allocator().create(Lock.Meta) catch unreachable;
-                    self.lock_at.* = Lock.Meta{
-                        .trace = std.builtin.StackTrace{
-                            .index = undefined,
-                            .instruction_addresses = arna.allocator().alloc(usize, 10) catch unreachable,
-                        },
-                    };
+                //if (is_debug and (!self.isLocked() or true)) {
+                //    self.lock_at = arna.allocator().create(Lock.Meta) catch unreachable;
+                //    self.lock_at.* = Lock.Meta{
+                //        .trace = std.builtin.StackTrace{
+                //            .index = undefined,
+                //            .instruction_addresses = arna.allocator().alloc(usize, 10) catch unreachable,
+                //        },
+                //    };
 
-                    std.debug.captureStackTrace(@returnAddress(), &self.lock_at.trace);
-                }
+                //    std.debug.captureStackTrace(@returnAddress(), &self.lock_at.trace);
+                //}
 
                 self.tmp_rc += 1;
                 return .{ .node = self };
@@ -1924,12 +1924,21 @@ pub fn Func(comptime Backend: type) type {
                 inpts: []const ?*Node,
                 extr: []const u64,
             ) u64 {
-                var hasher = std.hash.Wyhash.init(0);
-                hasher.update(std.mem.asBytes(&kind));
-                hasher.update(std.mem.asBytes(&dt));
-                hasher.update(@ptrCast(inpts));
-                hasher.update(@ptrCast(extr));
-                return hasher.final();
+                //var hasher = std.hash.Wyhash.init(0);
+                //hasher.update(std.mem.asBytes(&kind));
+                //hasher.update(std.mem.asBytes(&dt));
+                //hasher.update(@ptrCast(inpts));
+                //hasher.update(@ptrCast(extr));
+
+                var hsh: u64 = 0;
+
+                // yep, this works just fine
+                hsh +%= @intFromEnum(kind);
+                hsh +%= @intFromEnum(dt);
+                for (inpts) |i| hsh +%= @intFromPtr(i);
+                for (extr) |i| hsh +%= i;
+
+                return hsh;
             }
 
             pub fn cmp(
@@ -1976,22 +1985,22 @@ pub fn Func(comptime Backend: type) type {
             dt: DataType,
             inputs: []const ?*Node,
             extra: []const u64,
+            hsh: u64,
 
-            pub fn hash(_: @This(), k: InternedNode) u64 {
-                return k.hash;
+            pub fn hash(s: @This(), _: void) u64 {
+                return s.hsh;
             }
 
-            pub fn eql(s: @This(), a: InternedNode, b: InternedNode) bool {
-                if (a.hash != b.hash) return false;
+            pub fn eql(s: @This(), _: void, a: InternedNode) bool {
                 return Node.cmp(
                     s.kind,
-                    b.node.kind,
+                    a.node.kind,
                     s.dt,
-                    b.node.data_type,
+                    a.node.data_type,
                     s.inputs,
-                    b.node.inputs(),
+                    a.node.inputs(),
                     s.extra,
-                    b.node.anyextra(),
+                    a.node.anyextra(),
                 );
             }
         };
@@ -2135,21 +2144,23 @@ pub fn Func(comptime Backend: type) type {
             inputs: []const ?*Node,
             extra: []const u64,
         ) InsertMap.GetOrPutResult {
-            const map: *InsertMap = @ptrCast(&self.interner);
-
-            return map.getOrPutContext(
+            const hash = Node.hash(kind, dt, inputs, extra);
+            const int = self.interner.getOrPutContextAdapted(
                 self.arena.allocator(),
-                .{
-                    .node = undefined,
-                    .hash = Node.hash(kind, dt, inputs, extra),
-                },
+                {},
                 Inserter{
                     .kind = kind,
                     .inputs = inputs,
                     .dt = dt,
                     .extra = extra,
+                    .hsh = hash,
                 },
+                .{},
             ) catch unreachable;
+
+            if (!int.found_existing) int.key_ptr.hash = hash;
+
+            return int;
         }
 
         const Uninserter = struct {
@@ -2382,7 +2393,9 @@ pub fn Func(comptime Backend: type) type {
             if (op == .sext and ty.size() < oper.data_type.size()) {
                 utils.panic("{f} {f}", .{ ty, oper });
             }
-            if (op == .ired and ty.size() == oper.data_type.size()) return oper;
+            if (op == .ired and ty.size() == oper.data_type.size()) {
+                return oper;
+            }
             if (op == .ired and ty.size() >= oper.data_type.size()) {
                 utils.panic("{f} {f}", .{ ty, oper });
             }

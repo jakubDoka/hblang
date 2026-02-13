@@ -379,6 +379,9 @@ pub fn lookupIdentLow(
     name: []const u8,
     dotted: bool,
 ) ?Value {
+    //var lmt = self.types.metrics.begin(.lookup_ident);
+    //defer lmt.end();
+
     const scope_meta = scope.data().scope(self.types);
     const file = scope_meta.file.get(self.types);
 
@@ -591,6 +594,22 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
         return;
     }
 
+    global.ty = value.ty;
+
+    if (value.node() == .value and value.node().value.kind == .CInt) {
+        const cnst = value.node().value.extra(.CInt).value;
+
+        self.types.ct_backend.mach.emitData(.{
+            .id = @intFromEnum(global_id),
+            .value = .{ .init = std.mem.asBytes(&cnst)[0..value.ty.size(self.types)] },
+            .readonly = global.readonly,
+            .thread_local = false,
+            .uuid = @splat(0),
+        });
+
+        return;
+    }
+
     self.emitGenericStore(pos, ret_addr, value);
 
     self.bl.end(token);
@@ -615,8 +634,6 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
         .uuid = @splat(0),
     });
 
-    global.ty = value.ty;
-
     if (self.emitCtFuncs(until, relocs_until)) return;
 
     const global_sym = self.types.ct_backend.mach.out
@@ -627,6 +644,9 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
 }
 
 pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
+    //var vtm = self.types.metrics.begin(.vm);
+    //defer vtm.end();
+
     const log = @import("options").log_ct_exec;
     if (log) {
         self.types.reportSloc(slc, "executing this", .{});
@@ -900,6 +920,9 @@ pub fn emitGenericStore(self: *Codegen, pos: u32, dest: *BNode, value: Value) vo
 }
 
 pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
+    //var mef = self.types.metrics.begin(.emit_func);
+    //defer mef.end();
+
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -1672,7 +1695,8 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 " (TODO: display enums properly)", .{pat_value});
         },
         .@"$if" => {
-            if (self.peval(tok.pos, try self.typedExpr(.bool, .{}, lex), bool) catch false) {
+            const cond = self.peval(tok.pos, try self.typedExpr(.bool, .{}, lex), bool) catch false;
+            if (cond) {
                 const unreached = self.branchExpr(lex);
 
                 if (lex.eatMatch(.@"else")) {
@@ -1752,21 +1776,25 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                     break;
                 }
 
-                _ = self.loopControl(lex, .@"continue", loop.name) catch {};
+                if (loop.state.cmptime.kind == .falltrough and unreached) {
+                    break;
+                }
+
+                if (!unreached) _ = self.loopControl(lex, .@"continue", loop.name) catch {};
 
                 loop.state.cmptime.kind = .falltrough;
 
                 if (prev_erred < self.types.errored) break;
             }
 
-            if (fuel == 0) {
-                return self.report(tok.pos, "out of loop fuel", .{});
-            }
-
             if (checkpoint == end) {
                 lex.skipExprDropErr();
             } else {
                 lex.cursor = end;
+            }
+
+            if (fuel == 0) {
+                return self.report(tok.pos, "out of loop fuel", .{});
             }
 
             return .voidv;
@@ -4770,6 +4798,20 @@ pub fn @"fn"(self: *Codegen, lex: *Lexer) !union(enum) {
     template: Types.TemplateId,
     func_ty: Types.Id,
 } {
+    var is_in_global_decl = false;
+    if (self.scope.data().downcast(Types.UnorderedScope) != null) b: {
+        const back_pos = self.name.sourcePos() orelse break :b;
+        if (back_pos > lex.cursor) break :b;
+        var flex = Lexer.init(lex.source[0..], back_pos);
+
+        if (flex.eatIdent() == null) break :b;
+        if (!flex.eatMatch(.@":=")) break :b;
+        if (!flex.eatMatch(.@"fn")) break :b;
+
+        if (lex.cursor != flex.cursor) break :b;
+
+        is_in_global_decl = true;
+    }
     _ = try self.expect(lex, .@"(", "to open the argument list");
 
     var tmp = utils.Arena.scrath(null);
@@ -4850,7 +4892,8 @@ pub fn @"fn"(self: *Codegen, lex: *Lexer) !union(enum) {
         _ = try self.expect(lex, .@")", "to end an import declaration");
     } else {
         const ps = lex.cursor;
-        lex.skipExprDropErr();
+
+        if (!is_in_global_decl) lex.skipExprDropErr();
 
         if (is_fn_ptr and args.items.len != 0) {
             return self.report(ps, "signature has nameless arguments" ++
@@ -4889,6 +4932,9 @@ pub fn @"fn"(self: *Codegen, lex: *Lexer) !union(enum) {
 }
 
 pub fn peval(self: *Codegen, pos: u32, value: Value, comptime T: type) !T {
+    //var mpe = self.types.metrics.begin(.partial_eval);
+    //defer mpe.end();
+
     const mismatch, const name = switch (T) {
         Types.FuncId => .{ value.ty.data() != .FuncTy, "function" },
         Types.TemplateId => .{ value.ty != .template, "template" },
@@ -5048,6 +5094,11 @@ pub fn partialEval(self: *Codegen, vl: *BNode) error{Report}!*BNode {
             const rhs = value.inputs()[2].?;
 
             if (lhs.kind == .GlobalAddr and rhs.kind == .CInt) {
+                // TODO: move this to the peeps
+                if (value.extra(.BinOp).op == .ne and rhs.extra(.CInt).value == 0) {
+                    return self.bl.addIntImm(value.sloc, value.data_type, 1);
+                }
+
                 return value;
             }
 
@@ -5375,14 +5426,17 @@ pub fn partialEvalLoad(self: *Codegen, op: *BNode, relocs: ?[]Machine.DataOption
             var res: *BNode = undefined;
             for (rlocs.items) |reloc| {
                 if (reloc.offset == src_offset) {
-                    const rel = self.types.collectPointer(
-                        op.sloc,
-                        reloc.is_func,
-                        reloc.offset,
-                        0,
-                        mem,
-                        false,
-                    ) catch return error.Report;
+                    const rel = if (reloc.target & 0x80000000 != 0)
+                        self.types.collectPointer(
+                            op.sloc,
+                            reloc.is_func,
+                            reloc.offset,
+                            (reloc.target & ~@as(u32, 0x80000000)),
+                            mem,
+                            false,
+                        ) catch return error.Report
+                    else
+                        reloc;
 
                     if (rel.is_func) {
                         res = self.bl.addFuncAddr(op.sloc, rel.target);
@@ -5667,7 +5721,10 @@ pub fn typeCheck(
 pub fn defineVariable(self: *Codegen, name: Lexer.Token) usize {
     const file = self.file.get(self.types);
     self.vars.append(self.bl.arena(), .{
-        .prefix = file.source[name.pos + @intFromBool(name.kind == .@"$")],
+        .prefix = hb.frontend.DeclIndex.prefixOfToken(
+            file.source,
+            name.pos + @intFromBool(name.kind == .@"$"),
+        ),
         .variable = .{
             .ty = .void,
             .meta = .{

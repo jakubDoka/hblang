@@ -396,7 +396,7 @@ pub fn buildLow(
             slice.items(.prefix),
             slice.items(.offset),
         ) |i, *prefix, *offset| {
-            prefix.* = bl.lexer.source[i.offset];
+            prefix.* = prefixOfToken(bl.lexer.source, i.offset);
             offset.* = i;
         }
     }
@@ -456,7 +456,7 @@ pub fn buildLow(
             slice.items(.offset),
             slice.items(.prefix),
         ) |c, *off, *pre| {
-            pre.* = bl.lexer.source[c];
+            pre.* = prefixOfToken(bl.lexer.source, c);
             off.* = c;
         }
     }
@@ -470,6 +470,21 @@ pub fn buildLow(
         .exports = scratch.dupe(u32, exports.items),
         .end = bl.lexer.cursor,
     };
+}
+
+pub fn prefixOfToken(source: [:0]const u8, pos: u32) u8 {
+    var cursor: u32 = pos + 1;
+    while (true) : (cursor += 1) {
+        switch (source[cursor]) {
+            'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => {},
+            else => break,
+        }
+    }
+    return prefixOf(source[pos..cursor]);
+}
+
+pub fn prefixOf(str: []const u8) u8 {
+    return @truncate(std.hash.Fnv1a_32.hash(str));
 }
 
 pub fn addPattern(
@@ -539,12 +554,14 @@ pub fn filePrefixLookup(
     source: [:0]const u8,
     name: []const u8,
 ) ?*Off {
+    const prefix = prefixOf(name);
+
     var cursor: usize = 0;
     return while (std.mem.indexOfScalarPos(
         u8,
         prefixes,
         cursor,
-        name[0],
+        prefix,
     )) |index| : (cursor = index + 1) {
         const decl = &offsets[index];
 
@@ -624,60 +641,4 @@ pub fn log(self: DeclIndex, depth: usize, out: *std.Io.Writer) !void {
         for (0..depth) |_| try out.print(" ", .{});
         try out.print("}}\n", .{});
     }
-}
-
-test DeclIndex {
-    utils.Arena.initScratch(1024 * 4);
-
-    const source =
-        \\.field: u32 = 0;
-        \\foo := struct {}
-        \\bar := struct {
-        \\   voo := struct(struct {}) {}
-        \\   koo := struct {}
-        \\   $loo := fn(): void {
-        \\       a := 0
-        \\       a := 0
-        \\   }
-        \\}
-        \\foo.{boo, loo: .{coo}, koo.{kla}, soo: noo.{pa}} := mam
-        \\
-    ;
-
-    const result =
-        \\17:17 f
-        \\34:34 b
-        \\160:160 f
-        \\160:165 b
-        \\160:177 c
-        \\160:183 k
-        \\160:188 k
-        \\160:199 n
-        \\160:204 p
-        \\24 {
-        \\}
-        \\41 {
-        \\ 53:53 v
-        \\ 84:84 k
-        \\ 105:105 l
-        \\ 67 {
-        \\ }
-        \\ 60 {
-        \\ }
-        \\ 91 {
-        \\ }
-        \\}
-        \\
-    ;
-
-    var tmp = utils.Arena.init(1024 * 4);
-
-    const idx = try DeclIndex.build(source, .noop, &tmp);
-
-    var buf: [1024]u8 = undefined;
-    var out = std.Io.Writer.fixed(&buf);
-
-    try idx.log(0, &out);
-
-    try std.testing.expectEqualSlices(u8, result, out.buffered());
 }

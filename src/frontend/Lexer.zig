@@ -452,10 +452,32 @@ pub fn next(self: *Lexer) Token {
     };
 
     var pos = self.cursor;
+
     const kind: Lexeme = state: switch (State.start) {
         .start => switch (self.source[self.cursor]) {
             0 => break :state .Eof,
-            1...32, 127 => {
+            // This mathes on the newline simbols and slits the whitespace in one go
+            1...31 => {
+                const V = @Vector(16, u8);
+
+                if (self.source.len - self.cursor >= @sizeOf(V)) {
+                    @branchHint(.likely);
+
+                    const vec: V = @bitCast(self.source[self.cursor..][0..@sizeOf(V)].*);
+                    const whitespace_mask = vec > @as(V, @splat(32));
+                    const whitespace_bits: std.meta.Int(.unsigned, @sizeOf(V)) =
+                        @bitCast(whitespace_mask);
+
+                    self.cursor += @ctz(whitespace_bits);
+                    pos += @ctz(whitespace_bits);
+                } else {
+                    self.cursor += 1;
+                    pos += 1;
+                }
+
+                continue :state .start;
+            },
+            ' ', 127 => {
                 self.cursor += 1;
                 pos += 1;
                 continue :state .start;
@@ -873,7 +895,7 @@ pub fn skipSuffix(lex: *Lexer, top: Lexer.Token, prevPrec: u8) SkipError!void {
                 lex.eatUntilClosingDelimeter();
             }
         },
-        .@".*" => {},
+        .@".*", .@".?" => {},
         .@".{", .@".[", .@"[", .@".(", .@"(" => {
             lex.eatUntilClosingDelimeter();
         },

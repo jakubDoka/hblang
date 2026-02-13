@@ -472,8 +472,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
             try diags.print("  comptime functions: {}\n", .{comptime_functions});
             try diags.print("  dead functions:     {}\n", .{dead_functions});
 
-            // TODO
-            if (false) types.metrics.logStats(diags);
+            //types.metrics.logStats(diags);
         }
     }
 
