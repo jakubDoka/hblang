@@ -61,7 +61,7 @@ ct_backend: HbvmGen,
 
 pub const Decls = union(enum) {
     sourced: *const DeclIndex,
-    generated: *GenDecls,
+    generated: *const GenDecls,
 
     pub fn compat(self: Decls) *const DeclIndex {
         return switch (self) {

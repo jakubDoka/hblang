@@ -723,283 +723,8 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
             };
 
             switch (prefix.kind) {
-                .Type => {
-                    const tyun = self.types.builtins.type_union;
-                    const size = Types.Id.nany(tyun).size(self.types);
-                    const slot = regs.get(.stack_addr);
-                    const tag_layout = tyun.get(self.types).getLayout(self.types).tagLayout().?;
-
-                    var mem = vm_ctx.memory[slot..][0..@intCast(size)];
-
-                    const value: Types.Id = d: switch (@as(
-                        std.meta.Tag(Types.Data),
-                        @enumFromInt(mem[tag_layout.offset..][0]),
-                    )) {
-                        .Builtin => .never,
-                        .Pointer => self.types.pointerTo(self.loadVmTy(slc, mem[0..4]) catch return),
-                        .Slice => self.types.sliceOf(self.loadVmTy(slc, mem[0..4]) catch return),
-                        .Option => self.types.optionOf(self.loadVmTy(slc, mem[0..4]) catch return),
-                        .Array => self.types.arrayOf(
-                            self.loadVmTy(slc, mem[0..4]) catch return,
-                            @intCast(@as(u64, @bitCast(mem[8..][0..8].*))),
-                        ),
-                        .FuncTy => {
-                            var tmp = utils.Arena.scrath(null);
-                            defer tmp.deinit();
-
-                            const args = self.loadVmSlice(Types.Id, mem[0..][0..16], tmp.arena);
-                            const ret = self.loadVmTy(slc, mem[16..][0..4]) catch return;
-
-                            for (args) |v| {
-                                self.validateExistingType(slc, v) catch return;
-                            }
-
-                            break :d self.types.funcTyOf(args, ret);
-                        },
-                        .Struct => {
-                            var tmp = utils.Arena.scrath(null);
-                            defer tmp.deinit();
-
-                            const alignment: u64 = @bitCast(mem[0..][0..8].*);
-                            const hard_align: ?Types.Size =
-                                if (alignment == 0) null else @intCast(alignment);
-
-                            const Field = extern struct {
-                                name: [16]u8,
-                                ty: Types.Id,
-                                offset: u64,
-                                default: ?*anyopaque,
-                            };
-
-                            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
-
-                            const decls = Types.GenDecls{
-                                .fields = self.types.arena.alloc([]u8, fields.len),
-                            };
-                            var layout = Types.Struct.Layout{
-                                .spec = .{ .size = 0, .alignment = 0 },
-                                .fields = self.types.arena.alloc(Types.Struct.Layout.Field, fields.len),
-                            };
-
-                            for (fields, 0..) |*field, i| {
-                                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
-                                decls.fields[i] = self.types.arena.dupe(u8, name);
-                                self.validateExistingType(slc, field.ty) catch return;
-                                layout.fields[i].ty = field.ty;
-                                layout.fields[i].default = .invalid;
-                            }
-
-                            layout.compute(self.types, hard_align);
-
-                            const structa = self.types.structs.push(&self.types.arena, .{
-                                .scope = scope,
-                                .layout = layout,
-                                .decls = .{ .generated = self.types.arena.spill(decls) },
-                                .captures = .empty,
-                            });
-
-                            break :d .nany(structa);
-                        },
-                        .Union => {
-                            var tmp = utils.Arena.scrath(null);
-                            defer tmp.deinit();
-
-                            const tag_ty = if (mem[4..][0] == 1)
-                                self.loadVmTy(slc, mem[0..][0..4]) catch return
-                            else
-                                null;
-
-                            if (tag_ty) |t| {
-                                if (t.data() != .Enum) {
-                                    self.reportSloc(slc, "{} is not an enum", .{t}) catch return;
-                                }
-                            }
-
-                            const tag = if (tag_ty) |t| t.data().Enum else null;
-
-                            const Field = extern struct {
-                                name: [16]u8,
-                                ty: Types.Id,
-                            };
-
-                            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
-
-                            const decls = Types.GenDecls{
-                                .fields = self.types.arena.alloc([]u8, fields.len),
-                            };
-
-                            var layout = Types.Union.Layout{
-                                .tag = tag,
-                                .spec = .{ .size = 0, .alignment = 0 },
-                                .fields = self.types.arena.alloc(Types.Id, fields.len),
-                            };
-
-                            for (fields, 0..) |*field, i| {
-                                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
-                                decls.fields[i] = self.types.arena.dupe(u8, name);
-                                self.validateExistingType(slc, field.ty) catch return;
-                                layout.fields[i] = field.ty;
-                            }
-
-                            layout.compute(self.types);
-
-                            const uniona = self.types.unions.push(&self.types.arena, .{
-                                .scope = scope,
-                                .layout = layout,
-                                .decls = .{ .generated = self.types.arena.spill(decls) },
-                                .captures = .empty,
-                            });
-
-                            break :d .nany(uniona);
-                        },
-                        .Enum => {
-                            var tmp = utils.Arena.scrath(null);
-                            defer tmp.deinit();
-
-                            const tag = self.loadVmTy(slc, mem[0..][0..4]) catch return;
-
-                            const Field = extern struct {
-                                name: [16]u8,
-                                value: i64,
-                            };
-
-                            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
-
-                            const decls = Types.GenDecls{
-                                .fields = self.types.arena.alloc([]u8, fields.len),
-                            };
-
-                            var layout = Types.Enum.Layout{
-                                .spec = tag.stackSpec(self.types),
-                                .fields = self.types.arena.alloc(i64, fields.len),
-                            };
-
-                            for (fields, 0..) |*field, i| {
-                                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
-                                decls.fields[i] = self.types.arena.dupe(u8, name);
-                                layout.fields[i] = field.value;
-                            }
-
-                            layout.compute();
-
-                            const enuma = self.types.enums.push(&self.types.arena, .{
-                                .scope = scope,
-                                .layout = layout,
-                                .decls = .{ .generated = self.types.arena.spill(decls) },
-                                .captures = .empty,
-                            });
-
-                            break :d .nany(enuma);
-                        },
-                    };
-
-                    regs.set(.ret(0), value.raw());
-                },
-                .type_info => {
-                    const slot = regs.get(.arg(1));
-                    const ty: Types.Id = @enumFromInt(regs.get(.arg(2)));
-                    const tyun = self.types.builtins.type_union;
-                    const tag_layout = tyun.get(self.types).getLayout(self.types).tagLayout().?;
-                    const size = Types.Id.nany(tyun).size(self.types);
-
-                    var mem = vm_ctx.memory[slot..][0..@intCast(size)];
-                    mem[tag_layout.offset..][0] = @intFromEnum(ty.data());
-
-                    switch (ty.data()) {
-                        .Builtin => {},
-                        .Option => |o| {
-                            mem[0..4].* = std.mem.toBytes(o.get(self.types).inner);
-                        },
-                        .Pointer => |p| {
-                            mem[0..4].* = std.mem.toBytes(p.get(self.types).*);
-                        },
-                        .Slice => |s| {
-                            mem[0..4].* = std.mem.toBytes(s.get(self.types).*);
-                        },
-                        .Array => |a| {
-                            mem[0..16].* = std.mem.toBytes(a.get(self.types).*);
-                        },
-                        .FuncTy => |f| {
-                            const arg_slc = f.get(self.types).args;
-
-                            _, const memr = self.addSliceGlobal(.type, arg_slc.len, mem[0..16]);
-
-                            @memcpy(memr, @as([]const u8, @ptrCast(arg_slc)));
-
-                            mem[16..][0..4].* = std.mem.toBytes(f.get(self.types).ret);
-                        },
-                        .Struct => |s| {
-                            const layout = s.get(self.types).getLayout(self.types);
-                            mem[0..][0..8].* = std.mem.toBytes(@as(u64, layout.spec.alignmentBytes()));
-
-                            const struct_field = self.types.builtins.struct_field;
-                            _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
-
-                            for (0..layout.fields.len) |i| {
-                                const base = i * Types.Id.nany(struct_field).size(self.types);
-                                const field = layout.fields[i];
-
-                                const field_name = s.get(self.types).fieldName(self.types, i);
-
-                                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
-                                @memcpy(name_mem, field_name);
-
-                                fields_mem[base..][16..][0..4].* = std.mem.toBytes(field.ty);
-                                fields_mem[base..][24..][0..8].* = std.mem.toBytes(@as(u64, field.offset));
-                                fields_mem[base..][32..][0..8].* = std.mem.toBytes(@as(u64, 0));
-                            }
-
-                            self.addDecls(s, mem[24..][0..16]);
-                        },
-                        .Enum => |e| {
-                            const layout = e.get(self.types).getLayout(self.types);
-
-                            mem[0..][0..4].* = std.mem.toBytes(layout.backingInteger());
-
-                            const enum_field = self.types.builtins.enum_field;
-                            _, const fields_mem = self.addSliceGlobal(.nany(enum_field), layout.fields.len, mem[8..][0..16]);
-
-                            for (0..layout.fields.len) |i| {
-                                const base = i * Types.Id.nany(enum_field).size(self.types);
-                                const field = layout.fields[i];
-
-                                const field_name = e.get(self.types).fieldName(self.types, i);
-
-                                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
-                                @memcpy(name_mem, field_name);
-
-                                fields_mem[base..][16..][0..8].* = std.mem.toBytes(field);
-                            }
-
-                            self.addDecls(e, mem[24..][0..16]);
-                        },
-                        .Union => |u| {
-                            const layout = u.get(self.types).getLayout(self.types);
-                            mem[0..][0..8].* = std.mem.toBytes(@as(u64, 0));
-                            if (layout.tag) |t| {
-                                mem[0..][0..4].* = std.mem.toBytes(Types.Id.nany(t));
-                                mem[4..][0] = 1;
-                            }
-
-                            const struct_field = self.types.builtins.struct_field;
-                            _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
-
-                            for (0..layout.fields.len) |i| {
-                                const base = i * Types.Id.nany(struct_field).size(self.types);
-                                const field = layout.fields[i];
-
-                                const field_name = u.get(self.types).fieldName(self.types, i);
-
-                                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
-                                @memcpy(name_mem, field_name);
-
-                                fields_mem[base..][16..][0..4].* = std.mem.toBytes(field);
-                            }
-
-                            self.addDecls(u, mem[24..][0..16]);
-                        },
-                    }
-                },
+                .Type => self.evalTypeEca(slc, scope) catch return,
+                .type_info => self.evalTypeInfoEca(slc) catch return,
                 .alloc_global => {
                     const len = regs.get(.arg(1 + Types.Slice.len_offset / 8));
                     const ptr = regs.get(.arg(1 + Types.Slice.ptr_offset / 8));
@@ -1014,6 +739,290 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
         },
         else => unreachable, // TODO
     };
+}
+
+pub fn evalTypeInfoEca(self: *Codegen, slc: graph.Sloc) !void {
+    const regs = &self.types.vm.regs;
+
+    const slot = regs.get(.arg(1));
+    const ty: Types.Id = @enumFromInt(regs.get(.arg(2)));
+    try self.validateExistingType(slc, ty);
+    const tyun = self.types.builtins.type_union;
+    const tag_layout = tyun.get(self.types).getLayout(self.types).tagLayout().?;
+    const size = Types.Id.nany(tyun).size(self.types);
+
+    var mem = self.types.ct_backend.mach.out.code.items[slot..][0..@intCast(size)];
+    mem[tag_layout.offset..][0] = @intFromEnum(ty.data());
+
+    switch (ty.data()) {
+        .Builtin => {},
+        .Option => |o| {
+            mem[0..4].* = std.mem.toBytes(o.get(self.types).inner);
+        },
+        .Pointer => |p| {
+            mem[0..4].* = std.mem.toBytes(p.get(self.types).*);
+        },
+        .Slice => |s| {
+            mem[0..4].* = std.mem.toBytes(s.get(self.types).*);
+        },
+        .Array => |a| {
+            mem[0..16].* = std.mem.toBytes(a.get(self.types).*);
+        },
+        .FuncTy => |f| {
+            const arg_slc = f.get(self.types).args;
+
+            _, const memr = self.addSliceGlobal(.type, arg_slc.len, mem[0..16]);
+
+            @memcpy(memr, @as([]const u8, @ptrCast(arg_slc)));
+
+            mem[16..][0..4].* = std.mem.toBytes(f.get(self.types).ret);
+        },
+        .Struct => |s| {
+            const layout = s.get(self.types).getLayout(self.types);
+            mem[0..][0..8].* = std.mem.toBytes(@as(u64, layout.spec.alignmentBytes()));
+
+            const struct_field = self.types.builtins.struct_field;
+            _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
+
+            for (0..layout.fields.len) |i| {
+                const base = i * Types.Id.nany(struct_field).size(self.types);
+                const field = layout.fields[i];
+
+                const field_name = s.get(self.types).fieldName(self.types, i);
+
+                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
+                @memcpy(name_mem, field_name);
+
+                fields_mem[base..][16..][0..4].* = std.mem.toBytes(field.ty);
+                fields_mem[base..][24..][0..8].* = std.mem.toBytes(@as(u64, field.offset));
+                fields_mem[base..][32..][0..8].* = std.mem.toBytes(@as(u64, 0));
+            }
+
+            self.addDecls(s, mem[24..][0..16]);
+        },
+        .Enum => |e| {
+            const layout = e.get(self.types).getLayout(self.types);
+
+            mem[0..][0..4].* = std.mem.toBytes(layout.backingInteger());
+
+            const enum_field = self.types.builtins.enum_field;
+            _, const fields_mem = self.addSliceGlobal(.nany(enum_field), layout.fields.len, mem[8..][0..16]);
+
+            for (0..layout.fields.len) |i| {
+                const base = i * Types.Id.nany(enum_field).size(self.types);
+                const field = layout.fields[i];
+
+                const field_name = e.get(self.types).fieldName(self.types, i);
+
+                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
+                @memcpy(name_mem, field_name);
+
+                fields_mem[base..][16..][0..8].* = std.mem.toBytes(field);
+            }
+
+            self.addDecls(e, mem[24..][0..16]);
+        },
+        .Union => |u| {
+            const layout = u.get(self.types).getLayout(self.types);
+            mem[0..][0..8].* = std.mem.toBytes(@as(u64, 0));
+            if (layout.tag) |t| {
+                mem[0..][0..4].* = std.mem.toBytes(Types.Id.nany(t));
+                mem[4..][0] = 1;
+            }
+
+            const struct_field = self.types.builtins.struct_field;
+            _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
+
+            for (0..layout.fields.len) |i| {
+                const base = i * Types.Id.nany(struct_field).size(self.types);
+                const field = layout.fields[i];
+
+                const field_name = u.get(self.types).fieldName(self.types, i);
+
+                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
+                @memcpy(name_mem, field_name);
+
+                fields_mem[base..][16..][0..4].* = std.mem.toBytes(field);
+            }
+
+            self.addDecls(u, mem[24..][0..16]);
+        },
+    }
+}
+
+pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
+    const regs = &self.types.vm.regs;
+
+    const tyun = self.types.builtins.type_union;
+    const size = Types.Id.nany(tyun).size(self.types);
+    const slot = regs.get(.stack_addr);
+    const tag_layout = tyun.get(self.types).getLayout(self.types).tagLayout().?;
+
+    var mem = self.types.ct_backend.mach.out.code.items[slot..][0..@intCast(size)];
+
+    const value: Types.Id = d: switch (@as(
+        std.meta.Tag(Types.Data),
+        @enumFromInt(mem[tag_layout.offset..][0]),
+    )) {
+        .Builtin => .never,
+        .Pointer => self.types.pointerTo(try self.loadVmTy(slc, mem[0..4])),
+        .Slice => self.types.sliceOf(try self.loadVmTy(slc, mem[0..4])),
+        .Option => self.types.optionOf(try self.loadVmTy(slc, mem[0..4])),
+        .Array => self.types.arrayOf(
+            try self.loadVmTy(slc, mem[0..4]),
+            @intCast(@as(u64, @bitCast(mem[8..][0..8].*))),
+        ),
+        .FuncTy => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const args = self.loadVmSlice(Types.Id, mem[0..][0..16], tmp.arena);
+            const ret = try self.loadVmTy(slc, mem[16..][0..4]);
+
+            for (args) |v| {
+                try self.validateExistingType(slc, v);
+            }
+
+            break :d self.types.funcTyOf(args, ret);
+        },
+        .Struct => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const alignment: u64 = @bitCast(mem[0..][0..8].*);
+            const hard_align: ?Types.Size =
+                if (alignment == 0) null else @intCast(alignment);
+
+            const Field = extern struct {
+                name: [16]u8,
+                ty: Types.Id,
+                offset: u64,
+                default: ?*anyopaque,
+            };
+
+            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
+
+            const decls = Types.GenDecls{
+                .fields = self.types.arena.alloc([]u8, fields.len),
+            };
+            var layout = Types.Struct.Layout{
+                .spec = .{ .size = 0, .alignment = 0 },
+                .fields = self.types.arena.alloc(Types.Struct.Layout.Field, fields.len),
+            };
+
+            for (fields, 0..) |*field, i| {
+                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
+                decls.fields[i] = self.types.arena.dupe(u8, name);
+                try self.validateExistingType(slc, field.ty);
+                layout.fields[i].ty = field.ty;
+                layout.fields[i].default = .invalid;
+            }
+
+            layout.compute(self.types, hard_align);
+
+            const structa = self.types.structs.push(&self.types.arena, .{
+                .scope = scope,
+                .layout = layout,
+                .decls = .{ .generated = self.types.arena.spill(decls) },
+                .captures = .empty,
+            });
+
+            break :d .nany(structa);
+        },
+        .Union => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const tag_ty = if (mem[4..][0] == 1)
+                try self.loadVmTy(slc, mem[0..][0..4])
+            else
+                null;
+
+            if (tag_ty) |t| {
+                if (t.data() != .Enum) {
+                    return self.reportSloc(slc, "{} is not an enum", .{t});
+                }
+            }
+
+            const tag = if (tag_ty) |t| t.data().Enum else null;
+
+            const Field = extern struct {
+                name: [16]u8,
+                ty: Types.Id,
+            };
+
+            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
+
+            const decls = Types.GenDecls{
+                .fields = self.types.arena.alloc([]u8, fields.len),
+            };
+
+            var layout = Types.Union.Layout{
+                .tag = tag,
+                .spec = .{ .size = 0, .alignment = 0 },
+                .fields = self.types.arena.alloc(Types.Id, fields.len),
+            };
+
+            for (fields, 0..) |*field, i| {
+                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
+                decls.fields[i] = self.types.arena.dupe(u8, name);
+                try self.validateExistingType(slc, field.ty);
+                layout.fields[i] = field.ty;
+            }
+
+            layout.compute(self.types);
+
+            const uniona = self.types.unions.push(&self.types.arena, .{
+                .scope = scope,
+                .layout = layout,
+                .decls = .{ .generated = self.types.arena.spill(decls) },
+                .captures = .empty,
+            });
+
+            break :d .nany(uniona);
+        },
+        .Enum => {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const tag = try self.loadVmTy(slc, mem[0..][0..4]);
+
+            const Field = extern struct {
+                name: [16]u8,
+                value: i64,
+            };
+
+            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
+
+            const decls = Types.GenDecls{
+                .fields = self.types.arena.alloc([]u8, fields.len),
+            };
+
+            var layout = Types.Enum.Layout{
+                .spec = tag.stackSpec(self.types),
+                .fields = self.types.arena.alloc(i64, fields.len),
+            };
+
+            for (fields, 0..) |*field, i| {
+                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
+                decls.fields[i] = self.types.arena.dupe(u8, name);
+                layout.fields[i] = field.value;
+            }
+
+            layout.compute();
+
+            const enuma = self.types.enums.push(&self.types.arena, .{
+                .scope = scope,
+                .layout = layout,
+                .decls = .{ .generated = self.types.arena.spill(decls) },
+                .captures = .empty,
+            });
+
+            break :d .nany(enuma);
+        },
+    };
+
+    regs.set(.ret(0), value.raw());
 }
 
 pub fn addDecls(self: *Codegen, e: anytype, slot: *[16]u8) void {
@@ -1419,6 +1428,8 @@ pub fn prepareMatchValue(self: *Codegen, lex: *Lexer) !Value {
 }
 
 pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitError!Value {
+    const slc = self.sloc(tok.pos);
+
     return switch (tok.kind.expand()) {
         .Comment => .voidv,
         .idk => ik: {
@@ -1429,7 +1440,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             break :ik switch (ty.category(self.types)) {
                 .Impossible => return self.report(tok.pos, "{} is uninhabited, can not be uninitialized", .{ty}),
                 .Imaginary => .unit(ty),
-                .Scalar => |t| .value(ty, self.bl.addUninit(self.sloc(tok.pos), t)),
+                .Scalar => |t| .value(ty, self.bl.addUninit(slc, t)),
                 .Stack => .ptr(ty, self.emitLoc(tok.pos, ty, ctx)),
             };
         },
@@ -1444,23 +1455,23 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             switch (ty.category(self.types)) {
                 .Impossible => break :nl .unit(ty),
-                .Imaginary => break :nl .value(ty, self.bl.addIntImm(self.sloc(tok.pos), .i8, 0)),
+                .Imaginary => break :nl .value(ty, self.bl.addIntImm(slc, .i8, 0)),
                 .Scalar, .Stack => {
                     const layout = ty.data().Option.get(self.types).getLayout(self.types);
                     const slot = self.emitLoc(tok.pos, ty, ctx);
                     self.bl.addFieldStore(
-                        self.sloc(tok.pos),
+                        slc,
                         slot,
                         layout.inner.offset,
                         layout.inner.storage.dataType(),
-                        self.bl.addIntImm(self.sloc(tok.pos), layout.inner.storage.dataType(), 0),
+                        self.bl.addIntImm(slc, layout.inner.storage.dataType(), 0),
                     );
                     break :nl .ptr(ty, slot);
                 },
             }
         },
         .die => {
-            self.bl.addTrap(self.sloc(tok.pos), 0);
+            self.bl.addTrap(slc, 0);
             return error.Unreachable;
         },
         .@"\"" => lit: {
@@ -1509,7 +1520,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             }
 
             break :lit .value(.u8, self.bl.addIntImm(
-                self.sloc(tok.pos),
+                slc,
                 .i8,
                 bytes[0],
             ));
@@ -1558,7 +1569,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
                     const slot = self.emitLoc(tok.pos, oper.ty, ctx);
                     self.bl.addFixedMemCpy(
-                        self.sloc(tok.pos),
+                        slc,
                         slot,
                         p,
                         oper.ty.size(self.types),
@@ -1614,7 +1625,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 const slice_ty = self.types.sliceOf(felem);
                 const slice = self.emitLoc(tok.pos, slice_ty, ctx);
 
-                const len_imm = self.bl.addIntImm(self.sloc(tok.pos), .i64, len);
+                const len_imm = self.bl.addIntImm(slc, .i64, len);
                 self.initSlice(tok.pos, slice, slot, len_imm);
 
                 return .ptr(slice_ty, slice);
@@ -1626,7 +1637,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             if (oper.ty.data() == .FuncTy) {
                 const vl = try self.peval(lex.cursor, oper, Types.FuncId);
-                break :ref .value(ptr_ty, self.bl.addFuncAddr(self.sloc(tok.pos), @intFromEnum(vl)));
+                break :ref .value(ptr_ty, self.bl.addFuncAddr(slc, @intFromEnum(vl)));
             }
 
             break :ref .value(ptr_ty, try oper.asPtr(tok.pos, self));
@@ -1645,7 +1656,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             }
 
             break :neg .value(oper.ty, self.bl.addUnOp(
-                self.sloc(tok.pos),
+                slc,
                 if (tok.kind == .@"~") .bnot else .ineg,
                 Abi.categorizeBuiltinUnwrapped(oper.ty.data().Builtin),
                 oper.load(tok.end, self),
@@ -1655,7 +1666,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             var oper = try self.typedExprPrec(.bool, .{}, lex, 1);
 
             break :not .value(.bool, self.bl.addUnOp(
-                self.sloc(tok.pos),
+                slc,
                 .not,
                 .i8,
                 oper.load(tok.end, self),
@@ -1726,12 +1737,12 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
         },
         .@"fn" => switch (try self.@"fn"(lex)) {
             .func => |vl| .value(.nany(vl[1]), self.bl.addIntImm(
-                self.sloc(tok.pos),
+                slc,
                 .i32,
                 @intFromEnum(vl[0]),
             )),
             .template => |id| .value(.template, self.bl.addIntImm(
-                self.sloc(tok.pos),
+                slc,
                 .i32,
                 @intFromEnum(id),
             )),
@@ -1897,7 +1908,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             };
 
             var if_bl = self.bl.addIfAndBeginThen(
-                self.sloc(tok.pos),
+                slc,
                 cond.load(tok.end, self),
             );
 
@@ -1976,7 +1987,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 .defer_frame = self.defers.items.len,
                 .name = try self.eatLabel(lex),
                 .state = .{ .runtime = .{
-                    .bl = self.bl.addLoopAndBeginBody(self.sloc(tok.pos)),
+                    .bl = self.bl.addLoopAndBeginBody(slc),
                 } },
             };
             self.loops = &loop;
@@ -1998,7 +2009,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 .defer_frame = self.defers.items.len,
                 .name = try self.eatLabel(lex),
                 .state = .{ .runtime = .{
-                    .bl = self.bl.addLoopAndBeginBody(self.sloc(tok.pos)),
+                    .bl = self.bl.addLoopAndBeginBody(slc),
                 } },
             };
             self.loops = &loop;
@@ -2008,7 +2019,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             const cond = try self.typedExpr(.bool, .{ .in_if_or_while = true }, lex);
             var bl = self.bl.addIfAndBeginThen(
-                self.sloc(tok.pos),
+                slc,
                 cond.load(tok.pos, self),
             );
 
@@ -2031,12 +2042,12 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
         .@"for" => {
             const Len = struct { vl: LLValue, bound: LLValue, idx: usize };
             const fns = struct {
-                fn addLenCheck(gen: *Codegen, slc: graph.Sloc, length_check_cond: *?LLValue, len: Len, bound: *LLValue) void {
-                    const cond = gen.bl.addBinOp(slc, .ne, .i8, len.bound.load(gen), bound.load(gen));
+                fn addLenCheck(gen: *Codegen, sc: graph.Sloc, length_check_cond: *?LLValue, len: Len, bound: *LLValue) void {
+                    const cond = gen.bl.addBinOp(sc, .ne, .i8, len.bound.load(gen), bound.load(gen));
                     if (length_check_cond.*) |*lcc| {
-                        lcc.set(.value(.bool, gen.bl.addBinOp(slc, .bor, .i8, lcc.load(gen), cond)));
+                        lcc.set(.value(.bool, gen.bl.addBinOp(sc, .bor, .i8, lcc.load(gen), cond)));
                     } else {
-                        length_check_cond.* = LLValue.init(slc.index, .value(.bool, cond));
+                        length_check_cond.* = LLValue.init(sc.index, .value(.bool, cond));
                     }
                     bound.deinit(gen);
                 }
@@ -2044,8 +2055,6 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
-
-            const slc = self.sloc(tok.pos);
 
             const frame = self.vars.len;
 
@@ -2239,11 +2248,11 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                     buf[0].lockTmp();
                 } else if (returns.len == 2) {
                     const ptr = ret.normalized(tok.pos, self).ptr;
-                    buf[0] = self.bl.addLoad(self.sloc(tok.pos), ptr, returns[0].Reg);
+                    buf[0] = self.bl.addLoad(slc, ptr, returns[0].Reg);
                     buf[0].lockTmp();
                     buf[1] = self.emitArbitraryLoad(
                         tok.pos,
-                        self.bl.addFieldOffset(self.sloc(tok.pos), ptr, 8),
+                        self.bl.addFieldOffset(slc, ptr, 8),
                         returns[1].Reg,
                         ret.ty.size(self.types) - 8,
                     );
@@ -2264,8 +2273,8 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             return error.Unreachable;
         },
-        .true => .value(.bool, self.bl.addIntImm(self.sloc(tok.pos), .i8, 1)),
-        .false => .value(.bool, self.bl.addIntImm(self.sloc(tok.pos), .i8, 0)),
+        .true => .value(.bool, self.bl.addIntImm(slc, .i8, 1)),
+        .false => .value(.bool, self.bl.addIntImm(slc, .i8, 0)),
         .DecInteger, .BinInteger, .OctInteger, .HexInteger => int: {
             const res = std.fmt.parseInt(u64, tok.view(lex.source), 0);
             const val = res catch |err| switch (err) {
@@ -2279,7 +2288,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             if (!ty.isBuiltin(.isInteger)) ty = .uint;
 
             break :int .value(ty, self.bl.addIntImm(
-                self.sloc(tok.pos),
+                slc,
                 Abi.categorizeBuiltinUnwrapped(ty.data().Builtin),
                 @bitCast(val),
             ));
@@ -2294,7 +2303,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             if (!ty.isBuiltin(.isFloat)) ty = .f32;
 
             break :float .value(ty, self.bl.addIntImm(
-                self.sloc(tok.pos),
+                slc,
                 Abi.categorizeBuiltinUnwrapped(ty.data().Builtin),
                 if (ty == .f64)
                     @bitCast(val)
@@ -2352,7 +2361,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
         .@".(" => {
             const ty = ctx.ty orelse {
                 // TODO: this is gonna cause issues
-                const loc = ctx.loc orelse self.bl.addLocal(self.sloc(tok.pos), 0, std.math.maxInt(u32));
+                const loc = ctx.loc orelse self.bl.addLocal(slc, 0, std.math.maxInt(u32));
 
                 var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
@@ -3089,6 +3098,8 @@ pub const SuffixCtx = struct { Lexer.Token, Lexer.Token, u8, Ctx, *?LLValue, boo
 pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) SuffixError!void {
     const tok, const top, const prevPrec, const ctx, const ass_lhs, const is_ass_op = sctx;
 
+    const slc = self.sloc(top.pos);
+
     switch (top.kind) {
         .@"." => {
             const field = try self.expect(lex, .Ident, "to access a field");
@@ -3172,7 +3183,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     .Array => |a| {
                         if (std.mem.eql(u8, field.view(lex.source), "len")) {
                             res.set(.value(.uint, self.bl.addIntImm(
-                                self.sloc(top.pos),
+                                slc,
                                 .i64,
                                 a.get(self.types).len.s,
                             )));
@@ -3191,12 +3202,12 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                         if (std.mem.eql(u8, field.view(lex.source), "len")) {
                             res.set(.ptr(
                                 .uint,
-                                self.bl.addFieldOffset(self.sloc(top.pos), ptr, Types.Slice.len_offset),
+                                self.bl.addFieldOffset(slc, ptr, Types.Slice.len_offset),
                             ));
                         } else if (std.mem.eql(u8, field.view(lex.source), "ptr")) {
                             res.set(.ptr(
                                 self.types.pointerTo(s.get(self.types).elem),
-                                self.bl.addFieldOffset(self.sloc(top.pos), ptr, Types.Slice.ptr_offset),
+                                self.bl.addFieldOffset(slc, ptr, Types.Slice.ptr_offset),
                             ));
                         } else {
                             return self.report(field.pos, "{} only has `len` and `ptr` fields", .{res.value.ty});
@@ -3322,15 +3333,15 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     Array: Types.ArrayId,
                 };
 
-                const slc = res.value.ty.data().downcast(Slicable).?;
+                const slice = res.value.ty.data().downcast(Slicable).?;
 
-                var elem = switch (slc) {
+                var elem = switch (slice) {
                     .Pointer => |p| p.get(self.types).ty,
                     .Slice => |s| s.get(self.types).elem,
                     .Array => |a| a.get(self.types).elem,
                 };
 
-                var ptr = switch (slc) {
+                var ptr = switch (slice) {
                     .Pointer => res.load(self),
                     .Slice => self.emitSliceFieldLoad(top.pos, res.value, .ptr),
                     .Array => try res.value.asPtr(top.pos, self),
@@ -3338,7 +3349,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
                 if (index) |vl| {
                     ptr = self.bl.addIndexOffset(
-                        self.sloc(top.pos),
+                        slc,
                         ptr,
                         .iadd,
                         elem.size(self.types),
@@ -3351,7 +3362,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
                 var len = if (end_index) |ei|
                     ei.load(self)
-                else switch (slc) {
+                else switch (slice) {
                     .Pointer => return self.report(
                         top.pos,
                         "pointer slice requires an end index",
@@ -3359,7 +3370,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     ),
                     .Slice => self.emitSliceFieldLoad(top.pos, res.value, .len),
                     .Array => |a| self.bl.addIntImm(
-                        self.sloc(top.pos),
+                        slc,
                         .i64,
                         a.get(self.types).len.s,
                     ),
@@ -3374,7 +3385,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     const last_idx = end_index orelse index orelse break :handler;
 
                     var cond = self.bl.addBinOp(
-                        self.sloc(top.pos),
+                        slc,
                         .ugt,
                         .i8,
                         last_idx.load(self),
@@ -3383,12 +3394,12 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
                     if (index) |vl| if (end_index) |evl| {
                         cond = self.bl.addBinOp(
-                            self.sloc(top.pos),
+                            slc,
                             .bor,
                             .i8,
                             cond,
                             self.bl.addBinOp(
-                                self.sloc(top.pos),
+                                slc,
                                 .ule,
                                 .i8,
                                 vl.load(self),
@@ -3402,7 +3413,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     handler.pushArg(self, if (index) |i|
                         i.load(self)
                     else
-                        self.bl.addIntImm(self.sloc(top.pos), .i64, 0));
+                        self.bl.addIntImm(slc, .i64, 0));
                     handler.pushArg(self, if (end_index) |i| i.load(self) else len);
                     handler.end(self);
                 }
@@ -3410,13 +3421,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 len.unlockTmp();
 
                 if (index) |vl| {
-                    len = self.bl.addBinOp(
-                        self.sloc(top.pos),
-                        .isub,
-                        .i64,
-                        len,
-                        vl.load(self),
-                    );
+                    len = self.bl.addBinOp(slc, .isub, .i64, len, vl.load(self));
                 }
 
                 const ty = self.types.sliceOf(elem);
@@ -3461,7 +3466,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     res.set(.ptr(
                         p.get(self.types).ty,
                         self.bl.addIndexOffset(
-                            self.sloc(top.pos),
+                            slc,
                             res.load(self),
                             .iadd,
                             p.get(self.types).ty.size(self.types),
@@ -3480,7 +3485,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
                         const len = self.emitSliceFieldLoad(top.pos, res.value, .len);
                         const cond = self.bl.addBinOp(
-                            self.sloc(top.pos),
+                            slc,
                             .uge,
                             .i8,
                             index.?.load(self),
@@ -3496,7 +3501,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     res.set(.ptr(
                         s.get(self.types).elem,
                         self.bl.addIndexOffset(
-                            self.sloc(top.pos),
+                            slc,
                             ptr,
                             .iadd,
                             s.get(self.types).elem.size(self.types),
@@ -3516,12 +3521,12 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                         defer tmp.deinit();
 
                         const len = self.bl.addIntImm(
-                            self.sloc(top.pos),
+                            slc,
                             .i64,
                             a.get(self.types).len.s,
                         );
                         const cond = self.bl.addBinOp(
-                            self.sloc(top.pos),
+                            slc,
                             .uge,
                             .i8,
                             index.?.load(self),
@@ -3535,10 +3540,10 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     }
 
                     const ptr = switch (res.value.normalized(top.pos, self)) {
-                        .empty => self.bl.addUninit(self.sloc(top.pos), .i64),
+                        .empty => self.bl.addUninit(slc, .i64),
                         .value => |v| {
                             res.set(.value(elem, self.bl.addBitIndexLoad(
-                                self.sloc(top.pos),
+                                slc,
                                 v,
                                 index.?.load(self),
                                 self.types.abi.categorizeAssumeReg(elem, self.types),
@@ -3551,7 +3556,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     res.set(.ptr(
                         elem,
                         self.bl.addIndexOffset(
-                            self.sloc(top.pos),
+                            slc,
                             ptr,
                             .iadd,
                             elem.size(self.types),
@@ -3593,13 +3598,13 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 if (t.data() != .Array) loc = null;
             }
 
-            const slot = loc orelse self.bl.addLocal(self.sloc(top.pos), 0, std.math.maxInt(u32));
+            const slot = loc orelse self.bl.addLocal(slc, 0, std.math.maxInt(u32));
 
             var list = lex.list(.@",", .@"]");
             var offset: Types.Size = 0;
             var i: Types.Size = 0;
             while (list.next()) : (i += 1) {
-                const eloc = self.bl.addFieldOffset(self.sloc(top.pos), slot, offset);
+                const eloc = self.bl.addFieldOffset(slc, slot, offset);
                 const value = self.typedExpr(elem, .{ .loc = eloc }, lex) catch {
                     if (list.recover()) break else continue;
                 };
@@ -3683,7 +3688,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                             value = .value(value.ty, value.load(eq.pos, self));
                         } else {
                             const loc = self.bl.addLocal(
-                                self.sloc(top.pos),
+                                slc,
                                 value.ty.size(self.types),
                                 @intFromEnum(value.ty),
                             );
@@ -3705,7 +3710,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             try self.typeCheckLL(.{}, res, .bool);
 
             var if_bl = self.bl.addIfAndBeginThen(
-                self.sloc(top.pos),
+                slc,
                 res.load(self),
             );
 
@@ -3719,7 +3724,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                         if_bl.end(&self.bl, if_bl.beginElse(&self.bl));
 
                         res.set(.value(.bool, self.bl.addIntImm(
-                            self.sloc(top.pos),
+                            slc,
                             .i8,
                             0,
                         )));
@@ -3735,10 +3740,10 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
             if_bl.end(&self.bl, if_bl.beginElse(&self.bl));
 
-            res.set(Value.value(.bool, self.bl.addPhi(
-                self.sloc(top.pos),
+            res.set(.value(.bool, self.bl.addPhi(
+                slc,
                 alt.load(self),
-                self.bl.addIntImm(self.sloc(top.pos), .i8, 0),
+                self.bl.addIntImm(slc, .i8, 0),
             )));
         },
         .@"||" => or_: {
@@ -3758,7 +3763,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             }
 
             var if_bl = self.bl.addIfAndBeginThen(
-                self.sloc(top.pos),
+                slc,
                 if (is_unwrap)
                     self.emitOptionCheck(top.pos, .@"!=", res.value)
                 else
@@ -3791,7 +3796,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                             res.set(unwrapped.value);
                         } else {
                             res.set(.value(.bool, self.bl.addIntImm(
-                                self.sloc(top.pos),
+                                slc,
                                 .i8,
                                 0,
                             )));
@@ -3827,7 +3832,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     .ptr => |p| .{ p, rhs_n.ptr },
                 };
 
-                const phi = self.bl.addPhi(self.sloc(top.pos), lhs_vl, rhs_vl);
+                const phi = self.bl.addPhi(slc, lhs_vl, rhs_vl);
 
                 res.set(switch (rhs_n) {
                     .empty => unreachable,
@@ -3839,8 +3844,8 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 if_bl.end(&self.bl, tk);
 
                 res.set(.value(.bool, self.bl.addPhi(
-                    self.sloc(top.pos),
-                    self.bl.addIntImm(self.sloc(top.pos), .i8, 0),
+                    slc,
+                    self.bl.addIntImm(slc, .i8, 0),
                     alt.load(self),
                 )));
             }
@@ -3889,11 +3894,11 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 const tag = self.getUnionTag(top.pos, tag_layout, res.value);
 
                 res.set(.value(.bool, self.bl.addBinOp(
-                    self.sloc(top.pos),
+                    slc,
                     if (top.kind == .@"==") .eq else .ne,
                     .i8,
                     tag,
-                    self.bl.addIntImm(self.sloc(top.pos), tag.data_type, cmp_vl),
+                    self.bl.addIntImm(slc, tag.data_type, cmp_vl),
                 )));
 
                 break :op;
@@ -3907,6 +3912,50 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             var rhs = LLValue.init(lex.cursor, vl);
             defer rhs.deinit(self);
 
+            if (res.value.ty.data() == .Struct) {
+                try self.typeCheckLL(.{}, &rhs, res.value.ty);
+
+                if (top.kind == .@"==" or top.kind == .@"!=") {
+                    var loc: ?*BNode = null;
+                    try self.emitStructCmp(
+                        top.pos,
+                        top.kind,
+                        res.value.ty.data().Struct,
+                        &loc,
+                        res.value,
+                        rhs.value,
+                    );
+
+                    res.set(.value(.bool, loc orelse self.bl.addIntImm(
+                        slc,
+                        .i8,
+                        @intFromBool(top.kind == .@"=="),
+                    )));
+                } else {
+                    if (top.kind.isComparison()) {
+                        return self.report(
+                            top.pos,
+                            "{} does not support ordering comparison",
+                            .{res.value.ty},
+                        );
+                    }
+
+                    const loc = self.emitLoc(top.pos, res.value.ty, ctx);
+
+                    try self.emitHomoStructOp(
+                        top.pos,
+                        top.kind,
+                        res.value.ty.data().Struct,
+                        loc,
+                        res.value,
+                        rhs.value,
+                    );
+                    res.set(.ptr(res.value.ty, loc));
+                }
+
+                break :op;
+            }
+
             if (res.value.ty == .never or rhs.value.ty == .never)
                 return self.silentReport();
 
@@ -3919,7 +3968,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 res.set(Value.value(
                     res.value.ty,
                     self.bl.addIndexOffset(
-                        self.sloc(top.pos),
+                        slc,
                         res.load(self),
                         if (top.kind == .@"+") .iadd else .isub,
                         elem_ty.size(self.types),
@@ -3968,7 +4017,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             const op = try self.lexemeToBinOp(top.pos, top.kind, oper_ty);
 
             res.set(Value.value(result, self.bl.addBinOp(
-                self.sloc(top.pos),
+                slc,
                 op,
                 Abi.categorizeBuiltinUnwrapped(result.data().Builtin),
                 res.load(self),
@@ -3976,6 +4025,100 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             )));
             res.peep(self);
         },
+    }
+}
+
+pub fn emitStructCmp(
+    self: *Codegen,
+    pos: u32,
+    op: Lexer.Lexeme,
+    ty: Types.StructId,
+    loc: *?*BNode,
+    lhs: Value,
+    rhs: Value,
+) !void {
+    for (ty.get(self.types).getLayout(self.types).fields, 0..) |f, i| {
+        const flhs = self.accessStructField(pos, lhs, f);
+        const frhs = self.accessStructField(pos, rhs, f);
+
+        if (f.ty.data() == .Struct) {
+            self.emitStructCmp(pos, op, f.ty.data().Struct, loc, flhs, frhs) catch {
+                return self.report(pos, "...when accesing {} on {}", .{
+                    ty.get(self.types).fieldName(self.types, i),
+                    Types.Id.nany(ty),
+                });
+            };
+        } else {
+            const opa = self.lexemeToBinOp(pos, op, f.ty) catch {
+                return self.report(
+                    pos,
+                    "{} in {} on {} can not be operated on within struct op",
+                    .{ f.ty, ty.get(self.types).fieldName(self.types, i), Types.Id.nany(ty) },
+                );
+            };
+
+            const vl = self.bl.addBinOp(
+                self.sloc(pos),
+                opa,
+                .i8,
+                flhs.load(pos, self),
+                frhs.load(pos, self),
+            );
+
+            if (loc.*) |*l| {
+                const join_op: graph.BinOp = switch (op) {
+                    .@"==" => .band,
+                    .@"!=" => .bor,
+                    else => unreachable,
+                };
+
+                l.* = self.bl.addBinOp(self.sloc(pos), join_op, .i8, l.*, vl);
+            } else {
+                loc.* = vl;
+            }
+        }
+    }
+}
+
+pub fn emitHomoStructOp(
+    self: *Codegen,
+    pos: u32,
+    op: Lexer.Lexeme,
+    ty: Types.StructId,
+    loc: *BNode,
+    lhs: Value,
+    rhs: Value,
+) !void {
+    for (ty.get(self.types).getLayout(self.types).fields, 0..) |f, i| {
+        const flhs = self.accessStructField(pos, lhs, f);
+        const frhs = self.accessStructField(pos, rhs, f);
+
+        if (f.ty.data() == .Struct) {
+            const floc = self.bl.addFieldOffset(self.sloc(pos), loc, f.offset);
+            self.emitHomoStructOp(pos, op, f.ty.data().Struct, floc, flhs, frhs) catch {
+                return self.report(pos, "...when accesing {} on {}", .{
+                    ty.get(self.types).fieldName(self.types, i),
+                    Types.Id.nany(ty),
+                });
+            };
+        } else {
+            const opa = self.lexemeToBinOp(pos, op, f.ty) catch {
+                return self.report(
+                    pos,
+                    "{} in {} on {} can not be operated on within struct op",
+                    .{ f.ty, ty.get(self.types).fieldName(self.types, i), Types.Id.nany(ty) },
+                );
+            };
+
+            const vl = self.bl.addBinOp(
+                self.sloc(pos),
+                opa,
+                self.types.abi.categorizeAssumeReg(f.ty, self.types),
+                flhs.load(pos, self),
+                frhs.load(pos, self),
+            );
+            self.bl.addFieldStore(self.sloc(pos), loc, f.offset, vl.data_type, vl);
+        }
     }
 }
 
@@ -6474,7 +6617,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
 
     var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
     target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
-    target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
+    //  target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
 
     const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();
