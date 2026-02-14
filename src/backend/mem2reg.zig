@@ -361,7 +361,7 @@ pub fn Mixin(comptime Backend: type) type {
                 self.subsume(tr.mem(), tr, .intern);
             }
 
-            if (std.debug.runtime_safety) {
+            if (graph.is_debug) {
                 var worklist = Func.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
                 worklist.collectAll(self);
 

@@ -1076,7 +1076,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         }
     }
 
-    if (std.debug.runtime_safety and false) {
+    if (graph.is_debug and false) {
         const util = struct {
             pub fn logCollision(fnc: *Func, block: *CfgNode, def: *Node, clobber: *Node, use: *Node, allc: []u16) void {
                 if (utils.freestanding) return;

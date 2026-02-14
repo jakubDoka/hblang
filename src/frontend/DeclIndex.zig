@@ -14,6 +14,16 @@ end: u32,
 
 const DeclIndex = @This();
 
+pub const empty = DeclIndex{
+    .entries = .empty,
+    .sub_scopes = .empty,
+    .imports = .empty,
+    .fields = .empty,
+    .exports = &.{},
+    .start = 0,
+    .end = 0,
+};
+
 pub const Child = struct {
     offset: u32,
     index: DeclIndex,

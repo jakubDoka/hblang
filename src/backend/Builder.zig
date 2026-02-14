@@ -131,7 +131,7 @@ pub fn arena(self: *Builder) std.mem.Allocator {
 pub fn end(self: *Builder, _: BuildToken) void {
     if (!self.isUnreachable()) self.addReturn(&.{});
 
-    if (std.debug.runtime_safety) {
+    if (graph.is_debug) {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 

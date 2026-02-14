@@ -1605,6 +1605,7 @@ pub fn Func(comptime Backend: type) type {
                     writer.writeAll(" [") catch unreachable;
                     for (self.output_base[0..self.output_len]) |o| {
                         writer.writeAll(", ") catch unreachable;
+                        writer.print("{}:", .{o.pos()}) catch unreachable;
                         logNid(writer, o.get().id, colors);
                     }
                     writer.writeAll("]") catch unreachable;
@@ -2371,6 +2372,8 @@ pub fn Func(comptime Backend: type) type {
                 return lhs;
             }
 
+            if (op.isCmp()) std.debug.assert(ty == .i8);
+
             return self.addNode(
                 .BinOp,
                 sloc,
@@ -2796,6 +2799,8 @@ pub fn Func(comptime Backend: type) type {
             def: *Node,
             at_least: usize,
         ) void {
+            def.assertAlive();
+
             if (def.output_cap < at_least) {
                 self.waste += @sizeOf(Node.Out) * @as(usize, def.output_cap);
                 const new_cap = @max(@max(def.output_cap, 1) * 2, at_least);
@@ -3524,7 +3529,7 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (std.debug.runtime_safety and !utils.freestanding) {
+            if (is_debug and !utils.freestanding) {
                 for (func.gcm.postorder, 0..) |bb, i| {
                     if (bb.base.kind != .Loop) continue;
 

@@ -2797,7 +2797,7 @@ malloc := fn(i: int): ^void @import("malloc")
 malloc2 := fn(i: int): ^void @import("malloc")
 
 main := fn(): uint {
-    $if @target("hbvm-ableos") return 0
+    $if !@target("x86_64") return 0
     _ = malloc(10)
     _ = malloc2(10)
     return 0

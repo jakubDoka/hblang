@@ -145,7 +145,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                 },
                 .FuncTy => .int,
                 .Pointer => .int,
-                .Enum => |e| if (e.get(ts).decls.fields.len == 0)
+                .Enum => |e| if (e.get(ts).decls.fieldCount() == 0)
                     return error.Impossible
                 else
                     .int,
@@ -178,7 +178,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                     return;
                 },
                 .Union => |u| {
-                    if (u.get(ts).decls.fields.len == 0) return error.Impossible;
+                    if (u.get(ts).decls.fieldCount() == 0) return error.Impossible;
 
                     const layout = u.get(ts).getLayout(ts);
 

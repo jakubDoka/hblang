@@ -257,19 +257,19 @@ main := fn(): void {
 }
 
 return_direct_stack := fn(): ^uint {
-    a := 0
+    a := #0
     if true return &a
 
     return &a
 }
 
 return_indirect_stack := fn(): struct{.u: uint; .b: uint; .c: ^uint} {
-    v := 0
+    v := #0
     return .(0, 0, &v)
 }
 
 return_indirect_stack_but_not := fn(arg: ^?^uint): void {
-    v := 0
+    v := #0
     arg.* = &v
     arg.* = null
 }
@@ -1827,10 +1827,10 @@ Vtable := fn($T: type): type {
     $decls: [entries.len]Field = idk
 
     $while n < entries.len {
-        decls[n] = .(&.[], entries[n], idk)
+        decls[n] = .(&.[], entries[n], idk, idk)
         n += 1
     }
-    return @Type(.{@struct: .(@align_of(^void), decls[..], &.[])})
+    return @eval(@Type(.{@struct: .(@align_of(^void), decls[..], &.[])}))
 }
 
 $vtable := fn($V: type, $Dyn: type): Vtable(V) {
@@ -1838,7 +1838,7 @@ $vtable := fn($V: type, $Dyn: type): Vtable(V) {
 
     $if @len_of(Vtable(V)) != entries.len @error(Dyn, " is not an object of kind ", V)
 
-    $tmp: Vtable(V) = idk
+    tmp: Vtable(V) = idk
     $n := 0
     $while n < @len_of(Vtable(V)) {
         tmp[n] = @bit_cast(&Dyn[n])
@@ -2367,22 +2367,23 @@ main := fn(): uint {
     $FnTy := @Type(.{fnty: .{args: &.[u8, u8], ret: u8}})
     $if FnTy != (fn(u8, u8): u8) return 6
 
-    $Stru := MakeStruct("foo", u8)
-    $StruI := MakeStruct("foo", u8)
+    fmm := "foo"
+    $Stru := MakeStruct(fmm, u8)
+    $StruI := MakeStruct(fmm, u8)
 
     s: StruI = .(0)
     b := Stru.(0)
     s = b
 
-    $Unio := MakeUnion("foo", u8)
-    $UnioI := MakeUnion("foo", u8)
+    $Unio := MakeUnion(fmm, u8)
+    $UnioI := MakeUnion(fmm, u8)
 
     u: UnioI = .{foo: 0}
     c := Unio.{foo: 0}
     u = c
 
-    $Enum := MakeEnum("foo")
-    $EnumI := MakeEnum("foo")
+    $Enum := MakeEnum(fmm)
+    $EnumI := MakeEnum(fmm)
 
     e: EnumI = .foo
     d := Enum.foo
@@ -2391,30 +2392,31 @@ main := fn(): uint {
     return s.foo
 }
 
-MakeStruct := fn(fname: []u8, ftype: type): type {
-    return @Type(.{@struct: .{
+MakeStruct := fn($fname: []u8, $ftype: type): type {
+    return @eval(@Type(.{@struct: .{
         alignment: @align_of(ftype),
         fields: &.[.{
             name: fname,
             ty: ftype,
-            defalut_value: idk,
+            offset: 0,
+            default: idk,
         }],
         decls: &.[],
-    }})
+    }}))
 }
 
-MakeUnion := fn(fname: []u8, ftype: type): type {
-    return @Type(.{@union: .{
+MakeUnion := fn($fname: []u8, $ftype: type): type {
+    return @eval(@Type(.{@union: .{
         tag: void,
         fields: &.[.{
             name: fname,
             ty: ftype,
         }],
         decls: &.[],
-    }})
+    }}))
 }
 
-MakeEnum := fn(fname: []u8): type {
+MakeEnum := fn($fname: []u8): type {
     // just triggering stack alignment bug
     fields := @TypeOf(@type_info(idk).@enum.fields[0]).[.{
         name: fname,
@@ -2426,11 +2428,11 @@ MakeEnum := fn(fname: []u8): type {
     onm := u8.['b', 'a', 'r']
     fields[1].name = onm[..]
 
-    return @Type(.{@enum: .{
+    return @eval(@Type(.{@enum: .{
         backing_int: u8,
         fields: fields[..],
         decls: &.[],
-    }})
+    }}))
 }
 ```
 

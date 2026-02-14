@@ -339,7 +339,7 @@ pub fn Mixin(comptime Backend: type) type {
                 break :compact_ids;
             }
 
-            if (std.debug.runtime_safety) validate_ssa: {
+            if (graph.is_debug) validate_ssa: {
                 for (cfg_rpo[1..]) |bb| if (bb.base.isBasicBlockStart()) {
                     for (bb.base.outputs()[0 .. bb.base.outputs().len - 1]) |n| {
                         const o = n.get();

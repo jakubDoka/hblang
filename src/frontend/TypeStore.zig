@@ -59,6 +59,58 @@ handler_signatures: std.EnumArray(Handler, FuncTyId),
 ct_backend: HbvmGen,
 //metrics: Metrics = .{},
 
+pub const Decls = union(enum) {
+    sourced: *const DeclIndex,
+    generated: *GenDecls,
+
+    pub fn compat(self: Decls) *const DeclIndex {
+        return switch (self) {
+            .sourced => |s| s,
+            .generated => &DeclIndex.empty,
+        };
+    }
+
+    pub fn lookupField(self: Decls, scope: Scope, types: *Types, name: []const u8) ?usize {
+        return switch (self) {
+            .sourced => |d| {
+                const field = d
+                    .lookupField(scope.file.get(types).source, name) orelse return null;
+                return utils.indexOfPtr(u32, d.fields.items(.offset), field);
+            },
+            .generated => |d| for (d.fields, 0..) |f, i| {
+                if (std.mem.eql(u8, f, name)) break i;
+            } else null,
+        };
+    }
+
+    pub fn fieldCount(self: Decls) usize {
+        return switch (self) {
+            inline else => |s| s.fields.len,
+        };
+    }
+
+    pub fn fieldPos(self: Decls, index: usize) ?u32 {
+        return switch (self) {
+            .sourced => |s| s.fields.items(.offset)[index],
+            .generated => null,
+        };
+    }
+
+    pub fn fieldName(self: Decls, scope: Scope, types: *Types, index: usize) []const u8 {
+        return switch (self) {
+            .sourced => |s| Lexer.peekStr(
+                scope.file.get(types).source,
+                s.fields.items(.offset)[index],
+            ),
+            .generated => |g| g.fields[index],
+        };
+    }
+};
+
+pub const GenDecls = struct {
+    fields: [][]u8,
+};
+
 pub const Metrics = utils.TimeMetrics(enum {
     vm,
     lookup_ident,
@@ -187,7 +239,7 @@ pub const UnorderedScope = union(enum(u8)) {
 
     pub fn decls(self: @This(), types: *Types) *const DeclIndex {
         return switch (self) {
-            inline else => |v| v.get(types).decls,
+            inline else => |v| v.get(types).decls.compat(),
         };
     }
 };
@@ -260,12 +312,16 @@ pub const AnyScope = union(enum(u8)) {
         return switch (self) {
             inline .Func, .Template => |f| f.get(types).scope.parent
                 .data().downcast(AnyScope).?.decls(types),
-            inline else => |v| v.get(types).decls,
+            inline else => |v| v.get(types).decls.compat(),
         };
     }
 };
 
 pub const generic = struct {
+    pub fn fieldName(self: anytype, types: *Types, index: usize) []const u8 {
+        return self.decls.fieldName(self.scope, types, index);
+    }
+
     pub fn format_(self: anytype, types: *Types, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         return switch (self.*) {
             inline else => |t| t.get(types).format_(types, writer),
@@ -273,9 +329,7 @@ pub const generic = struct {
     }
 
     pub fn lookupField(self: anytype, types: *Types, name: []const u8) ?usize {
-        const field = self.decls
-            .lookupField(self.scope.file.get(types).source, name) orelse return null;
-        return utils.indexOfPtr(u32, self.decls.fields.items(.offset), field);
+        return self.decls.lookupField(self.scope, types, name);
     }
 
     pub fn hashScope(self: anytype, _: *Types) u64 {
@@ -537,7 +591,7 @@ pub const Id = enum(u32) {
         return @intCast(switch (self.data()) {
             .Slice, .Pointer, .Builtin, .Option => 0,
             .Array => |a| a.get(types).len.s,
-            inline .Struct, .Enum, .Union => |s| s.get(types).decls.fields.len,
+            inline else => |s| s.get(types).decls.fieldCount(),
             .FuncTy => |f| f.get(types).args.len,
         });
     }
@@ -914,7 +968,7 @@ pub const Option = struct {
                 else => return .not_computed,
             },
             .Union => return .not_computed,
-            .Enum => |e| return if (e.get(types).decls.fields.len == 0)
+            .Enum => |e| return if (e.get(types).decls.fieldCount() == 0)
                 .empty
             else
                 .not_computed,
@@ -976,7 +1030,7 @@ pub const StructId = EntId(Struct, "structs");
 pub const Struct = struct {
     scope: Scope,
     captures: Captures,
-    decls: *const DeclIndex,
+    decls: Decls,
     layout: ?Layout = null,
 
     pub const Layout = struct {
@@ -988,6 +1042,37 @@ pub const Struct = struct {
             default: GlobalId,
             offset: Size,
         };
+
+        pub fn compute(self: *Layout, types: *Types, hard_align: ?Size) void {
+            for (self.fields) |*slot| {
+                self.spec.alignment = @max(
+                    self.spec.alignment,
+                    slot.ty.alignmentPow(types),
+                );
+                self.spec.size = std.mem.alignForward(
+                    Size,
+                    self.spec.size,
+                    @min(
+                        slot.ty.alignment(types),
+                        hard_align orelse self.spec.alignmentBytes(),
+                    ),
+                );
+
+                slot.offset = self.spec.size;
+
+                self.spec.size += slot.ty.size(types);
+            }
+
+            if (hard_align) |alignm| {
+                self.spec.alignment = std.math.log2_int(u64, alignm);
+            }
+
+            self.spec.size = std.mem.alignForward(
+                Size,
+                self.spec.size,
+                self.spec.alignmentBytes(),
+            );
+        }
     };
 
     pub fn format_(self: *Struct, types: *Types, writer: *std.Io.Writer) error{WriteFailed}!void {
@@ -1006,23 +1091,19 @@ pub const Struct = struct {
         try self.scope.format_(types.structs.ptrToIndex(self), types, writer);
     }
 
-    pub fn fieldName(self: *Struct, types: *Types, index: usize) []const u8 {
-        return Lexer.peekStr(
-            self.scope.file.get(types).source,
-            self.decls.fields.items(.offset)[index],
-        );
-    }
-
     pub const lookupField = generic.lookupField;
+    pub const fieldName = generic.fieldName;
 
     pub fn getLayout(self: *Struct, types: *Types) *Layout {
         if (self.layout) |*l| return l;
 
         const file = self.scope.file.get(types);
 
+        const decls = self.decls.sourced;
+
         self.layout = Layout{
             .spec = .{ .size = 0, .alignment = 0 },
-            .fields = types.arena.alloc(Layout.Field, self.decls.fields.len),
+            .fields = types.arena.alloc(Layout.Field, decls.fields.len),
         };
         const layout = &self.layout.?;
 
@@ -1041,9 +1122,9 @@ pub const Struct = struct {
 
         var hard_align: ?Size = null;
         haling: {
-            if (self.decls.start == 0) break :haling;
+            if (decls.start == 0) break :haling;
 
-            var lex = Lexer.init(file.source, self.decls.start);
+            var lex = Lexer.init(file.source, decls.start);
             _ = lex.slit(.@"struct"); // maybe shift this after the keyword?
 
             if (lex.eatMatch(.@"align")) {
@@ -1055,7 +1136,7 @@ pub const Struct = struct {
             }
         }
 
-        for (@as([]u32, self.decls.fields.items(.offset)), 0..) |o, i| {
+        for (@as([]u32, decls.fields.items(.offset)), 0..) |o, i| {
             const slot = &layout.fields[i];
             var lex = Lexer.init(file.source, o);
 
@@ -1083,34 +1164,9 @@ pub const Struct = struct {
 
                 glob_gen.evalGlobal(&lex, slot.ty, slot.default);
             }
-
-            layout.spec.alignment = @max(
-                layout.spec.alignment,
-                slot.ty.alignmentPow(types),
-            );
-            layout.spec.size = std.mem.alignForward(
-                u58,
-                layout.spec.size,
-                @min(
-                    slot.ty.alignment(types),
-                    hard_align orelse layout.spec.alignmentBytes(),
-                ),
-            );
-
-            slot.offset = layout.spec.size;
-
-            layout.spec.size += slot.ty.size(types);
         }
 
-        if (hard_align) |alignm| {
-            layout.spec.alignment = std.math.log2_int(u64, alignm);
-        }
-
-        layout.spec.size = std.mem.alignForward(
-            u58,
-            layout.spec.size,
-            layout.spec.alignmentBytes(),
-        );
+        layout.compute(types, hard_align);
 
         return layout;
     }
@@ -1120,7 +1176,7 @@ pub const EnumId = EntId(Enum, "enums");
 pub const Enum = struct {
     scope: Scope,
     captures: Captures,
-    decls: *const DeclIndex,
+    decls: Decls,
     layout: ?Layout = null,
 
     pub const Layout = struct {
@@ -1129,6 +1185,21 @@ pub const Enum = struct {
 
         pub fn backingInteger(self: *Layout) Id {
             return @enumFromInt(@intFromEnum(Id.u8) + self.spec.alignment);
+        }
+
+        pub fn compute(self: *Layout) void {
+            var max_value: i64 = 0;
+            for (self.fields) |value| {
+                max_value = @max(max_value, value);
+            }
+
+            if (self.spec.size == 0) {
+                self.spec.size = @max(8, std.math.ceilPowerOfTwo(
+                    Size,
+                    @max(64 - @clz(max_value), 1),
+                ) catch unreachable) / 8;
+                self.spec.alignment = std.math.log2_int(u64, @max(1, self.spec.size));
+            }
         }
     };
 
@@ -1141,19 +1212,22 @@ pub const Enum = struct {
     }
 
     pub const lookupField = generic.lookupField;
+    pub const fieldName = generic.fieldName;
 
     pub fn getLayout(self: *Enum, types: *Types) *Layout {
         if (self.layout) |*l| return l;
 
         const file = self.scope.file.get(types);
 
+        const decls = self.decls.sourced;
+
         self.layout = Layout{
             .spec = .{ .size = 0, .alignment = 1 },
-            .fields = types.arena.alloc(i64, self.decls.fields.len),
+            .fields = types.arena.alloc(i64, decls.fields.len),
         };
         const layout = &self.layout.?;
 
-        var lex = Lexer.init(file.source, self.decls.start);
+        var lex = Lexer.init(file.source, decls.start);
 
         if (lex.eatMatch(.@"union")) {
             _ = lex.slit(.@"(");
@@ -1174,9 +1248,8 @@ pub const Enum = struct {
         var tmp = types.tmpCheckpoint();
         defer tmp.deinit();
 
-        var max_value: i64 = 0;
         var value: i64 = 0;
-        for (self.decls.fields.items(.offset), layout.fields) |f, *slt| {
+        for (decls.fields.items(.offset), layout.fields) |f, *slt| {
             var flex = Lexer.init(file.source, f);
 
             _ = flex.slit(.Ident);
@@ -1200,17 +1273,10 @@ pub const Enum = struct {
             }
 
             slt.* = value;
-            max_value = @max(max_value, value);
             value +%= 1;
         }
 
-        if (layout.spec.size == 0) {
-            layout.spec.size = @max(8, std.math.ceilPowerOfTwo(
-                Size,
-                @max(64 - @clz(max_value), 1),
-            ) catch unreachable) / 8;
-            layout.spec.alignment = std.math.log2_int(u64, @max(1, layout.spec.size));
-        }
+        layout.compute();
 
         return layout;
     }
@@ -1220,7 +1286,7 @@ pub const UnionId = EntId(Union, "unions");
 pub const Union = struct {
     scope: Scope,
     captures: Captures,
-    decls: *const DeclIndex,
+    decls: Decls,
     layout: ?Layout = null,
 
     pub const Layout = struct {
@@ -1236,9 +1302,25 @@ pub const Union = struct {
             else
                 null;
         }
+
+        pub fn compute(self: *Layout, types: *Types) void {
+            for (self.fields) |slot| {
+                self.spec.size = @max(self.spec.size, slot.size(types));
+                self.spec.alignment = @max(self.spec.alignment, slot.alignmentPow(types));
+            }
+
+            if (self.tag) |t| {
+                self.spec.alignment = @max(
+                    self.spec.alignment,
+                    Id.nany(t).alignmentPow(types),
+                );
+                self.spec.size += self.spec.alignmentBytes();
+            }
+        }
     };
 
     pub const lookupField = generic.lookupField;
+    pub const fieldName = generic.fieldName;
 
     pub fn format_(self: *Union, types: *Types, writer: *std.Io.Writer) error{WriteFailed}!void {
         try self.scope.format_(types.unions.ptrToIndex(self), types, writer);
@@ -1249,10 +1331,12 @@ pub const Union = struct {
 
         const file = self.scope.file.get(types);
 
+        const decls = self.decls.sourced;
+
         self.layout = .{
             .tag = null,
             .spec = .{ .alignment = 1, .size = 0 },
-            .fields = types.arena.alloc(Id, self.decls.fields.len),
+            .fields = types.arena.alloc(Id, decls.fields.len),
         };
         const layout = &self.layout.?;
 
@@ -1268,7 +1352,7 @@ pub const Union = struct {
         );
         _ = gen.bl.begin(.systemv, undefined);
 
-        var lex = Lexer.init(file.source, self.decls.start);
+        var lex = Lexer.init(file.source, decls.start);
         _ = lex.slit(.@"union");
         if (lex.eatMatch(.@"(")) tag: {
             const check_point = lex.cursor;
@@ -1276,7 +1360,7 @@ pub const Union = struct {
                 layout.tag = types.enums.push(&types.arena, .{
                     .scope = gen.gatherScope(),
                     .captures = .empty,
-                    .decls = self.decls, // mabye, just mabye
+                    .decls = .{ .sourced = decls },
                 });
             } else {
                 lex.cursor = check_point;
@@ -1289,25 +1373,16 @@ pub const Union = struct {
             }
         }
 
-        for (self.decls.fields.items(.offset), layout.fields) |off, *slot| {
+        for (decls.fields.items(.offset), layout.fields) |off, *slot| {
             var flex = Lexer.init(file.source, off);
 
             _ = flex.slit(.Ident);
             _ = gen.expect(&flex, .@":", "to start the field type declaration") catch {};
 
             slot.* = gen.typ(&flex) catch .never;
-
-            layout.spec.size = @max(layout.spec.size, slot.size(types));
-            layout.spec.alignment = @max(layout.spec.alignment, slot.alignmentPow(types));
         }
 
-        if (layout.tag) |t| {
-            layout.spec.alignment = @max(
-                layout.spec.alignment,
-                Id.nany(t).alignmentPow(types),
-            );
-            layout.spec.size += layout.spec.alignmentBytes();
-        }
+        layout.compute(types);
 
         return layout;
     }
@@ -1555,7 +1630,7 @@ pub fn init(
                     .name_pos = .file,
                 },
                 .captures = .empty,
-                .decls = &f.decls,
+                .decls = .{ .sourced = &f.decls },
             },
         );
     }

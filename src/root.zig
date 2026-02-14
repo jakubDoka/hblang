@@ -315,9 +315,6 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
     }
 
     var type_system_memory = Arena.init(opts.type_system_memory);
-    defer if (std.debug.runtime_safety) {
-        type_system_memory.deinit();
-    };
 
     if (opts.fmt_stdout) {
         if (lane.isRoot()) {

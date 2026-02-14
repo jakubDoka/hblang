@@ -455,6 +455,7 @@ pub const Data = struct {
     }
 
     pub fn getFuncSym(self: *Data, id: u32) ?*Sym {
+        if (self.funcs.items.len <= id) return null;
         if (self.funcs.items[id] == .invalid) return null;
         return &self.syms.items[@intFromEnum(self.funcs.items[id])];
     }
