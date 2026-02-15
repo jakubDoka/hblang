@@ -384,7 +384,12 @@ pub const Data = struct {
             gpa,
             try ensureSlot(&self.globals, gpa, opts.id),
             opts.name,
-            if (opts.value == .init) .data else if (opts.thread_local) .tls_prealloc else .prealloc,
+            if (opts.value == .init or push_uninit)
+                .data
+            else if (opts.thread_local)
+                .tls_prealloc
+            else
+                .prealloc,
             linkage,
             opts.readonly,
             false,
@@ -931,7 +936,7 @@ pub const OptOptions = struct {
 
         func.start.assertAlive();
 
-        if (minimal_only) {
+        if (false and minimal_only) {
             func.iterPeeps(ctx, Backend.idealize);
         } else {
             func.iterPeeps(ctx, Func.idealize);

@@ -798,6 +798,7 @@ pub fn regMask(
     }
 
     if (idx == 0) return writeIntMask(arena);
+
     if (node.inputs()[idx].?.data_type == .f32) return floatMask32(arena);
     if (node.inputs()[idx].?.data_type == .f64) return floatMask64(arena);
 

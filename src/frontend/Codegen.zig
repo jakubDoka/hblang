@@ -24,6 +24,7 @@ name: Types.Scope.NamePos = .empty,
 vars: std.MultiArrayList(VEntry) = .empty,
 defers: std.ArrayList(u32) = .empty,
 frozen_vars: usize = 0,
+in_type_of: bool = false,
 var_pins: BBuilder.Pins,
 ret_ty: Types.Id,
 ret_ref: ?*BNode = null,
@@ -384,6 +385,7 @@ pub fn lookupIdentDotted(self: *Codegen, scope: Types.AnyScopeRef, name: []const
     return self.lookupIdentLow(scope, name, true);
 }
 
+// TDOD: pass a position to this, it makes for a better reports
 pub fn lookupIdentLow(
     self: *Codegen,
     scope: Types.AnyScopeRef,
@@ -401,7 +403,7 @@ pub fn lookupIdentLow(
             self.vars.items(.prefix),
             Variable,
             self.vars.items(.variable),
-            file.source,
+            self.file.get(self.types).source,
             name,
         )) |variable| {
             return .variable(variable.ty, utils.indexOfPtr(
@@ -459,16 +461,6 @@ pub fn lookupIdentLow(
                 global = self.types.globals.at(global_id);
 
                 if (!slot.found_existing) {
-                    var lex = Lexer.init(file.source, pos);
-
-                    var ty: ?Types.Id = null;
-                    if (lex.eatMatch(.@":")) {
-                        ty = self.typ(&lex) catch return null;
-                        _ = lex.slit(.@"=");
-                    } else {
-                        _ = lex.slit(.@":=");
-                    }
-
                     var tmpc = self.types.tmpCheckpoint();
                     defer tmpc.deinit();
 
@@ -481,6 +473,18 @@ pub fn lookupIdentLow(
                     );
                     global_gen.name = @enumFromInt(vl.offset);
                     global_gen.target = .cmptime;
+
+                    var lex = Lexer.init(file.source, pos);
+
+                    var ty: ?Types.Id = null;
+                    if (lex.eatMatch(.@":")) {
+                        _ = global_gen.bl.begin(.systemv, undefined);
+                        ty = global_gen.typ(&lex) catch return null;
+                        global_gen.bl.func.reset();
+                        _ = lex.slit(.@"=");
+                    } else {
+                        _ = lex.slit(.@":=");
+                    }
 
                     global_gen.evalGlobal(&lex, ty, global_id);
                 }
@@ -517,8 +521,14 @@ pub fn lookupIdentLow(
         if (scope_cursor.captures(self.types).lookup(file.source, name)) |r| {
             const pos, const ty, const value = r;
             if (value) |vl| {
+                if (ty == .never) return .never;
                 return self.ctValueToValue(pos, ty, vl);
             } else {
+                if (!self.in_type_of) {
+                    self.report(pos, "accessing runtime value from a" ++
+                        " different runtime context; TODO: show from where", .{}) catch {};
+                }
+
                 return switch (ty.category(self.types)) {
                     .Impossible => .never,
                     .Imaginary => .unit(ty),
@@ -1058,8 +1068,6 @@ pub fn addSliceGlobal(self: *Codegen, elem: Types.Id, len: usize, dest: *[16]u8)
 }
 
 pub fn emitCtFuncs(self: *Codegen, until: usize, relocs_until: usize) bool {
-    var failed = false;
-
     var tmp = self.types.tmpCheckpoint();
     defer tmp.deinit();
 
@@ -1067,6 +1075,7 @@ pub fn emitCtFuncs(self: *Codegen, until: usize, relocs_until: usize) bool {
     gen.init(self.types, self.scope, .never, tmp.allocator());
     gen.target = .cmptime;
 
+    var failed = false;
     while (self.types.nextFunc(.cmptime, until)) |fnid| {
         gen.prepareForFunc(fnid);
         gen.emitFunc(fnid) catch {
@@ -1087,7 +1096,7 @@ pub fn emitGenericStore(self: *Codegen, pos: u32, dest: *BNode, value: Value) vo
     switch (value.normalized(pos, self)) {
         .empty => {},
         .value => |v| {
-            self.bl.addStore(self.sloc(pos), dest, v.data_type, v);
+            self.emitArbitraryStore(pos, dest, v, value.ty.size(self.types));
         },
         .ptr => |p| {
             self.bl.addFixedMemCpy(
@@ -1112,6 +1121,8 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
     const prev_erred = stypes.errored;
 
     const func = fnid.get(stypes);
+
+    errdefer func.corrupted = true;
 
     self.vars = .empty;
     self.var_pins = self.bl.addPins();
@@ -1298,7 +1309,9 @@ pub fn emitToBackend(
         }
     }
 
-    if (prev_err_count < self.types.errored) return;
+    if (prev_err_count < self.types.errored) {
+        return;
+    }
 
     backend.emitFunc(&self.bl.func, .{
         .id = @intFromEnum(fnid),
@@ -1453,22 +1466,32 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 return self.report(tok.pos, "this type can not be null", .{});
             }
 
-            switch (ty.category(self.types)) {
-                .Impossible => break :nl .unit(ty),
-                .Imaginary => break :nl .value(ty, self.bl.addIntImm(slc, .i8, 0)),
-                .Scalar, .Stack => {
-                    const layout = ty.data().Option.get(self.types).getLayout(self.types);
-                    const slot = self.emitLoc(tok.pos, ty, ctx);
-                    self.bl.addFieldStore(
-                        slc,
-                        slot,
-                        layout.inner.offset,
-                        layout.inner.storage.dataType(),
-                        self.bl.addIntImm(slc, layout.inner.storage.dataType(), 0),
-                    );
-                    break :nl .ptr(ty, slot);
-                },
+            const opt = ty.data().Option.get(self.types);
+            const layout = opt.getLayout(self.types);
+            if (layout.compact) {
+                switch (opt.inner.category(self.types)) {
+                    .Impossible => unreachable,
+                    .Imaginary => unreachable,
+                    .Scalar => |dt| break :nl .value(ty, self.bl.addIntImm(slc, dt, 0)),
+                    .Stack => {},
+                }
+            } else {
+                switch (opt.inner.category(self.types)) {
+                    .Impossible => break :nl .unit(ty),
+                    .Imaginary => break :nl .value(ty, self.bl.addIntImm(slc, .i8, 0)),
+                    .Scalar, .Stack => {},
+                }
             }
+
+            const slot = self.emitLoc(tok.pos, ty, ctx);
+            self.bl.addFieldStore(
+                slc,
+                slot,
+                layout.inner.offset,
+                layout.inner.storage.dataType(),
+                self.bl.addIntImm(slc, layout.inner.storage.dataType(), 0),
+            );
+            break :nl .ptr(ty, slot);
         },
         .die => {
             self.bl.addTrap(slc, 0);
@@ -1529,10 +1552,12 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             tok.pos,
             @as(Types.Builtin, @enumFromInt(@intFromEnum(t))),
         ),
-        .Ident, .@"$" => self.lookupIdent(
-            self.scope,
-            tok.view(lex.source),
-        ) orelse .variable(.void, self.defineVariable(tok)),
+        .Ident, .@"$" => id: {
+            break :id self.lookupIdent(
+                self.scope,
+                tok.view(lex.source),
+            ) orelse .variable(.void, self.defineVariable(tok));
+        },
         .@"[" => array: {
             if (lex.eatMatch(.@"]")) {
                 break :array self.tyLit(tok.pos, self.types.sliceOf(try self.typ(lex)));
@@ -1693,6 +1718,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             const decls = self.scope.data().decls(self.types)
                 .lookupScope(tok.pos) orelse {
+                if (true) unreachable;
                 return self.report(bra.pos, "malformed " ++ @tagName(t), .{});
             };
             lex.cursor = decls.end;
@@ -2424,22 +2450,18 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             const ty = ctx.ty orelse
                 return self.report(tok.pos, "cant infer the destination type", .{});
 
-            if (lex.eatMatch(.@"(")) {
-                const scope = ty.data().downcast(Types.UnorderedScope) orelse
-                    return self.report(tok.pos, "expected type with unordered" ++
-                        " scope (struct/union/enum)", .{});
+            const scope = ty.data().downcast(Types.UnorderedScope) orelse
+                return self.report(tok.pos, "expected type with unordered" ++
+                    " scope (struct/union/enum)", .{});
 
-                const item = self.lookupIdent(
+            if (lex.eatMatch(.@"(")) {
+                const item = self.lookupIdentDotted(
                     scope.upcast(Types.AnyScope).pack(),
                     field.view(lex.source),
                 ) orelse return self.report(field.pos, "{} does not have this declaration", .{ty});
 
                 break :inferred_field self.emitCall(field.end, ctx, null, item, lex);
             } else {
-                const scope = ty.data().downcast(Types.UnorderedScope) orelse {
-                    return self.report(tok.pos, "{} does not have an unordered scope so it does not support inferred access", .{ty});
-                };
-
                 return self.lookupIdentDotted(scope.upcast(Types.AnyScope).pack(), field.view(lex.source)) orelse {
                     return self.report(tok.pos, "cant find the inferred value in {}", .{ty});
                 };
@@ -2473,6 +2495,7 @@ pub fn emitString(self: *Codegen, pos: u32, ctx: Ctx, bytes: []const u8) Value {
         .ty = self.types.arrayOf(.u8, @intCast(bytes.len)),
         .readonly = true,
     });
+    global.get(self.types).scope.name_pos = .empty;
 
     self.types.ct_backend.emitData(.{
         .id = @intFromEnum(global),
@@ -2716,6 +2739,7 @@ pub fn directive(
                 ty_gen.vars = self.vars;
                 ty_gen.cmptime_values = self.cmptime_values;
                 ty_gen.frozen_vars = self.vars.len;
+                ty_gen.in_type_of = true;
                 _ = ty_gen.bl.begin(.systemv, undefined);
 
                 break :b (try ty_gen.expr(.{}, lex)).ty;
@@ -2856,7 +2880,7 @@ pub fn directive(
             };
         },
         .len_of, .align_of, .size_of, .kind_of, .decl_count_of => {
-            var res = ctx.ty orelse .uint;
+            var res: Types.Id = ctx.ty orelse if (d == .kind_of) .u8 else .uint;
             if (!res.isBuiltin(.isInteger)) res = .uint;
 
             const ty = try self.typ(lex);
@@ -2908,7 +2932,7 @@ pub fn directive(
             var call = self.bl.addCall(
                 tmp.arena,
                 self.sloc(pos),
-                .systemv,
+                if (d == .syscall) .syscall else .ablecall,
                 .{ .special = hb.x86_64.X86_64Gen.syscall },
             );
 
@@ -2921,7 +2945,7 @@ pub fn directive(
                 if (call.abi_params.items.len - prev_len != 1 or
                     call.abi_params.items[prev_len] != .Reg)
                 {
-                    self.report(pos, "{} can not be passed by single register but" ++
+                    self.report(lex.cursor, "{} can not be passed by single register but" ++
                         " syscall/ecall call convention does not allow that", .{ty}) catch {};
                 }
             }
@@ -2974,6 +2998,34 @@ pub fn directive(
             call.pushArg(&self.bl, slc, .{ .Reg = .i64 }, ty_slot, 0);
 
             break :d self.endComptimeEca(pos, &call, ty, slot);
+        },
+        .field_name => {
+            const ty = try self.typ(lex);
+
+            const uno = ty.data().downcast(Types.UnorderedScope) orelse {
+                return self.report(lex.cursor, "{} is not a type with fields", .{ty});
+            };
+
+            const decl = uno.decls2(self.types);
+
+            try self.expectNext(iter);
+
+            const idx_vl = try self.typedExpr(.uint, .{}, lex);
+            const idx = try self.peval(lex.cursor, idx_vl, i64);
+
+            if (idx < 0 or idx >= decl.fieldCount()) {
+                return self.report(
+                    lex.cursor,
+                    "{} has {} fields, but the index is {}",
+                    .{ ty, decl.fieldCount(), idx },
+                );
+            }
+
+            break :d self.emitString(pos, ctx, decl.fieldName(
+                uno.scope(self.types).*,
+                self.types,
+                @intCast(idx),
+            ));
         },
         else => {
             lex.eatUntilClosingDelimeter();
@@ -3795,11 +3847,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                         if (is_unwrap) {
                             res.set(unwrapped.value);
                         } else {
-                            res.set(.value(.bool, self.bl.addIntImm(
-                                slc,
-                                .i8,
-                                0,
-                            )));
+                            res.set(.value(.bool, self.bl.addIntImm(slc, .i8, 1)));
                         }
 
                         break :or_;
@@ -3845,7 +3893,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
                 res.set(.value(.bool, self.bl.addPhi(
                     slc,
-                    self.bl.addIntImm(slc, .i8, 0),
+                    self.bl.addIntImm(slc, .i8, 1),
                     alt.load(self),
                 )));
             }
@@ -4957,6 +5005,11 @@ pub fn emitArbitraryStore(
     var offset: Types.Size = 0;
     const slc = self.sloc(pos);
 
+    if (value.data_type.size() == size) {
+        self.bl.addStore(slc, ptr, value.data_type, value);
+        return;
+    }
+
     std.debug.assert(!value.data_type.isFloat()); // TODO
 
     // TODO: this will be incorrect on ARM
@@ -5360,6 +5413,11 @@ pub fn partialEval(self: *Codegen, vl: *BNode) error{Report}!*BNode {
             return try self.partialEvalGlobal(value);
         },
         .CInt => return value,
+        .UnOp => {
+            _ = try self.partialEval(value.inputs()[1].?);
+            value = self.bl.peep(value);
+            return value;
+        },
         .BinOp => {
             value.lockTmp();
             _ = try self.partialEval(value.inputs()[1].?);
@@ -5764,6 +5822,8 @@ pub fn partialEvalCall(
     const fnid: Types.FuncId = @enumFromInt(call.extra(.Call).id);
 
     if (call.extra(.Call).id != comptime_only_fn) {
+        if (fnid.get(self.types).corrupted) return error.Report;
+
         fnid.get(self.types).queue(.cmptime, self.types);
 
         if (self.emitCtFuncs(until, self.types.ct_backend.mach.out.relocs.items.len)) {
@@ -6087,24 +6147,19 @@ pub fn popScope(self: *Codegen, scope_marker: usize) void {
     self.vars.len = scope_marker;
 }
 
-pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
-    _ = gpa;
-    const root = File.Id.root.get(types);
-    const root_scope = File.Id.root.getScope(types);
-
-    errdefer {
-        root.decls.log(0, types.loader.diagnostics.?) catch {};
-    }
-
-    var tmp = types.tmpCheckpoint();
-    defer tmp.deinit();
-
-    var self: Codegen = undefined;
-    self.init(types, .nany(root_scope), .never, tmp.allocator());
-    _ = self.bl.begin(.systemv, undefined);
-
+pub fn collectExports(types: *Types) !void {
     var has_main = false;
-    for (types.files) |f| {
+    for (types.files, 0..) |f, i| {
+        const id: File.Id = @enumFromInt(i);
+        const scope = id.getScope(types);
+
+        var tmp = types.tmpCheckpoint();
+        defer tmp.deinit();
+
+        var self: Codegen = undefined;
+        self.init(types, .nany(scope), .never, tmp.allocator());
+        _ = self.bl.begin(.systemv, undefined);
+
         for (f.decls.exports) |epos| {
             var elex = Lexer.init(f.source, epos);
             const kind = elex.next().kind;
@@ -6147,6 +6202,7 @@ pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
                     const func: Types.FuncId = @enumFromInt(value.@"inline");
                     func.get(types).linkage = .exported;
                     func.get(types).queue(.runtime, types);
+                    std.debug.assert(func.get(types).scope.file == id); // TODO
                     func.get(types).scope.name_pos = self.name;
                 },
                 .@"@handler" => {
@@ -6214,12 +6270,12 @@ pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
                             ) catch continue;
                         }
 
-                        for (expected.args, supplied.args, 0..) |ea, sa, i| {
+                        for (expected.args, supplied.args, 0..) |ea, sa, j| {
                             if (ea != sa) {
                                 self.report(
                                     name_tok.pos,
                                     "argument {} mismatch, expected {}, got {}",
-                                    .{ i, ea, sa },
+                                    .{ j, ea, sa },
                                 ) catch continue;
                             }
                         }
@@ -6241,6 +6297,15 @@ pub fn collectExports(types: *Types, gpa: std.mem.Allocator) !void {
     }
 
     if (!has_main) {
+        const root_scope = File.Id.root.getScope(types);
+
+        var tmp = types.tmpCheckpoint();
+        defer tmp.deinit();
+
+        var self: Codegen = undefined;
+        self.init(types, .nany(root_scope), .never, tmp.allocator());
+        _ = self.bl.begin(.systemv, undefined);
+
         const main = self.lookupIdent(.nany(root_scope), "main") orelse {
             if (types.loader.diagnostics) |diags| {
                 try diags.writeAll(
@@ -6603,7 +6668,7 @@ pub const Class = enum(u8) {
 pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void {
     utils.Arena.tryInitScratch(1024 * 1024);
 
-    var scratch = utils.Arena.init(1024 * 1024 * 32);
+    var scratch = utils.Arena.init(1024 * 1024 * 64);
     var writer = std.fs.File.stderr().writer(&.{});
     const wint = &writer.interface;
     //var writer = std.Io.Writer.Discarding.init(&.{});
@@ -6625,7 +6690,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     var types = Types.init(asts, &kl.loader, @tagName(target), backend, scratch, gpa);
     defer types.deinit();
 
-    try collectExports(&types, gpa);
+    try collectExports(&types);
 
     const opt_mode = Machine.OptOptions{
         .mode = .release,
@@ -6829,6 +6894,63 @@ pub fn parseExample(
     len += 1;
 
     return .{ asts[0..len], kl };
+}
+
+pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
+    if (std.mem.indexOf(u8, path, "inf") != null) return;
+    if (std.mem.indexOf(u8, path, "struct-niches") != null) return;
+    //if (std.mem.indexOf(u8, path, "json") != null) return;
+    if (std.mem.indexOf(u8, path, "float") != null) return;
+
+    utils.Arena.initScratch(1024 * 1024 * 32);
+    defer utils.Arena.deinitScratch();
+
+    if (projs.len == 0) { // for hblsp tests
+        _ = try runVendoredTestLow(path, projs, "hbvm-ableos", .release);
+        _ = try runVendoredTestLow(path, projs, "hbvm-ableos-no-opts", .debug);
+
+        if (false and std.mem.indexOf(u8, path, "almighty-ops") == null) {
+            _ = try runVendoredTestLow(path, projs, "wasm-freestanding", .release);
+            _ = try runVendoredTestLow(path, projs, "wasm-freestanding-no-opts", .debug);
+        }
+    }
+    if (true) {
+        _ = try runVendoredTestLow(path, projs, "x86_64-linux", .release);
+        _ = try runVendoredTestLow(path, projs, "x86_64-linux-no-opts", .debug);
+    }
+}
+
+pub fn runVendoredTestLow(
+    path: []const u8,
+    projs: []const [2][]const u8,
+    target: []const u8,
+    optimizations: Machine.OptOptions.Mode,
+) !void {
+    const stderr = std.fs.File.stderr();
+    var stderr_writer = stderr.writer(&.{});
+
+    var opts = hb.CompileOptions{
+        .diagnostics = &stderr_writer.interface,
+        .colors = std.io.tty.detectConfig(std.fs.File.stderr()),
+        .error_colors = std.io.tty.detectConfig(std.fs.File.stderr()),
+        .mangle_terminal = true,
+        .vendored_test = true,
+        .root_file = path,
+        .target = Machine.SupportedTarget.fromStr(target).?,
+        .optimizations = optimizations,
+    };
+    const scratch = utils.Arena.scrath(null);
+
+    opts.path_projection.ensureTotalCapacity(
+        scratch.arena.allocator(),
+        @intCast(projs.len),
+    ) catch unreachable;
+    for (projs) |proj| {
+        opts.path_projection
+            .putAssumeCapacity(proj[0], proj[1]);
+    }
+
+    try hb.compile(opts);
 }
 
 pub fn gatherScope(self: *Codegen) Types.Scope {

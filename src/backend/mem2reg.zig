@@ -180,12 +180,15 @@ pub fn Mixin(comptime Backend: type) type {
                     }
 
                     for (offsets.items) |off| {
-                        if (off.offset <= offs and offs < off.offset + (@as(u64, 1) << off.size)) {
-                            if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
-                                continue :outer;
-                            }
-                            break;
+                        if (off.offset > offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
+                            continue;
                         }
+
+                        if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
+                            continue :outer;
+                        }
+
+                        break;
                     } else {
                         try offsets.append(tmp.arena.allocator(), .{
                             .offset = @intCast(offs),

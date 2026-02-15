@@ -431,13 +431,13 @@ pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.No
     };
 }
 
-pub fn mergeScopes(
+pub fn evenOutScopes(
     func: *Func,
     lhs: SpecificNode(.Scope),
     rhs: SpecificNode(.Scope),
-) SpecificNode(.Scope) {
-    var lhs_values = getScopeValues(lhs);
-    var rhs_values = getScopeValues(rhs);
+) void {
+    const lhs_values = getScopeValues(lhs);
+    const rhs_values = getScopeValues(rhs);
 
     const relevant_size = @max(lhs_values.len, rhs_values.len);
 
@@ -450,14 +450,22 @@ pub fn mergeScopes(
         const other = lhs_values[i];
         _ = pushToScopeFn(func, rhs, func.addUninit(other.sloc, other.data_type));
     }
+}
 
-    lhs_values = getScopeValues(lhs);
-    rhs_values = getScopeValues(rhs);
+pub fn mergeScopes(
+    func: *Func,
+    lhs: SpecificNode(.Scope),
+    rhs: SpecificNode(.Scope),
+) SpecificNode(.Scope) {
+    evenOutScopes(func, lhs, rhs);
+
+    const lhs_values = getScopeValues(lhs);
+    const rhs_values = getScopeValues(rhs);
 
     const new_ctrl = func.addNode(.Region, .none, .top, &.{ lhs_values[0], rhs_values[0] }, .{});
 
     const start = 1;
-    for (lhs_values[start..relevant_size], rhs_values[start..relevant_size], start..) |lh, rh, i| {
+    for (lhs_values[start..], rhs_values[start..], start..) |lh, rh, i| {
         if (lh == rh) continue;
         const thn = getScopeValueMulty(func, lhs, i);
         const els = getScopeValueMulty(func, rhs, i);
@@ -623,13 +631,17 @@ pub const Loop = struct {
             }
         }
 
-        const init_values = getScopeValues(self.scope.node);
+        var init_values = getScopeValues(self.scope.node);
 
         if (init_values.len == 0) return;
 
         const start = 1;
         if (builder.scope) |backedge| {
+            evenOutScopes(&builder.func, self.scope.node, backedge);
+
+            init_values = getScopeValues(self.scope.node);
             const update_values = getScopeValues(backedge);
+
             for (init_values[start..], update_values[start..]) |ini, update| {
                 // NOTE: first value is the cfg
                 if (ini.isLazyPhi(init_values[0])) {
@@ -668,8 +680,9 @@ pub const Loop = struct {
             return;
         };
 
-        const exit_values = getScopeValues(exit)[0..init_values.len];
-        for (init_values[start..], exit_values[start..], start..) |ini, exi, i| {
+        const exit_values = getScopeValues(exit);
+        const bound = @min(init_values.len, exit_values.len);
+        for (init_values[start..bound], exit_values[start..bound], start..) |ini, exi, i| {
             if (exi.kind == .Scope) {
                 builder.func.setInputNoIntern(exit, i, ini);
             }

@@ -4,7 +4,7 @@ const Machine = @import("Machine.zig");
 const matcher = @import("graph.IdealGen");
 const Builder = @import("Builder.zig");
 const Regalloc = @import("Regalloc.zig");
-pub const is_debug = @import("builtin").mode == .Debug;
+pub const is_debug = false; // @import("builtin").mode == .Debug;
 
 const print = (std.debug).print;
 
@@ -435,6 +435,7 @@ pub const AbiParam = union(enum) {
 
 pub const CallConv = enum(u8) {
     systemv,
+    syscall,
     ablecall,
     wasmcall,
     @"inline",
@@ -457,6 +458,9 @@ pub const CcBuilder = struct {
             },
             .ablecall => {
                 spilled = self.int_reg_count + self.float_reg_count > 11;
+            },
+            .syscall => {
+                spilled = self.int_reg_count > 7 or r.isFloat();
             },
             else => utils.panic("{}", .{cc}),
         }

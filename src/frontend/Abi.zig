@@ -34,7 +34,7 @@ pub const Buf = struct {
 pub fn isRetByRef(abi: Abi, self: Spec) bool {
     const pr = self orelse return false;
     return switch (abi.cc) {
-        .systemv => pr.len > 1 or (pr.len != 0 and pr[0] != .Reg),
+        .systemv, .syscall => pr.len > 1 or (pr.len != 0 and pr[0] != .Reg),
         .ablecall, .wasmcall => pr.len == 1 and pr[0] != .Reg,
         .@"inline" => unreachable,
     };
@@ -61,7 +61,7 @@ pub fn categorizeAssumeReg(self: Abi, ty: Id, types: *Types) graph.DataType {
 
 pub fn categorize(self: Abi, ty: Id, types: *Types, buf: *Buf) ?[]graph.AbiParam {
     switch (self.cc) {
-        .ablecall, .wasmcall, .systemv => switch (ty.data()) {
+        .ablecall, .wasmcall, .systemv, .syscall => switch (ty.data()) {
             else => {
                 // NOTE: well, maybe we can improve some stuff, but eh
                 categorizeSystemv(ty, buf, types) catch |err| switch (err) {

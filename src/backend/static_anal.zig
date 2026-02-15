@@ -191,6 +191,7 @@ pub fn Anal(comptime Backend: type) type {
                     const store = ao.get().knownStore(arg) orelse continue;
 
                     if (store.value() != null and store.value().?.kind == .Local) {
+                        if (store.value().?.inputs()[1].?.extra(.LocalAlloc).size == 0) continue;
                         try local_stores.append(tmp.arena.allocator(), store);
                     }
                 }
@@ -260,8 +261,8 @@ pub fn Anal(comptime Backend: type) type {
             // note: assuming store->load peepholes are all applied, walking loads should be redundant
             var i: usize = 0;
             while (i < frontier.entries.len) : (i += 1) {
-                const nd = frontier.entries.items(.key)[i];
-                if (nd.kind == .Local) {
+                const nd: *Node = frontier.entries.items(.key)[i];
+                if (nd.kind == .Local and nd.inputs()[1].?.extra(.LocalAlloc).size != 0) {
                     self.addError(.{ .ReturningStack = .{ .slot = nd.sloc } });
                 } else if (nd.kind == .Phi) {
                     for (nd.inputs()[1..]) |n| {

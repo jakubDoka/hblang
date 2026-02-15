@@ -61,6 +61,7 @@ pub const utils = @import("utils-lib");
 pub const diff = @import("diff.zig");
 pub const lane = utils.lane;
 pub const runTest = frontend.Codegen.runTest;
+pub const runVendoredTest = frontend.Codegen.runVendoredTest;
 
 test {
     std.testing.refAllDeclsRecursive(@This());
@@ -417,7 +418,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
     defer lane.sync(.{});
 
-    hb.frontend.Codegen.collectExports(&types, opts.gpa) catch return error.Failed;
+    hb.frontend.Codegen.collectExports(&types) catch return error.Failed;
     hb.frontend.Codegen.emitReachable(&types, opts.gpa, opt_options);
 
     if (types.errored > 0) {
@@ -642,17 +643,17 @@ const Loader = struct {
         {
             defer self.shared.lobby.signal();
 
-            const arena = self.arena;
-
             self.shared.state_lock.lock();
             defer self.shared.state_lock.unlock();
 
             // This search might be too slow, but we want such problems
             for (self.shared.files.items, 0..) |fl, i| {
-                if (std.mem.eql(u8, fl.path, canon)) return @enumFromInt(i);
+                if (std.mem.eql(u8, fl.path, canon)) {
+                    return @enumFromInt(i);
+                }
             }
 
-            const slot = self.shared.files.addOne(arena.allocator()) catch unreachable;
+            const slot = self.shared.files.addOne(self.arena.allocator()) catch unreachable;
             slot.path = self.arena.dupe(u8, canon);
 
             return @enumFromInt(self.shared.files.items.len - 1);
@@ -697,6 +698,7 @@ const Loader = struct {
 
         var self = Loader{ .arena = scratch, .shared = shared, .gpa = gpa };
         self.loader.colors = colors;
+        self.loader.diagnostics = diagnostics;
 
         while (true) {
             var tmp = root_tmp.arena.checkpoint();
@@ -752,7 +754,7 @@ const Loader = struct {
             };
 
             self.loader.from = @enumFromInt(i);
-            self.loader.path = path;
+            self.loader.path = slot_path;
 
             const file = hb.frontend.DeclIndex.File
                 .init(source, &self.loader, self.arena);

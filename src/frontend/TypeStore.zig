@@ -242,6 +242,12 @@ pub const UnorderedScope = union(enum(u8)) {
             inline else => |v| v.get(types).decls.compat(),
         };
     }
+
+    pub fn decls2(self: @This(), types: *Types) Decls {
+        return switch (self) {
+            inline else => |v| v.get(types).decls,
+        };
+    }
 };
 
 pub const ParentRef = enum(u32) {
@@ -1435,6 +1441,7 @@ pub const Func = struct {
     pos: u32,
     compiled: std.EnumSet(Target) = .initEmpty(),
     linkage: Machine.Data.Linkage = .local,
+    corrupted: bool = false,
 
     pub const Param = extern struct {
         value: ComptimeValue,
@@ -1600,7 +1607,7 @@ pub fn init(
 
     self.roots = self.arena.alloc(StructId, files.len);
 
-    self.tmp = self.arena.subslice(1024 * 1024);
+    self.tmp = self.arena.subslice(1024 * 1024 * 16);
 
     // NOTE: god for now, will be configured later
     self.ct_backend.mach.out.code = .initBuffer(self.arena.subslice(1024 * 1024 * 16).asSlice());

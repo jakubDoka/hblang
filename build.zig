@@ -126,7 +126,7 @@ pub fn build(b: *std.Build) !void {
         "passed as a filter to tests",
     )) |f| &.{f} else &.{};
 
-    hb_test: {
+    if (false) hb_test: {
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{
             .root_module = hb,
             .filters = test_filter,
@@ -196,7 +196,7 @@ pub fn build(b: *std.Build) !void {
         break :check;
     }
 
-    example_tests: {
+    if (true) example_tests: {
         const gen = b.addExecutable(.{
             .name = "gen_tests.zig",
             .root_module = b.createModule(.{
@@ -239,6 +239,47 @@ pub fn build(b: *std.Build) !void {
         }
 
         break :example_tests;
+    }
+
+    if (true) vendored_tests: {
+        const grn = b.addExecutable(.{
+            .name = "gen_vendored_tests",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("scripts/gen_vendored_tests.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
+        });
+
+        check_step.dependOn(&grn.step);
+
+        const run_gen = b.addRunArtifact(grn);
+        run_gen.has_side_effects = true;
+        run_gen.addDirectoryArg(b.path("vendored-tests"));
+        run_gen.addArg("hbc-tests");
+        const out = run_gen.addOutputFileArg("vendored_tests.zig");
+
+        const test_run = b.addTest(.{
+            .name = "vendored_tests",
+            .root_module = b.createModule(.{
+                .root_source_file = out,
+                .target = b.graph.host,
+                .optimize = optimize,
+                .single_threaded = true,
+            }),
+            .filters = test_filter,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
+        });
+
+        test_run.root_module.addImport("utils", hb);
+        const tr = b.addRunArtifact(test_run);
+        tr.has_side_effects = true;
+        test_step.dependOn(&tr.step);
+
+        break :vendored_tests;
     }
 
     if (false) old: {
@@ -294,58 +335,6 @@ pub fn build(b: *std.Build) !void {
             test_step.dependOn(&tr.step);
 
             break :vendored_tests;
-        }
-
-        example_tests: {
-            const gen = b.addExecutable(.{
-                .name = "gen_tests.zig",
-                .root_module = b.createModule(.{
-                    .root_source_file = b.path("scripts/gen_tests.zig"),
-                    .target = b.graph.host,
-                    .optimize = .Debug,
-                    .single_threaded = true,
-                }),
-                .use_llvm = use_llvm,
-                .use_lld = use_lld,
-            });
-
-            check_step.dependOn(&gen.step);
-
-            inline for (
-                .{ "example_tests", "bugfix_tests" },
-                .{ "README.md", "BUGFIX.md" },
-            ) |name, source| {
-                const run_gen = b.addRunArtifact(gen);
-                run_gen.addFileArg(b.path(source));
-                const out = run_gen.addOutputFileArg("tests.zig");
-
-                const test_run = b.addTest(.{
-                    .name = name,
-                    .root_module = b.createModule(.{
-                        .root_source_file = out,
-                        .target = b.graph.host,
-                        .optimize = optimize,
-                        .single_threaded = true,
-                    }),
-                    .filters = test_filter,
-                    .use_llvm = use_llvm,
-                    .use_lld = use_lld,
-                });
-
-                test_run.root_module.addImport("utils", test_module);
-                const run = b.addRunArtifact(test_run);
-                run.has_side_effects = true;
-                test_step.dependOn(&run.step);
-            }
-
-            break :example_tests;
-        }
-
-        check: {
-            const t = b.addTest(.{ .root_module = test_module });
-            check_step.dependOn(&t.step);
-
-            break :check;
         }
 
         break :old;

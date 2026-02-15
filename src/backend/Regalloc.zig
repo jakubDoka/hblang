@@ -127,6 +127,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         mask: Set,
         def: *Node,
         failed: bool = false,
+        failed_to_color: bool = false,
         self_conflict: bool = false,
         reg: u16 = unresolved_reg,
 
@@ -134,10 +135,15 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
         pub fn format(self: *const LiveRange, writer: *std.Io.Writer) !void {
             try writer.writeAll("def: ");
-            try self.def.format(writer);
+            if (!self.def.isDead()) {
+                try self.def.format(writer);
+            }
             try writer.writeAll(", ");
             try writer.writeAll("mask: ");
             try writer.print("{x:016} ", .{self.mask.mask});
+            if (self.reg != unresolved_reg) {
+                try writer.print("reg: {}", .{self.reg});
+            }
             // if (self.killed_by) |k| {
             //     try writer.writeAll("\n\tkilled by: ");
             //     try k.format(a, b, writer);
@@ -327,6 +333,23 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         pub fn easierToColorThen(self: LiveRange, other: LiveRange) bool {
             return self.mask.count() > other.mask.count();
         }
+
+        pub const max_risky_score = 100000;
+
+        pub fn riskyScore(self: LiveRange) usize {
+            if (self.def.isClone()) {
+                const pos = self.def.cfg0().base.posOfOutput(0, self.def);
+                for (self.def.outputs()) |o| {
+                    if (o.get().cfg0() != self.def.cfg0() or
+                        pos != o.get().cfg0().base.posOfOutput(0, o.get()) - 1)
+                    {
+                        return max_risky_score;
+                    }
+                }
+            }
+
+            return 1000;
+        }
     };
 
     const LiveMap = Map(u16, *Node);
@@ -503,7 +526,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
             if (should_log) for (members.entries.items(.key)) |o| {
                 const depth = func.loopDepth(o);
-                print("|- [{}] {f}\n", .{ depth, o });
+                print("|- [{}] {x:08} {f}\n", .{ depth, if (o.schedule != std.math.maxInt(u16)) lrg_table[o.schedule].mask.mask else 0, o });
             };
 
             var call_cnt: usize = 0;
@@ -584,7 +607,9 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                             !dep.isClone() and !dep.isReadonly() and
                             // NOTE: more then one call, so we absolutely need to split on it
                             // or we get into a split loop
-                            (call_cnt < 2 or member.kind != .Call)) continue;
+                            (call_cnt < 2 or member.kind != .Call) and
+                            // interesting
+                            !lrg.failed_to_color) continue;
 
                         func.splitBefore(member, j, dep, false, .@"use/loop/use", scnt);
                     }
@@ -993,7 +1018,23 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
     while (done_cursor < color_stack.len) : (done_cursor += 1) {
         if (done_cursor == known_cursor) {
-            // TODO: add heuristic
+            if (true) {
+                var best = known_cursor;
+                var best_score = lrgs[color_stack[best]].riskyScore();
+                for (best + 1..color_stack.len) |idx| {
+                    if (best_score == LiveRange.max_risky_score) break;
+                    const score = lrgs[color_stack[idx]].riskyScore();
+                    if (score > best_score) {
+                        best_score = score;
+                        best = idx;
+                    }
+                }
+
+                if (best != known_cursor) {
+                    swap(&color_stack[known_cursor], &color_stack[best]);
+                }
+            }
+
             known_cursor += 1;
         }
 
@@ -1053,6 +1094,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             lrg.reg = @intCast(reg);
         } else {
             lrg.fail(lrgs, &failed);
+            lrg.failed_to_color = true;
         }
     }
 

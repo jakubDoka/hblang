@@ -255,8 +255,10 @@ pub fn buildLow(
     var scope_nesting_stack = std.ArrayList(@TypeOf(subscope))
         .initBuffer(&buf);
 
-    while (true) {
-        const tok = bl.lexer.next();
+    var prev_tok: Lexer.Token = .init(0, 0, .@"{");
+    var tok: Lexer.Token = undefined;
+    while (true) : (prev_tok = tok) {
+        tok = bl.lexer.next();
         switch (tok.kind) {
             .Eof => {
                 bl.depth = init_depth;
@@ -265,14 +267,10 @@ pub fn buildLow(
             .@"." => {
                 if (bl.depth != init_depth) continue;
                 const ident = bl.lexer.next();
-                const peek = bl.lexer.peekNext();
-                if (ident.kind == .Ident and
-                    (peek.kind == .@"}" or
-                        peek.kind == .@";" or
-                        peek.kind == .@":=" or
-                        peek.kind == .@":" or
-                        peek.kind == .Ident))
-                {
+                if (ident.kind == .Ident and switch (prev_tok.kind) {
+                    .@";", .@"{", .Comment => true,
+                    else => false,
+                }) {
                     fields.append(tmp.arena.allocator(), ident.pos) catch unreachable;
                 }
             },
