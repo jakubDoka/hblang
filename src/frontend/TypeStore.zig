@@ -844,7 +844,8 @@ pub const Scope = extern struct {
     }
 
     pub const NamePos = enum(u32) {
-        tuple = std.math.maxInt(u32) - 3,
+        entry = std.math.maxInt(u32) - 4,
+        tuple,
         file,
         empty,
         _,
@@ -861,6 +862,7 @@ pub const Scope = extern struct {
                 .file => file.get(types).path,
                 .empty => "",
                 .tuple => "tuple",
+                .entry => "_start",
                 _ => |v| {
                     var str = file.get(types).tokenStr(@intFromEnum(v));
                     if (str[0] == '"') str = str[1 .. str.len - 1];

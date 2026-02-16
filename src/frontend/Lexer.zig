@@ -782,7 +782,7 @@ pub fn eatUntilClosingDelimeter(self: *@This()) void {
 pub fn list(self: *Lexer, comptime sep: Lexeme, comptime end: Lexeme) *struct {
     lexer: Lexer,
 
-    pub fn next(slf: *@This()) bool {
+    pub fn nextExt(slf: *@This()) enum { has_next, end, trailing_end } {
         const tok = slf.lexer.peekNext();
         switch (tok.kind) {
             sep => {
@@ -790,18 +790,22 @@ pub fn list(self: *Lexer, comptime sep: Lexeme, comptime end: Lexeme) *struct {
                 const ptok = slf.lexer.peekNext();
                 if (ptok.kind == end) {
                     slf.lexer.cursor = ptok.end;
-                    return false;
+                    return .trailing_end;
                 }
 
-                return true;
+                return .has_next;
             },
             end => {
                 slf.lexer.cursor = tok.end;
-                return false;
+                return .end;
             },
-            .Eof => return false,
-            else => return true,
+            .Eof => return .end,
+            else => return .has_next,
         }
+    }
+
+    pub fn next(slf: *@This()) bool {
+        return slf.nextExt() == .has_next;
     }
 
     pub fn recover(slf: *@This()) bool {

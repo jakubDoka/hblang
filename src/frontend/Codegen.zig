@@ -2257,7 +2257,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             const cx = Ctx{ .ty = self.ret_ty, .loc = self.ret_ref };
 
             var ret: Value = if (lex.peekNext().kind.canStartExpression())
-                try self.expr(cx, lex)
+                try self.exprAllowUnreachable(cx, lex)
             else
                 .voidv;
 
@@ -6294,7 +6294,13 @@ pub fn collectExports(types: *Types) !void {
         }
     }
 
-    if (!has_main) {
+    if (types.handlers.get(.entry).asOpt()) |h| {
+        h.get(types).linkage = .exported;
+        h.get(types).scope.name_pos = .entry;
+        h.get(types).queue(.runtime, types);
+    }
+
+    if (!has_main and types.handlers.get(.entry) == .invalid) {
         const root_scope = File.Id.root.getScope(types);
 
         var tmp = types.tmpCheckpoint();
@@ -6680,7 +6686,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
 
     var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
     target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
-    target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
+    //target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
 
     const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();

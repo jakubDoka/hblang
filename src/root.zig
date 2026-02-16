@@ -17,6 +17,7 @@ pub const frontend = opaque {
     pub const Abi = @import("frontend/Abi.zig");
     pub const Types = @import("frontend/TypeStore.zig");
     pub const DeclIndex = @import("frontend/DeclIndex.zig");
+    pub const Fmt = @import("frontend/Fmt.zig");
 };
 
 pub const backend = opaque {
