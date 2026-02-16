@@ -11,11 +11,11 @@
             .url = "git+https://github.com/zyantific/zycore-c.git#e008c670c2fd7e476c1c03a8d2f995d8f977ff8c",
             .hash = "N-V-__8AAJ3LBwCttPEtrDwMrR2emNETvMHllXK-1iH5Zq0C",
         },
-        .utils = .{ .path = "../utils" },
-        //.utils = .{
-        //    .url = "git+https://github.com/jakubDoka/utils#771919d10f1df557f6eaa9614713a919a403513a",
-        //    .hash = "utils-0.0.0-whqoY0TsAAAFBLBXYSPmdHZdZe5-hg-EQx2ge99-zyw4",
-        //},
+        //.utils = .{ .path = "../utils" },
+        .utils = .{
+            .url = "git+https://github.com/jakubDoka/utils#b5dece96a40570667a9bc191932eb4807c5d9cd1",
+            .hash = "utils-0.0.0-whqoYxX-AAAl9w6P9YZb4V5bv_ZDGfeVhRvKZ-bz0iJl",
+        },
     },
     .paths = .{
         "build.zig",

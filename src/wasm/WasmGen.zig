@@ -79,6 +79,7 @@ pub const Set = Regalloc.RegMask(RegTag, set_cap);
 
 pub const i_know_the_api = {};
 
+// TODO: maybe we can avoid this, but it works too well
 threadlocal var stacked: std.DynamicBitSetUnmanaged = undefined;
 
 pub fn isDef(self: *Func.Node) bool {
@@ -524,7 +525,8 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const count = func.next_id * 3; // eh
+    // Its reasonamble to assume we wont insert more nodes that this
+    const count = func.next_id * 3;
 
     stacked = try .initEmpty(tmp.arena.allocator(), count);
 
