@@ -322,12 +322,10 @@ pub fn Mixin(comptime Backend: type) type {
                 visited.setRangeValue(.{ .start = 0, .end = visited.capacity() }, false);
                 self.gcm.block_count = 0;
                 self.gcm.instr_count = 0;
-                self.start.schedule = 0;
 
                 const postorder = self.collectPostorder(tmp.arena.allocator(), &visited);
                 for (postorder) |bb| {
                     const node = &bb.base;
-                    node.schedule = self.gcm.block_count;
                     self.gcm.block_count += 1;
 
                     scheduleBlock(self, bb);
@@ -497,7 +495,7 @@ pub fn Mixin(comptime Backend: type) type {
                         if (def.cfg0() != b) continue;
                         if (def.outputs().len > 1) continue;
                         cnts[
-                            @intFromBool(meta[def.schedule].single_def or
+                            @intFromBool(meta[def.id].single_def or
                                 n.regMask(fnc, i, tmp.arena).count() == 1)
                         ] += 1;
                     }
@@ -518,10 +516,12 @@ pub fn Mixin(comptime Backend: type) type {
             defer tmp.deinit();
 
             // init meta
+            const prev_ids = tmp.arena.alloc(u32, bbn.outputs().len);
             const metas: []NodeMeta = tmp.arena.alloc(NodeMeta, bbn.outputs().len);
-            for (bbn.outputs(), metas, 0..) |in, *m, i| {
+            for (bbn.outputs(), metas, prev_ids, 0..) |in, *m, *e, i| {
                 const instr = in.get();
-                instr.schedule = @intCast(i);
+                e.* = instr.id;
+                instr.id = @intCast(i);
 
                 m.* = .{};
 
@@ -554,7 +554,7 @@ pub fn Mixin(comptime Backend: type) type {
                 if (instr.inPlaceSlot()) |slot| {
                     const def = instr.dataDeps()[slot];
                     if (def.cfg0() == bb) {
-                        m.single_def = metas[def.schedule].single_def;
+                        m.single_def = metas[def.id].single_def;
                     }
                 }
             }
@@ -562,7 +562,7 @@ pub fn Mixin(comptime Backend: type) type {
             const outs = bb.base.outputs();
             var ready: usize = 0;
             for (outs) |*o| {
-                if (metas[o.get().schedule].unscheduled_deps == 0) {
+                if (metas[o.get().id].unscheduled_deps == 0) {
                     std.mem.swap(Node.Out, &outs[ready], o);
                     ready += 1;
                 }
@@ -576,11 +576,11 @@ pub fn Mixin(comptime Backend: type) type {
                 );
 
                 var pick = scheduled;
-                var pick_priority = metas[outs[pick].get().schedule]
+                var pick_priority = metas[outs[pick].get().id]
                     .priority(func, bb, outs[pick].get(), metas);
                 for (outs[scheduled + 1 .. ready], scheduled + 1..) |n, i| {
                     const o = n.get();
-                    const o_priority = metas[o.schedule]
+                    const o_priority = metas[o.id]
                         .priority(func, bb, o, metas);
                     if (o_priority > pick_priority) {
                         pick = i;
@@ -592,20 +592,22 @@ pub fn Mixin(comptime Backend: type) type {
                 for (n.outputs()) |def| if (bb == def.get().tryCfg0() and
                     def.get().kind != .Phi)
                 {
-                    metas[def.get().schedule].unscheduled_deps -= 1;
+                    metas[def.get().id].unscheduled_deps -= 1;
                 };
 
                 std.mem.swap(Node.Out, &outs[scheduled], &outs[pick]);
                 scheduled += 1;
 
                 for (outs[ready..]) |*o| {
-                    if (metas[o.get().schedule].unscheduled_deps == 0) {
+                    if (metas[o.get().id].unscheduled_deps == 0) {
                         std.debug.assert(o.get().kind != .Phi);
                         std.mem.swap(Node.Out, &outs[ready], o);
                         ready += 1;
                     }
                 }
             };
+
+            for (bbn.outputs()) |o| o.get().id = prev_ids[o.get().id];
         }
 
         fn shedEarly(

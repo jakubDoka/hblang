@@ -31,6 +31,7 @@ pub const Ctx = struct {
     allocs: []const u16,
     ret_count: usize,
     local_relocs: std.ArrayList(Reloc),
+    schedules: []u16,
     block_offsets: []u32,
     stack_layout: graph.StackLayout,
     slot_bases: std.EnumArray(RegTag, u32),
@@ -881,6 +882,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     var used_regs = std.EnumSet(Reg){};
     for (allocs) |a| {
+        if (a == Regalloc.no_reg_sentinel) continue;
         if (std.meta.intToEnum(Reg, a)) |enm| {
             used_regs.insert(enm);
         } else |_| {
@@ -893,10 +895,10 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     var spill_slot_counts = std.EnumArray(RegTag, u32).initFill(0);
     for (func.gcm.postorder) |c| {
         for (c.base.outputs()) |inst| {
-            if (inst.get().schedule != std.math.maxInt(u16)) {
+            if (allocs[inst.get().id] != Regalloc.no_reg_sentinel) {
                 const tag = RegTag.fromDt(inst.get().data_type);
                 const slt = spill_slot_counts.getPtr(tag);
-                slt.* = @max(slt.*, allocs[inst.get().schedule] -| (16 - 1));
+                slt.* = @max(slt.*, allocs[inst.get().id] -| (16 - 1));
             }
         }
     }
@@ -946,6 +948,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         .code_base = @intCast(self.mach.out.code.items.len),
         .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),
         .local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10)),
+        .schedules = tmp.arena.alloc(u16, func.next_id),
         .block_offsets = tmp.arena.alloc(u32, postorder.len),
         .slot_bases = spill_slot_counts,
         .stack_layout = .{
@@ -981,9 +984,10 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         break :prelude;
     }
 
+    for (postorder, 0..) |bb, i| self.ctx.schedules[bb.base.id] = @intCast(i);
+
     for (postorder, 0..) |bb, i| {
-        self.ctx.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
-        std.debug.assert(bb.base.schedule == i);
+        self.ctx.block_offsets[i] = @intCast(self.mach.out.code.items.len);
 
         self.emitBlockBody(&bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1].get();
@@ -1007,7 +1011,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
             // ret
             self.emitByte(0xc3);
-        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].get().schedule) {
+        } else if (i + 1 == self.ctx.schedules[last.outputs()[@intFromBool(last.isSwapped())].get().id]) {
             // noop
         } else if (last.kind == .Never) {
             // noop
@@ -1016,7 +1020,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         } else {
             std.debug.assert(last.outputs()[0].get().isBasicBlockStart());
             self.ctx.local_relocs.appendAssumeCapacity(.{
-                .dest = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
+                .dest = self.ctx.schedules[last.outputs()[@intFromBool(last.isSwapped())].get().id],
                 .offset = @intCast(self.mach.out.code.items.len),
                 .off = 1,
                 .class = .rel32,
@@ -1295,7 +1299,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitBytes(&.{ opcode, Reg.Mod.direct.rm(cond, cond) });
 
                 self.ctx.local_relocs.appendAssumeCapacity(.{
-                    .dest = instr.outputs()[1].get().schedule,
+                    .dest = self.ctx.schedules[instr.outputs()[1].get().id],
                     .offset = @intCast(self.mach.out.code.items.len),
                     .class = .rel32,
                     .off = 2,
@@ -1316,7 +1320,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 }
 
                 self.ctx.local_relocs.appendAssumeCapacity(.{
-                    .dest = instr.outputs()[1].get().schedule,
+                    .dest = self.ctx.schedules[instr.outputs()[1].get().id],
                     .offset = @intCast(self.mach.out.code.items.len),
                     .class = .rel32,
                     .off = 2,
@@ -2082,7 +2086,7 @@ pub fn setOff(op: graph.BinOp) u8 {
 }
 
 pub fn getReg(self: X86_64Gen, node: *FuncNode) Reg {
-    return @enumFromInt(self.ctx.allocs[node.schedule]);
+    return @enumFromInt(self.ctx.allocs[node.id]);
 }
 
 // TODO: alignment

@@ -79,20 +79,18 @@ pub const Set = Regalloc.RegMask(RegTag, set_cap);
 
 pub const i_know_the_api = {};
 
+threadlocal var stacked: std.DynamicBitSetUnmanaged = undefined;
+
 pub fn isDef(self: *Func.Node) bool {
-    return self.id != on_stack_id and
+    return !stacked.isSet(self.id) and
         self.kind != .GetLocal and
         self.kind != .WrapI64 and
         self.kind != .StackAddr;
 }
 
-pub const on_stack_id = std.math.maxInt(u16);
-pub const uses_tee_id = on_stack_id - 1;
-pub const deleted_id = on_stack_id - 2;
-
 pub const ScopeRange = struct {
     kind: enum { loop, block },
-    range: [2]u16,
+    range: [2]u32,
     signifier: *Func.Node,
 
     pub fn format(slf: *const @This(), writer: *std.Io.Writer) !void {
@@ -108,8 +106,10 @@ pub const Ctx = struct {
     start_pos: usize,
     buf: std.Io.Writer.Allocating,
     allocs: []u16 = undefined,
+    schedules: []u32,
     scope_stack: std.ArrayList(ScopeRange) = undefined,
     stack_layout: graph.StackLayout = undefined,
+    uses_tee_id: std.DynamicBitSetUnmanaged,
 };
 
 pub const classes = enum {
@@ -321,6 +321,9 @@ const Stacker = struct {
     func: *Func,
     block: *Func.CfgNode,
     second_round: bool,
+    schedules: []u32,
+    stacked: *std.DynamicBitSetUnmanaged,
+    deleted: *std.DynamicBitSetUnmanaged,
 
     pub fn recoverTree(self: *@This(), is_last: bool) bool {
         const instr = self.block.base.outputs()[self.index].get();
@@ -332,7 +335,7 @@ const Stacker = struct {
         var dataDeps = instr.dataDeps();
 
         if (dataDeps.len != 0 and instr.kind == .BinOp and instr.extra(.BinOp).op.isComutative() and
-            dataDeps[0].schedule > dataDeps[1].schedule)
+            self.schedules[dataDeps[0].id] > self.schedules[dataDeps[1].id])
         {
             for (dataDeps[0..], 1..) |dep, j| {
                 const idx = dep.posOfOutput(j, instr);
@@ -417,7 +420,7 @@ const Stacker = struct {
 
                 if (def.cfg0() != self.block) break :b true;
 
-                if (def.schedule != self.index - 1) break :b true;
+                if (self.schedules[def.id] != self.index - 1) break :b true;
 
                 if (ref_count > 1) break :b true;
 
@@ -429,7 +432,7 @@ const Stacker = struct {
             if (needs_load) {
                 if (def.isClone() and ref_count < max_clone_uses) {
                     const node = self.func.clone(def, self.block);
-                    node.id = on_stack_id;
+                    self.stacked.set(node.id);
                 } else {
                     _ = self.func.addNode(.GetLocal, def.sloc, def.data_type, &.{ &self.block.base, def }, .{});
                 }
@@ -451,11 +454,11 @@ const Stacker = struct {
             std.mem.rotate(Func.Node.Out, to_rotate, to_rotate.len - appended);
 
             if (def.isClone() and ref_count < max_clone_uses and !used_by_phi) {
-                def.id = deleted_id;
+                self.deleted.set(def.id);
             }
 
             if (!needs_load) {
-                def.id = on_stack_id;
+                self.stacked.set(def.id);
                 self.index -= 1;
                 _ = self.recoverTree(!needs_extra and i == 0);
             }
@@ -472,7 +475,7 @@ const Stacker = struct {
 
     pub fn recoverBlockTrees(self: *@This()) void {
         for (self.block.base.outputs(), 0..) |out, i| {
-            out.get().schedule = @intCast(i);
+            self.schedules[out.get().id] = @intCast(i);
         }
 
         const effective_end = for (self.block.base.outputs(), 0..) |out, i| {
@@ -509,12 +512,21 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         var ctx = Ctx{
             .start_pos = self.mach.out.code.items.len,
             .buf = .fromArrayList(self.gpa, &self.mach.out.code),
+            .schedules = undefined,
+            .uses_tee_id = undefined,
         };
         defer self.mach.out.code = ctx.buf.toArrayList();
 
         encodeFnType(&ctx.buf.writer, func.signature);
         return;
     }
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const count = func.next_id * 3; // eh
+
+    stacked = try .initEmpty(tmp.arena.allocator(), count);
 
     if (opts.optimizations.opts.mode == .release) {
         opts.optimizations.opts.optimizeRelease(WasmGen, self, func);
@@ -527,11 +539,10 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     var ctx = Ctx{
         .start_pos = self.mach.out.code.items.len,
         .buf = .fromArrayList(self.gpa, &self.mach.out.code),
+        .schedules = tmp.arena.alloc(u32, count),
+        .uses_tee_id = try .initEmpty(tmp.arena.allocator(), count),
     };
     defer self.mach.out.code = ctx.buf.toArrayList();
-
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
 
     const loop_ranges, const changed = func.backshiftLoopBodies(tmp.arena);
 
@@ -549,6 +560,8 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         @bitCast(@as(u32, @intCast(self.ctx.buf.writer.end -
         self.ctx.start_pos - @sizeOf(u32))));
 
+    var deleted: std.DynamicBitSetUnmanaged = try .initEmpty(tmp.arena.allocator(), count);
+
     for (0..2) |i| {
         for (func.gcm.postorder) |block| {
             var stacker = Stacker{
@@ -557,6 +570,9 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 .func = func,
                 .block = block,
                 .second_round = i != 0,
+                .schedules = self.ctx.schedules,
+                .stacked = &stacked,
+                .deleted = &deleted,
             };
             stacker.recoverBlockTrees();
         }
@@ -583,7 +599,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 std.mem.rotate(Func.Node.Out, outs[i..], 1);
                 func.kill(next.get());
                 outs = bb.base.outputs();
-                curr.get().id = uses_tee_id;
+                self.ctx.uses_tee_id.set(curr.get().id);
             }
         }
     }
@@ -633,7 +649,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 continue;
             }
 
-            const alloc = self.ctx.allocs[instr.schedule];
+            const alloc = self.ctx.allocs[instr.id];
 
             if (instr.kind == .Arg) continue;
 
@@ -675,7 +691,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
             if (!instr.isDef()) continue;
 
-            if (instr.id == on_stack_id) {
+            if (stacked.isSet(instr.id)) {
                 continue;
             }
 
@@ -683,11 +699,11 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
             const base = counters.get(dt);
             const param_count = param_counts.get(dt);
-            const alloc = self.ctx.allocs[instr.schedule];
+            const alloc = self.ctx.allocs[instr.id];
 
             const prefix = if (alloc < param_count) 0 else params_len + base;
 
-            self.ctx.allocs[instr.schedule] = @intCast(prefix + new_allocs.get(dt)[self.ctx.allocs[instr.schedule]]);
+            self.ctx.allocs[instr.id] = @intCast(prefix + new_allocs.get(dt)[self.ctx.allocs[instr.id]]);
         }
     }
 
@@ -725,17 +741,19 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         });
     }
 
+    for (func.gcm.postorder, 0..) |rbb, i| self.ctx.schedules[rbb.base.id] = @intCast(i);
+
     for (func.gcm.postorder) |rbb| {
         if ((rbb.base.kind == .Then or rbb.base.kind == .Else) and
             rbb.base.inputs()[0].?.kind == .If)
         {
-            const if_schedule = rbb.base.inputs()[0].?.inputs()[0].?.schedule;
-            if (if_schedule != rbb.base.schedule - 1) {
+            const if_schedule = self.ctx.schedules[rbb.base.inputs()[0].?.inputs()[0].?.id];
+            if (if_schedule != self.ctx.schedules[rbb.base.id] - 1) {
                 scope_ranges.appendAssumeCapacity(.{
                     .kind = .block,
                     .range = .{
                         if_schedule,
-                        rbb.base.schedule - 1,
+                        self.ctx.schedules[rbb.base.id] - 1,
                     },
                     .signifier = rbb.base.inputs()[0].?,
                 });
@@ -746,12 +764,12 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             for (rbb.base.inputs()) |inp| {
                 std.debug.assert(inp.?.kind == .Jmp);
                 const pred = inp.?.inputs()[0].?;
-                if (pred.schedule + 1 != rbb.base.schedule) {
+                if (self.ctx.schedules[pred.id] + 1 != self.ctx.schedules[rbb.base.id]) {
                     scope_ranges.appendAssumeCapacity(.{
                         .kind = .block,
                         .range = .{
-                            pred.schedule,
-                            rbb.base.schedule - 1,
+                            self.ctx.schedules[pred.id],
+                            self.ctx.schedules[rbb.base.id] - 1,
                         },
                         .signifier = pred,
                     });
@@ -837,7 +855,9 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             }
 
             if (log_cfg) print("  {f}\n", .{instr});
-            if (instr.id == deleted_id) continue;
+            if (deleted.isSet(instr.id) and !stacked.isSet(instr.id)) {
+                continue;
+            }
             self.emitInstr(instr);
         }
 
@@ -1296,7 +1316,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             for (0..ret.len) |i| {
                 for (instr.outputs()[0].get().outputs()) |out| {
                     if (out.get().kind == .Ret) {
-                        if (out.get().id == on_stack_id) {
+                        if (stacked.isSet(out.get().id)) {
                             std.debug.assert(!dropped);
                             break;
                         }
@@ -1358,7 +1378,9 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 try self.ctx.buf.writer.writeUleb128(label_id);
             }
 
-            if (region.get().kind == .Region and pred.schedule + 1 != region.get().schedule) {
+            if (region.get().kind == .Region and self.ctx.schedules[pred.id] + 1 !=
+                self.ctx.schedules[region.get().id])
+            {
                 var iter = std.mem.reverseIterator(self.ctx.scope_stack.items);
                 var j: usize = 0;
                 const label_id = while (iter.next()) |sr| : (j += 1) {
@@ -1394,7 +1416,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 }
 
 pub fn regOf(self: *WasmGen, node: ?*Func.Node) u16 {
-    return self.ctx.allocs[node.?.schedule];
+    return self.ctx.allocs[node.?.id];
 }
 
 pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
@@ -1403,13 +1425,13 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {
-    if (for_instr.id == on_stack_id) {
+    if (stacked.isSet(for_instr.id)) {
         return;
     }
 
     errdefer unreachable;
 
-    if (for_instr.id == uses_tee_id) {
+    if (self.ctx.uses_tee_id.isSet(for_instr.id)) {
         try self.ctx.buf.writer.writeByte(opb(.local_tee));
     } else {
         try self.ctx.buf.writer.writeByte(opb(.local_set));

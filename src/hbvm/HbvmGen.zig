@@ -21,6 +21,7 @@ align_globlals: bool = false,
 pub const Ctx = struct {
     local_relocs: std.ArrayList(BlockReloc),
     ret_count: usize,
+    schedules: []u16,
     block_offsets: []i32,
     allocs: []const u16,
     spill_base: usize,
@@ -301,6 +302,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         var max: u16 = 0;
         for (allocs) |r| {
             if (r == 254) continue;
+            if (r == Regalloc.no_reg_sentinel) continue;
             max = @max(r, max);
         }
         break :b max;
@@ -319,6 +321,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     var ctx = Ctx{
         .allocs = allocs,
+        .schedules = tmp.arena.alloc(u16, func.next_id),
         .block_offsets = tmp.arena.alloc(i32, func.gcm.postorder.len),
         .local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.postorder.len * 2)),
         .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),
@@ -341,15 +344,10 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         break :prelude;
     }
 
-    for (func.gcm.postorder) |bb| {
-        if (bb.base.schedule == std.math.maxInt(u16)) {
-            utils.panic("{f}", .{bb});
-        }
-    }
+    for (func.gcm.postorder, 0..) |bb, i| self.ctx.schedules[bb.base.id] = @intCast(i);
 
     for (func.gcm.postorder, 0..) |bb, i| {
-        self.ctx.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
-        std.debug.assert(bb.base.schedule == i);
+        self.ctx.block_offsets[i] = @intCast(self.mach.out.code.items.len);
         self.emitBlockBody(tmp.arena.allocator(), &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1].get();
         if (last.outputs().len == 0) {
@@ -365,7 +363,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             } else {
                 self.emit(.jala, .{ .null, .ret_addr, 0 });
             }
-        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].get().schedule) {
+        } else if (i + 1 == self.ctx.schedules[last.outputs()[@intFromBool(last.isSwapped())].get().id]) {
             // noop
         } else if (last.kind == .Never) {
             // noop
@@ -374,13 +372,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         } else {
             std.debug.assert(last.outputs()[@intFromBool(last.isSwapped())].get()
                 .isBasicBlockStart());
-            if (last.outputs()[@intFromBool(last.isSwapped())].get()
-                .schedule == std.math.maxInt(u16))
-            {
-                utils.panic("{f} {f}\n", .{ last.outputs()[@intFromBool(last.isSwapped())], last });
-            }
             self.ctx.local_relocs.appendAssumeCapacity(.{
-                .dest_block = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
+                .dest_block = self.ctx.schedules[last.outputs()[@intFromBool(last.isSwapped())].get().id],
                 .rel = self.reloc(1, .rel32),
             });
             self.emit(.jmp, .{0});
@@ -604,20 +597,15 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .IfOp => |extra| {
-                std.debug.assert(
-                    no.outputs()[@intFromBool(!extra.swapped)].get().schedule !=
-                        std.math.maxInt(u16),
-                );
                 self.ctx.local_relocs.appendAssumeCapacity(.{
-                    .dest_block = no.outputs()[@intFromBool(!extra.swapped)].get().schedule,
+                    .dest_block = self.ctx.schedules[no.outputs()[@intFromBool(!extra.swapped)].get().id],
                     .rel = self.reloc(3, .rel16),
                 });
                 self.emitLow("RRP", extra.op, .{ self.getReg(inps[0]), self.getReg(inps[1]), 0 });
             },
             .If => {
-                std.debug.assert(no.outputs()[1].get().schedule != std.math.maxInt(u16));
                 self.ctx.local_relocs.appendAssumeCapacity(.{
-                    .dest_block = no.outputs()[1].get().schedule,
+                    .dest_block = self.ctx.schedules[no.outputs()[1].get().id],
                     .rel = self.reloc(3, .rel16),
                 });
                 self.emit(.jeq, .{ self.getReg(inps[0]), .null, 0 });
@@ -673,7 +661,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
 const max_regs = @intFromEnum(isa.Reg.max);
 
 fn getReg(self: *HbvmGen, n: ?*Func.Node) isa.Reg {
-    return @enumFromInt(self.ctx.allocs[n.?.schedule]);
+    return @enumFromInt(self.ctx.allocs[n.?.id]);
 }
 
 fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) void {

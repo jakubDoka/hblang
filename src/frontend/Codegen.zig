@@ -1333,8 +1333,6 @@ pub fn emitReachable(types: *Types, gpa: std.mem.Allocator, opts: Machine.OptOpt
     self.init(types, .nany(File.Id.root.getScope(types)), .never, gpa);
     defer self.deinit();
     while (types.nextFunc(.runtime, 0)) |fnid| {
-        // TODO: we dont want this to reinitialize the bl every time
-
         self.prepareForFunc(fnid);
         self.emitFunc(fnid) catch continue;
         self.emitToBackend(fnid, types.backend, opts);
@@ -6682,7 +6680,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
 
     var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
     target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
-    //  target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
+    target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
 
     const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();

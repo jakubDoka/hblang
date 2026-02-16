@@ -126,8 +126,13 @@ pub fn Mixin(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
+            const escaped_schedue = std.math.maxInt(u32);
+
             var visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id);
             const postorder = self.collectDfs(tmp.arena.allocator(), &visited)[1..];
+
+            const schedules = tmp.arena.alloc(u32, self.next_id);
+            @memset(schedules, escaped_schedue);
 
             var slots = Arry(StackSlot){};
             var offset: i64 = 0;
@@ -141,7 +146,6 @@ pub fn Mixin(comptime Backend: type) type {
                     ov.extra(.LocalAlloc).meta.kind != .variable) continue :outer;
                 const o = ov.outputs()[0].get();
                 std.debug.assert(o.kind == .Local);
-                ov.schedule = std.math.maxInt(u16);
 
                 // collect all loads and stores, bail on something else
                 //
@@ -203,7 +207,7 @@ pub fn Mixin(comptime Backend: type) type {
                 const new = alloc_offsets.items[alloc_offsets.items.len - offsets.items.len ..];
                 std.sort.pdq(i64, new, {}, std.sort.asc(i64));
 
-                o.schedule = @intCast(slots.items.len);
+                schedules[o.id] = @intCast(slots.items.len);
                 try slots.append(tmp.arena.allocator(), .{ .offset = offset });
                 offset += @intCast(o.inputs()[1].?.extra(.LocalAlloc).size);
             }
@@ -216,7 +220,9 @@ pub fn Mixin(comptime Backend: type) type {
             var states = tmp.arena.alloc(BBState, postorder.len);
             @memset(states, .{});
 
-            for (postorder, 0..) |bb, i| bb.base.schedule = @intCast(i);
+            for (postorder, 0..) |bb, i| {
+                schedules[bb.base.id] = @intCast(i);
+            }
 
             var to_remove = Arry(*Node){};
             for (postorder) |bbc| {
@@ -235,15 +241,21 @@ pub fn Mixin(comptime Backend: type) type {
                 // handle fork
                 if (parent_succs == 2) {
                     // this is the second branch, restore the value
-                    if (states[parent.schedule].expand(locals.len).Fork) |s| {
+                    if (states[schedules[parent.id]].expand(locals.len).Fork) |s| {
                         locals = s.saved;
                     } else {
                         // we will visit this eventually
-                        states[parent.schedule] = .compact(.{ .Fork = .{ .saved = tmp.arena.dupe(Local, locals) } });
+                        states[schedules[parent.id]] = .compact(.{ .Fork = .{ .saved = tmp.arena.dupe(Local, locals) } });
                     }
                 }
 
-                Func.CfgNode.scheduleBlockAndRestoreBlockIds(bbc, postorder);
+                if (bbc.base.isBasicBlockStart()) {
+                    Func.CfgNode.scheduleBlock(bbc);
+                    for (bbc.base.outputs(), 0..) |o, i| {
+                        if (o.get().isCfg()) break;
+                        schedules[o.get().id] = @intCast(i);
+                    }
+                }
 
                 var stmp = utils.Arena.scrath(tmp.arena);
                 defer stmp.deinit();
@@ -255,9 +267,9 @@ pub fn Mixin(comptime Backend: type) type {
 
                     if (o.isStore()) {
                         const base, const off = o.base().knownOffset();
-                        if (base.kind == .Local and base.schedule != std.math.maxInt(u16)) {
+                        if (base.kind == .Local and schedules[base.id] != escaped_schedue) {
                             try to_remove.append(tmp.arena.allocator(), o);
-                            const offs = slots.items[base.schedule].offset + off;
+                            const offs = slots.items[schedules[base.id]].offset + off;
                             const idx = std.sort.binarySearch(i64, alloc_offsets.items, offs, struct {
                                 pub fn inner(a: i64, b: i64) std.math.Order {
                                     return std.math.order(a, b);
@@ -277,8 +289,8 @@ pub fn Mixin(comptime Backend: type) type {
                             const lo = no.get();
                             if (lo.isLoad()) {
                                 const base, const off = lo.base().knownOffset();
-                                if (base.kind == .Local and base.schedule != std.math.maxInt(u16)) {
-                                    const offs = slots.items[base.schedule].offset + off;
+                                if (base.kind == .Local and schedules[base.id] != escaped_schedue) {
+                                    const offs = slots.items[schedules[base.id]].offset + off;
                                     const idx = std.sort.binarySearch(i64, alloc_offsets.items, offs, struct {
                                         pub fn inner(a: i64, b: i64) std.math.Order {
                                             return std.math.order(a, b);
@@ -305,8 +317,8 @@ pub fn Mixin(comptime Backend: type) type {
                     }
 
                     // either we arrived from the back branch or the other side of the split
-                    if (states[child.schedule].expand(locals.len).Join) |s| {
-                        if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
+                    if (states[schedules[child.id]].expand(locals.len).Join) |s| {
+                        if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, schedules[s.ctrl.id], child, schedules[child.id] });
                         for (s.items, locals, 0..) |clhs, crhs, i| {
                             var lhs = clhs.expand() orelse continue;
                             if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
@@ -355,7 +367,7 @@ pub fn Mixin(comptime Backend: type) type {
                                 l.* = .compact(.{ .Loop = loop });
                             }
                         }
-                        states[child.schedule] = .compact(.{ .Join = loop });
+                        states[schedules[child.id]] = .compact(.{ .Join = loop });
                     }
                 }
             }

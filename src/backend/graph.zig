@@ -776,8 +776,8 @@ pub fn KindOf(comptime mach_classes: type) type {
 }
 
 pub const Cfg = extern struct {
+    antidep: u32 = 0,
     idepth: u16 = 0,
-    antidep: u16 = 0,
     loop: u16 = undefined,
 };
 
@@ -798,7 +798,7 @@ pub fn Func(comptime Backend: type) type {
         arena: std.heap.ArenaAllocator,
         interner: InternMap(Uninserter) = .{},
         signature: Signature = .{},
-        next_id: u16 = 0,
+        next_id: u32 = 0,
         waste: usize = 0,
         start: *Node = undefined,
         end: *Node = undefined,
@@ -1044,55 +1044,17 @@ pub fn Func(comptime Backend: type) type {
                     try self.base.format(writer);
                 }
 
-                pub fn scheduleBlockAndRestoreBlockIds(
-                    bbc: *CfgNode,
-                    postorder: []*CfgNode,
-                ) void {
-                    // we do it here because some loads are scheduled already
-                    // and removing them in this loop messes up the cheduling
-                    // in other blocks, we need to hack this becaus there are
-                    // no anty deps on loads yet, since this runs before gcm
-                    //
-
-                    const bb = &bbc.base;
-
-                    // carefull, the scheduleBlock messes up the node.schedule
-                    //
-                    var buf: [2]*Node = undefined;
-                    var scheds: [2]u16 = undefined;
-                    var len: usize = 0;
-                    for (bb.outputs()) |use| {
-                        if (use.get().isCfg()) {
-                            buf[len] = use.get();
-                            scheds[len] = use.get().schedule;
-                            len += 1;
-                        }
-                    }
-
-                    if (bb.isBasicBlockStart()) {
-                        scheduleBlock(bb.asCfg().?);
-                    }
-
-                    if (!(bb.kind == .If or len == 1)) {
-                        for (postorder) |p| {
-                            print("{f}\n", .{p});
-                        }
-                        utils.panic("{f}\n", .{bb});
-                    }
-
-                    for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
-                }
-
                 pub fn scheduleBlock(bb: *CfgNode) void {
                     var tmp = utils.Arena.scrath(null);
                     defer tmp.deinit();
 
                     // init meta
-                    const extr: []u8 =
-                        tmp.arena.alloc(u8, bb.base.outputs().len);
-                    for (bb.base.outputs(), extr, 0..) |in, *e, i| {
+                    const prev_ids = tmp.arena.alloc(u32, bb.base.outputs().len);
+                    const extr = tmp.arena.alloc(u8, bb.base.outputs().len);
+                    for (bb.base.outputs(), extr, prev_ids, 0..) |in, *e, *pi, i| {
                         const instr = in.get();
-                        instr.schedule = @intCast(i);
+                        pi.* = instr.id;
+                        instr.id = @intCast(i);
 
                         e.* = 0;
 
@@ -1109,7 +1071,7 @@ pub fn Func(comptime Backend: type) type {
                     const outs = bb.base.outputs();
                     var ready: usize = 0;
                     for (outs) |*o| {
-                        if (extr[o.get().schedule] == 0) {
+                        if (extr[o.get().id] == 0) {
                             std.mem.swap(Node.Out, &outs[ready], o);
                             ready += 1;
                         }
@@ -1127,20 +1089,24 @@ pub fn Func(comptime Backend: type) type {
                             if (bb == def.get().tryCfg0() and
                                 def.get().kind != .Phi)
                             {
-                                extr[def.get().schedule] -= 1;
+                                extr[def.get().id] -= 1;
                             }
                         }
 
                         scheduled += 1;
 
                         for (outs[ready..]) |*o| {
-                            if (extr[o.get().schedule] == 0) {
+                            if (extr[o.get().id] == 0) {
                                 std.debug.assert(o.get().kind != .Phi);
                                 std.mem.swap(Node.Out, &outs[ready], o);
                                 ready += 1;
                             }
                         }
                     };
+
+                    for (outs) |o| {
+                        o.get().id = prev_ids[o.get().id];
+                    }
                 }
             };
         }
@@ -1152,11 +1118,10 @@ pub fn Func(comptime Backend: type) type {
 
         pub const Node = extern struct {
             kind: Kind,
-            // TODO: merge these 2 fields
-            id: u16,
-            schedule: u16 = std.math.maxInt(u16),
             data_type: mod.DataType = .top,
+            // additional ref count for frontends
             tmp_rc: u8 = 0,
+            id: u32,
 
             input_ordered_len: u16,
             input_len: u16,
@@ -3493,11 +3458,11 @@ pub fn Func(comptime Backend: type) type {
         pub fn backshiftLoopBodies(
             func: *Self,
             scratch: *utils.Arena,
-        ) struct { [][2]u16, bool } {
+        ) struct { [][2]u32, bool } {
             // so this is slow? maybe we can mark nodes we visited each round
             // and then exit early
 
-            var ranges = scratch.makeArrayList([2]u16, func.gcm.postorder.len);
+            var ranges = scratch.makeArrayList([2]u32, func.gcm.postorder.len);
             var changed = false;
             for (func.gcm.postorder, 0..) |bb, i| {
                 if (bb.base.kind != .Loop) continue;
@@ -3525,12 +3490,6 @@ pub fn Func(comptime Backend: type) type {
                     @intCast(i),
                     @intCast(backshift_cursor - 1),
                 });
-            }
-
-            if (changed) {
-                for (func.gcm.postorder, 0..) |bb, i| {
-                    bb.base.schedule = @intCast(i);
-                }
             }
 
             if (is_debug and !utils.freestanding) {
