@@ -851,6 +851,15 @@ pub fn eatIdent(self: *Lexer) ?struct { Token, bool } {
     } };
 }
 
+pub fn eatMatchOrRevert(self: *Lexer, kind: Lexeme) bool {
+    const tok = self.peekNext();
+    if (tok.kind != kind) {
+        return false;
+    }
+    self.cursor = tok.end;
+    return true;
+}
+
 pub fn eatMatch(self: *Lexer, kind: Lexeme) bool {
     const tok = self.next();
     if (tok.kind != kind) {
@@ -929,7 +938,7 @@ pub fn skipUnitExpr(lex: *Lexer) SkipError!void {
         ._,
         => {},
 
-        .@"(", .@"{" => {
+        .@"(", .@"{", .@".{" => {
             lex.eatUntilClosingDelimeter();
         },
         .@"[" => {

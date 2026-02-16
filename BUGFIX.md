@@ -62,7 +62,7 @@ main := fn(): uint {
 ```hb
 $Result := fn($Value: type, $Error: type): type return union(enum) {
     .value: Value;
-    .error: Error
+    .error: Error;
 
     This := @CurrentScope()
 
@@ -666,7 +666,7 @@ Stru2 := struct {
 Stru := struct {
     .a: Stru2;
     .c: f;
-    .b: ?Stru2
+    .b: ?Stru2;
 
     f := struct{.b: Stru2}
 }
@@ -712,7 +712,7 @@ main := fn(): uint return bwa(.[null, null, null, null, null, null, null])
 #### more comptime eval 1
 ```hb
 X := struct {
-    .st: uint
+    .st: uint;
     $x := fn($st: uint): X return .(st)
 }
 $aaa := fn($a: []X): uint {
@@ -729,7 +729,7 @@ main := fn(): uint {
 ```hb
 X := struct {
     .st: uint;
-    .st1: uint
+    .st1: uint;
     $x := fn($st: uint): X return .(st, 0)
 }
 
@@ -746,7 +746,7 @@ main := fn(): uint {
 X := struct {
     .st: uint;
     .st1: uint;
-    .st2: uint
+    .st2: uint;
     $x := fn($st: uint): X return .(st, 0, 0)
 }
 
@@ -797,7 +797,7 @@ main := fn(): uint {
 ```hb
 DynObj := struct {
     .do_thing: ^fn(inst: ^void): u8;
-    .obj: ^void
+    .obj: ^void;
 
     $new := fn($T: type, inst: ^T): DynObj {
         return .(@bit_cast(&T.do_thing), @bit_cast(inst))
@@ -805,7 +805,7 @@ DynObj := struct {
 }
 
 Obj := struct {
-    .x: u8
+    .x: u8;
     do_thing := fn(self: ^Obj): u8 return self.x + 1
 }
 
@@ -822,7 +822,7 @@ main := fn(): uint {
 DynObj := struct {
     .obj: ^Obj;
     .v_func: ^fn(^Obj): u8;
-    ._wth: void
+    ._wth: void;
     // TODO: fix the formatter here it removes semicolon incorrectly
 
     $func := fn(self: ^DynObj): u8 {
@@ -834,7 +834,7 @@ DynObj := struct {
 }
 
 Obj := struct {
-    .state: u8
+    .state: u8;
     func := fn(self: ^Obj): u8 return self.state + 1
 }
 
@@ -1516,7 +1516,7 @@ main := fn(): uint {
 }
 
 $byte_iter := fn(slice: []u8): Iterator(struct {
-    .slice: []u8
+    .slice: []u8;
 
     $next := fn(self: ^@CurrentScope()): ?u8 {
         if self.slice.len == 0 return null
@@ -1529,7 +1529,7 @@ $byte_iter := fn(slice: []u8): Iterator(struct {
 }
 
 Iterator := fn($Iter: type): type return struct {
-    .inner: Iter
+    .inner: Iter;
     Next := @TypeOf(Iter.next(idk))
     Value := @ChildOf(Next)
     Self := @CurrentScope()
@@ -1965,7 +1965,7 @@ main := fn(): uint {
             test := fn(self: @CurrentScope()): uint {
                 return 0
             }
-        }
+        };
         new := fn(): @CurrentScope() {
             return .(.())
         }
@@ -1998,7 +1998,7 @@ expectations := .{
 }
 
 Async := fn($T: type, $Poller: type): type return struct {
-    .poller: Poller
+    .poller: Poller;
     new := fn(x: Input): @CurrentScope() {
         return .(Poller.new1(x))
     }
@@ -2012,7 +2012,7 @@ Async := fn($T: type, $Poller: type): type return struct {
         .poller: union {
             .left: Poll;
             .right: f.Poll;
-        }
+        };
         new1 := fn(x: Poll): @CurrentScope() {
             return .(false, @bit_cast(x))
         }
@@ -2447,7 +2447,7 @@ wasm_freestanding := @use("wasm_freestanding.hb")
 Target := enum {
     .AbleOS;
     .x86_64_linux;
-    .wasm_freestanding
+    .wasm_freestanding;
 
     current := fn(): Target {
         $if @target("hbvm-ableos") return .AbleOS
@@ -2711,7 +2711,7 @@ Kind := enum(u8) {
     .eof := 0;
     .ident;
     .decl;
-    .k_fn
+    .k_fn;
 
     keyword_range := @type_info(Kind).@enum.fields[0].value
 }
@@ -2758,12 +2758,12 @@ main := fn(): uint {
 #### modify tmp 1
 ```hb
 Parser := struct {
-    .tok: Tok
+    .tok: Tok;
 
     Tok := struct {
         .kind: Kind;
         .value: uint;
-        .value2: uint
+        .value2: uint;
 
         Kind := enum(u8) {
             .ident;
@@ -2817,20 +2817,34 @@ $declares := fn($T: type, $name: ?[]u8, $D: type, $v: ?D): ?D {
         .@struct => decls = @bit_cast(t_info.@struct.decls),
         .@enum => decls = @bit_cast(t_info.@enum.decls),
         .@union => decls = @bit_cast(t_info.@union.decls),
-        _ => return null
+        _ => return null,
     }
 
-    $i := 0 $while i < @decl_count_of(T) {
+    $i := 0
+    $while i < @decl_count_of(T) {
         $if name != null {
-            $if decls[i].len != name.?.len { i += 1 continue }
-            $j := 0 $while j < name.?.len {
+            $if decls[i].len != name.?.len {
+                i += 1
+                continue
+            }
+            $j := 0
+            $while j < name.?.len {
                 $if decls[i][j] != name.?[j] break else j += 1
             }
-            $if j != name.?.len { i += 1 continue }
+            $if j != name.?.len {
+                i += 1
+                continue
+            }
         }
-        
-        $if @TypeOf(T[i]) != D { i += 1 continue }
-        $if v != null $if T[i] != v.? { i += 1 continue }
+
+        $if @TypeOf(T[i]) != D {
+            i += 1
+            continue
+        }
+        $if v != null $if T[i] != v.? {
+            i += 1
+            continue
+        }
         return T[i]
     }
     return null

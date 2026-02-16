@@ -305,7 +305,7 @@ pub const CompileOptions = struct {
     }
 };
 
-pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
+pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, SyntaxError }!void {
     if (opts.help) {
         if (lane.isRoot()) if (opts.diagnostics) |d|
             try d.writeAll(CompileOptions.help_str);
@@ -333,8 +333,13 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
             };
 
             if (opts.output) |o| {
-                // TDOD: this just compatibility
-                try o.writeAll(source);
+                try frontend.Fmt.fmt(
+                    opts.root_file,
+                    source,
+                    o,
+                    opts.diagnostics,
+                    opts.error_colors,
+                );
                 try o.flush();
             }
         }

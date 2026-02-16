@@ -104,14 +104,14 @@ sin_table := f32.[0.0, 0.02454122852291229, 0.04906767432741801, 0.0735645635996
 sin := fn(theta: f32): f32 {
     PI := 3.14159265358979323846
     TABLE_SIZE := @as(i32, 256)
-    si := @float_to_int(@float_cast(theta) * 0.5 * @int_to_float(TABLE_SIZE) /
-        @float_cast(PI))
+    si := @float_to_int(@float_cast(theta) * 0.5 * @int_to_float(TABLE_SIZE)
+        / @float_cast(PI))
     d := theta - @int_to_float(si) * 2.0 * PI / @int_to_float(TABLE_SIZE)
     ci := si + TABLE_SIZE / 4 & TABLE_SIZE - 1
     si &= TABLE_SIZE - 1
     //return @int_to_float(si)
-    return sin_table[@bit_cast(si)] + (sin_table[@bit_cast(ci)] - 0.5 *
-        sin_table[@bit_cast(si)] * d) * d
+    return sin_table[@bit_cast(si)] + (sin_table[@bit_cast(ci)] - 0.5
+        * sin_table[@bit_cast(si)] * d) * d
 }
 
 main := fn(): int {
@@ -786,7 +786,7 @@ expectations := .{
 
 Ty := struct {
     .a: int;
-    .b: int = 1
+    .b: int = 1;
 
     sum := fn(t: Ty): int {
         t.a -= 2
@@ -914,7 +914,7 @@ nvec := fn($E: type, v: uint): Vec(E) {
 
 Vec := fn($E: type): type return struct {
     .x: E;
-    .y: E
+    .y: E;
 
     sub := fn(self: @CurrentScope()): E {
         return self.x - self.y
@@ -932,7 +932,7 @@ main := fn(): uint {
 Foo := fn($F: type): type return struct {
     Bar := fn($B: type): type return struct {
         .foo: F;
-        .bar: B
+        .bar: B;
 
         init := fn(): @CurrentScope() return .(1, 1)
 
@@ -955,7 +955,7 @@ main := fn(): uint {
 }
 
 Foo := fn($F: type): type return struct {
-    .foo: F
+    .foo: F;
 
     sub := fn(self: @CurrentScope()): F {
         return self.foo
@@ -981,7 +981,7 @@ Array := fn($E: type, $len: u32): type if len == 0 {
 } else {
     return struct {
         .elem: E;
-        .next: Array(E, len - 1)
+        .next: Array(E, len - 1);
 
         get := fn(self: @CurrentScope(), i: uint): E {
             if i == 0 return self.elem
@@ -1001,7 +1001,7 @@ main := fn(): uint {
     end := "cd"
 
     Chars := struct {
-        .slc: []u8
+        .slc: []u8;
         next := fn(self: ^@CurrentScope()): ?u8 {
             if self.slc.len == 0 return null
             defer self.slc = self.slc[1..]
@@ -1012,7 +1012,7 @@ main := fn(): uint {
     Chain := fn($A: type, $B: type): type return struct {
         .state: enum{.a; .b; .done};
         .a: A;
-        .b: B
+        .b: B;
 
         Elem := @TypeOf(A.next(idk))
 
@@ -1311,7 +1311,7 @@ NameMap := fn($Enum: type): type {
 
     return struct {
         .buf: StrBuf;
-        .index: IndexBuf
+        .index: IndexBuf;
 
         new := fn(): @CurrentScope() {
             buf: StrBuf = #idk
@@ -1850,7 +1850,7 @@ $vtable := fn($V: type, $Dyn: type): Vtable(V) {
 
 Test := struct {
     .vt: Vtable(Test);
-    .obj: ^Test
+    .obj: ^Test;
 
     $from := fn(obj: @Any()): Test {
         return .(vtable(Test, @ChildOf(@TypeOf(obj))), @bit_cast(obj))
@@ -1860,7 +1860,7 @@ Test := struct {
 }
 
 Dyn2 := struct {
-    .inner: i32
+    .inner: i32;
     $a := fn(this: ^Dyn2): void {
         this.inner = 98
     }
@@ -2200,7 +2200,6 @@ bl := @Builtins()
     die
 })
 
-
 use_slice := fn(slice: []u8): uint {
     return slice[0]
 }
@@ -2266,8 +2265,8 @@ expectations := .{
 }
 
 main := fn(): uint {
-    return type_id(u8) + type_id(u16) + type_id(u32) +
-        type_id(u64) + type_id(i8) + type_id(u8)
+    return type_id(u8) + type_id(u16) + type_id(u32)
+        + type_id(u64) + type_id(i8) + type_id(u8)
 }
 
 $type_id := fn($T: type): uint {
@@ -2305,7 +2304,7 @@ something := fn(len: uint): uint {
 }
 
 Arena := struct {
-    .pos: ^u8
+    .pos: ^u8;
 
     $alloc := fn(self: ^Arena, $Elem: type, len: uint): []Elem {
         defer self.pos += @align_of(Elem) - 1 + @bit_cast(self.pos) & @align_of(Elem) - 1
@@ -2319,7 +2318,7 @@ Arena := struct {
 
 CheckPoint := struct {
     .arena: ^Arena;
-    .prev_pos: ^u8
+    .prev_pos: ^u8;
 
     $restore := fn(self: ^CheckPoint): void {
         self.arena.pos = self.prev_pos

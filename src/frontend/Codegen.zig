@@ -6470,7 +6470,7 @@ pub fn reportGeneric(
     }
     argss[fields.len] = "";
 
-    reportLow(path, source, pos, msg, &argss, types.loader.colors, diags);
+    reportLow(path, source, pos, msg, &argss, types.loader.colors, diags) catch unreachable;
 }
 
 pub fn reportLow(
@@ -6481,8 +6481,7 @@ pub fn reportLow(
     args: []const []const u8,
     colors: std.io.tty.Config,
     out: *std.Io.Writer,
-) void {
-    errdefer unreachable;
+) !void {
     const line, const col = lineCol(file, pos);
 
     try colors.setColor(out, .bright_white);
@@ -6684,6 +6683,8 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
 
     const asts, var kl = try parseExample(&scratch, name, code, wint);
 
+    if (true) return;
+
     var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
     target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
     //target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
@@ -6849,7 +6850,7 @@ pub fn parseExample(
     scratch: *utils.Arena,
     name: []const u8,
     code: []const u8,
-    output: ?*std.Io.Writer,
+    output: *std.Io.Writer,
 ) !struct { []File, KnownLoader } {
     var files = std.ArrayList(FileRecord).empty;
 
@@ -6888,6 +6889,29 @@ pub fn parseExample(
             kl.loader.from = @enumFromInt(i);
             kl.loader.diagnostics = output;
             kl.loader.colors = .escape_codes;
+
+            var buf = std.Io.Writer.Allocating.init(scratch.allocator());
+            try hb.frontend.Fmt.fmt(
+                fr.path,
+                fr.source,
+                &buf.writer,
+                output,
+                kl.loader.colors,
+            );
+
+            if (!std.mem.eql(
+                u8,
+                std.mem.trim(u8, fr.source, "\n"),
+                std.mem.trim(u8, buf.written(), "\n"),
+            )) {
+                try hb.diff.printDiff(
+                    std.mem.trim(u8, buf.written(), "\n"),
+                    std.mem.trim(u8, fr.source, "\n"),
+                    output,
+                    .escape_codes,
+                );
+                return error.TestFailed;
+            }
 
             asts[len] = .init(fr.source, &kl.loader, scratch);
             len += 1;

@@ -1,15 +1,18 @@
 const std = @import("std");
+const utils = @import("utils-lib");
 
 pub fn printDiff(
     a: []const u8,
     b: []const u8,
-    arena: std.mem.Allocator,
     out: *std.Io.Writer,
     color: std.io.tty.Config,
 ) !void {
-    const linesA = try splitLines(arena, a);
-    const linesB = try splitLines(arena, b);
-    const lcs = try lcsLines(a, b, arena);
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const linesA = try splitLines(tmp.arena, a);
+    const linesB = try splitLines(tmp.arena, b);
+    const lcs = try lcsLines(a, b, tmp.arena);
 
     var i: usize = 0;
     var j: usize = 0;
@@ -38,16 +41,16 @@ pub fn printDiff(
     }
 }
 
-fn lcsLines(a: []const u8, b: []const u8, arena: std.mem.Allocator) ![][]const u8 {
+fn lcsLines(a: []const u8, b: []const u8, arena: *utils.Arena) ![][]const u8 {
     const linesA = try splitLines(arena, a);
     const linesB = try splitLines(arena, b);
 
     const lenA = linesA.len;
     const lenB = linesB.len;
 
-    var dp = try arena.alloc([]usize, lenA + 1);
+    var dp = arena.alloc([]usize, lenA + 1);
     for (dp) |*row| {
-        row.* = try arena.alloc(usize, lenB + 1);
+        row.* = arena.alloc(usize, lenB + 1);
         @memset(row.*, 0);
     }
 
@@ -61,7 +64,7 @@ fn lcsLines(a: []const u8, b: []const u8, arena: std.mem.Allocator) ![][]const u
         }
     }
 
-    var result = try arena.alloc([]const u8, dp[lenA][lenB]);
+    var result = arena.alloc([]const u8, dp[lenA][lenB]);
     var i = lenA;
     var j = lenB;
     var k: usize = dp[lenA][lenB];
@@ -82,11 +85,11 @@ fn lcsLines(a: []const u8, b: []const u8, arena: std.mem.Allocator) ![][]const u
     return result;
 }
 
-fn splitLines(arena: std.mem.Allocator, input: []const u8) ![][]const u8 {
+fn splitLines(arena: *utils.Arena, input: []const u8) ![][]const u8 {
     var list = std.ArrayList([]const u8).empty;
-    var it = std.mem.tokenizeAny(u8, input, "\n");
+    var it = std.mem.splitScalar(u8, input, '\n');
     while (it.next()) |line| {
-        try list.append(arena, line);
+        try list.append(arena.allocator(), line);
     }
     return list.items;
 }
