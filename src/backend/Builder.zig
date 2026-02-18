@@ -593,7 +593,9 @@ pub const Loop = struct {
             const rhs = mergeScopes(&builder.func, builder_scope, ctrl);
             getScopeValues(rhs)[0].extra(.Region).preserve_identity_phys = kind == .@"continue";
         } else {
+            std.debug.print("{f}\n", .{builder_scope});
             builder._truncateScope(builder_scope, self.scope.node.inputs().len);
+            std.debug.print("{f}\n", .{builder_scope});
             self.control.set(kind, builder_scope);
         }
         if (kind == .@"break") self.markBreaking();

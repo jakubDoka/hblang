@@ -1936,6 +1936,10 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 cond.load(tok.end, self),
             );
 
+            if (self.bl.scope.?.id == 857) {
+                self.dbgReport(tok.end, "", .{});
+            }
+
             _ = self.branchExpr(lex);
 
             self.popScope(frame);
