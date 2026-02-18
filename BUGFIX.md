@@ -1044,6 +1044,25 @@ main := fn(): uint {
 }
 ```
 
+#### mem2reg crash 7
+```hb
+opaque := false
+
+main := fn(): uint {
+    vl: uint = #idk
+
+    if opaque {} else {
+        vl = 0
+    }
+
+    if opaque {} else {
+        return vl
+    }
+
+    return 1
+}
+```
+
 #### mem2reg crash 6
 ```hb
 expectations := .{

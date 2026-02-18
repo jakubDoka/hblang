@@ -34,7 +34,7 @@ fn parseCliArgs(diagnostics: ?*std.Io.Writer, output: ?*std.Io.Writer) hb.Compil
 threadlocal var err_buffer: [1024 * 4]u8 = undefined;
 threadlocal var out_buffer: [1024 * 4]u8 = undefined;
 fn entry(_: void) void {
-    var diag_writer = std.fs.File.stderr().writer(&err_buffer);
+    var diag_writer = std.fs.File.stderr().writer(&.{});
     var out_writer = std.fs.File.stdout().writer(&out_buffer);
 
     const opts = parseCliArgs(&diag_writer.interface, &out_writer.interface);

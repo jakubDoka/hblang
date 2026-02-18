@@ -4,7 +4,7 @@ const Machine = @import("Machine.zig");
 const matcher = @import("graph.IdealGen");
 const Builder = @import("Builder.zig");
 const Regalloc = @import("Regalloc.zig");
-pub const is_debug = false; // @import("builtin").mode == .Debug;
+pub const is_debug = @import("builtin").mode == .Debug;
 
 const print = (std.debug).print;
 
@@ -1448,7 +1448,7 @@ pub fn Func(comptime Backend: type) type {
                     std.io.tty.detectConfig(std.fs.File.stderr())
                 else
                     .escape_codes;
-                @constCast(self).fmt(null, writer, colors);
+                @constCast(self).fmt(false, writer, colors);
             }
 
             fn isVisibel(comptime Ty: type) bool {
@@ -1519,7 +1519,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn fmt(
                 self: *Node,
-                scheduled: ?u16,
+                scheduled: bool,
                 writer: *std.Io.Writer,
                 colors: std.io.tty.Config,
             ) void {
@@ -1557,7 +1557,7 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 for (self.input_base[0..self.input_len][@min(
-                    @intFromBool(scheduled != null and
+                    @intFromBool(scheduled and
                         (!self.isCfg() or !self.isBasicBlockStart())),
                     self.input_base[0..self.input_len].len,
                 )..]) |oo| if (oo) |o| {
@@ -1570,7 +1570,7 @@ pub fn Func(comptime Backend: type) type {
                     logNid(writer, o.id, colors);
                 };
 
-                if (scheduled == null) {
+                if (!scheduled) {
                     writer.writeAll(" [") catch unreachable;
                     for (self.output_base[0..self.output_len]) |o| {
                         writer.writeAll(", ") catch unreachable;
@@ -2387,6 +2387,17 @@ pub fn Func(comptime Backend: type) type {
             );
         }
 
+        pub fn addPhi(self: *Self, sloc: Sloc, ctrl: *Node, lhs: *Node, rhs: *Node) *Node {
+            std.debug.assert(ctrl.kind == .Region);
+            return self.addNode(
+                .Phi,
+                sloc,
+                lhs.data_type.meet(rhs.data_type),
+                &.{ ctrl, lhs, rhs },
+                .{},
+            );
+        }
+
         fn addMemJoin(self: *Self, to_join: []const *Node) *Node {
             errdefer unreachable;
 
@@ -2578,7 +2589,10 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (self.output_len != 0) {
-                utils.panic("{any} {f}\n", .{ self.outputs(), self });
+                for (self.outputs()) |o| {
+                    std.debug.print("{f}\n", .{o});
+                }
+                utils.panic("{f}\n", .{self});
             }
 
             std.debug.assert(self.output_len == 0);
@@ -2908,11 +2922,19 @@ pub fn Func(comptime Backend: type) type {
             visited: *std.DynamicBitSetUnmanaged,
             comptime only_basic: bool,
         ) void {
-            if (visited.isSet(node.id)) {
-                return;
+            if (node.kind == .Region) {
+                if (!visited.isSet(node.id)) {
+                    visited.set(node.id);
+                    pos.append(arena, node.asCfg().?) catch unreachable;
+                    return;
+                }
+            } else {
+                if (visited.isSet(node.id)) {
+                    return;
+                }
+                visited.set(node.id);
+                pos.append(arena, node.asCfg().?) catch unreachable;
             }
-            visited.set(node.id);
-            pos.append(arena, node.asCfg().?) catch unreachable;
             for (node.outputs()) |o| {
                 if (o.get().isCfg()) {
                     collectPostorder3(
@@ -2924,6 +2946,57 @@ pub fn Func(comptime Backend: type) type {
                         only_basic,
                     );
                 }
+            }
+        }
+
+        pub fn collectPostorder(
+            self: *Self,
+            arena: std.mem.Allocator,
+            visited: *std.DynamicBitSetUnmanaged,
+        ) []*CfgNode {
+            var postorder = std.ArrayList(*CfgNode).empty;
+
+            collectPostorder2(self, self.start, arena, &postorder, visited);
+
+            std.mem.reverse(*CfgNode, postorder.items);
+
+            return postorder.items;
+        }
+
+        pub fn collectPostorder2(
+            self: *Self,
+            node: *Node,
+            arena: std.mem.Allocator,
+            pos: *std.ArrayList(*CfgNode),
+            visited: *std.DynamicBitSetUnmanaged,
+        ) void {
+            switch (node.kind) {
+                .TrapRegion => return,
+                else => {
+                    if (visited.isSet(node.id)) {
+                        return;
+                    }
+                    visited.set(node.id);
+                },
+            }
+
+            if (node.isSwapped()) {
+                for (node.outputs()) |o| {
+                    if (o.get().isCfg()) {
+                        collectPostorder2(self, o.get(), arena, pos, visited);
+                    }
+                }
+            } else {
+                var iter = std.mem.reverseIterator(node.outputs());
+                while (@as(?Node.Out, iter.next())) |o| {
+                    if (o.get().isCfg()) {
+                        collectPostorder2(self, o.get(), arena, pos, visited);
+                    }
+                }
+            }
+
+            if (node.isBasicBlockStart()) {
+                pos.append(arena, node.asCfg().?) catch unreachable;
             }
         }
 
@@ -3519,57 +3592,6 @@ pub fn Func(comptime Backend: type) type {
             return .{ ranges.items, changed };
         }
 
-        pub fn collectPostorder(
-            self: *Self,
-            arena: std.mem.Allocator,
-            visited: *std.DynamicBitSetUnmanaged,
-        ) []*CfgNode {
-            var postorder = std.ArrayList(*CfgNode).empty;
-
-            collectPostorder2(self, self.start, arena, &postorder, visited);
-
-            std.mem.reverse(*CfgNode, postorder.items);
-
-            return postorder.items;
-        }
-
-        pub fn collectPostorder2(
-            self: *Self,
-            node: *Node,
-            arena: std.mem.Allocator,
-            pos: *std.ArrayList(*CfgNode),
-            visited: *std.DynamicBitSetUnmanaged,
-        ) void {
-            switch (node.kind) {
-                .TrapRegion => return,
-                else => {
-                    if (visited.isSet(node.id)) {
-                        return;
-                    }
-                    visited.set(node.id);
-                },
-            }
-
-            if (node.isSwapped()) {
-                for (node.outputs()) |o| {
-                    if (o.get().isCfg()) {
-                        collectPostorder2(self, o.get(), arena, pos, visited);
-                    }
-                }
-            } else {
-                var iter = std.mem.reverseIterator(node.outputs());
-                while (@as(?Node.Out, iter.next())) |o| {
-                    if (o.get().isCfg()) {
-                        collectPostorder2(self, o.get(), arena, pos, visited);
-                    }
-                }
-            }
-
-            if (node.isBasicBlockStart()) {
-                pos.append(arena, node.asCfg().?) catch unreachable;
-            }
-        }
-
         pub fn fmtScheduledLog(self: *Self) void {
             var writer = std.fs.File.stderr().writer(&.{});
             self.fmtScheduled(&writer.interface, .escape_codes);
@@ -3585,25 +3607,25 @@ pub fn Func(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            self.start.fmt(self.gcm.block_count, writer, colors);
+            self.start.fmt(true, writer, colors);
             if (self.start.outputs().len > 1 and
                 self.start.outputs()[1].get().kind == .Mem)
             {
                 for (self.start.outputs()[1].get().outputs()) |oo| {
                     if (oo.get().kind == .LocalAlloc) {
                         try writer.writeAll("\n  ");
-                        oo.get().fmt(self.gcm.instr_count, writer, colors);
+                        oo.get().fmt(true, writer, colors);
                     }
                 }
             }
             try writer.writeAll("\n");
             for (self.gcm.postorder) |p| {
-                p.base.fmt(self.gcm.block_count, writer, colors);
+                p.base.fmt(true, writer, colors);
 
                 try writer.writeAll("\n");
                 for (p.base.outputs()) |o| {
                     try writer.writeAll("  ");
-                    o.get().fmt(self.gcm.instr_count, writer, colors);
+                    o.get().fmt(true, writer, colors);
                     try writer.writeAll("\n");
                 }
             }
@@ -3622,7 +3644,7 @@ pub fn Func(comptime Backend: type) type {
             worklist.collectAll(self);
 
             for (worklist.items()) |p| {
-                p.fmt(null, writer, colors);
+                p.fmt(false, writer, colors);
                 writer.writeAll("\n") catch unreachable;
             }
         }

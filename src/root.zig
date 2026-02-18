@@ -482,7 +482,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
 
     const options = backend.Machine.FinalizeOptionsInterface{
         .optimizations = opt_options,
-        .builtins = .{}, // TDOD: types.getBuiltins(),
+        .builtins = types.getBuiltins(),
         .files = types.line_indexes,
     };
 
@@ -539,13 +539,14 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
                 .code = out.items,
             })) catch |err| {
                 opts.logDiag("failed to run the test: {s}", .{@errorName(err)});
+                if (true) unreachable;
                 return error.Failed;
             };
 
-            bckend.disasm(.{
+            if (false) bckend.disasm(.{
                 .name = name,
                 .bin = out.items,
-                .out = opts.output,
+                .out = opts.diagnostics,
                 .colors = .no_color,
             });
         }

@@ -252,7 +252,7 @@ expectations := .{
 main := fn(): void {
     rstack := return_direct_stack()
     rstruct := return_indirect_stack()
-    v: ?^uint = null
+    v: ?^uint = #null
     ret := return_indirect_stack_but_not(&v)
 }
 

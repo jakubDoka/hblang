@@ -2234,6 +2234,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             loop.state.runtime.bl.addControl(&self.bl, .@"break");
             cond_bl.end(&self.bl, tk);
 
+            self.dbgReport(tok.pos, "", .{});
             loop.state.runtime.bl.end(&self.bl);
 
             self.popScope(frame);
@@ -2516,6 +2517,7 @@ pub fn emitString(self: *Codegen, pos: u32, ctx: Ctx, bytes: []const u8) Value {
 }
 
 pub fn loopControl(self: *Codegen, lex: *Lexer, kind: BBuilder.Loop.Control, label: []const u8) !Value {
+    self.dbgReport(lex.cursor, "", .{});
     var cursor = self.loops;
     var seen_runtime = false;
     while (cursor) |loop| : (cursor = loop.prev) {
@@ -2542,7 +2544,7 @@ pub fn loopControl(self: *Codegen, lex: *Lexer, kind: BBuilder.Loop.Control, lab
             }
             break;
         }
-    }
+    } else unreachable;
 
     return error.Unreachable;
 }
@@ -4999,6 +5001,8 @@ pub fn emitArbitraryStore(
     value: *BNode,
     size: usize,
 ) void {
+    if (value.kind == .Poison) return;
+
     var storer = value.data_type;
     var offset: Types.Size = 0;
     const slc = self.sloc(pos);
@@ -6300,6 +6304,12 @@ pub fn collectExports(types: *Types) !void {
         h.get(types).queue(.runtime, types);
     }
 
+    if (types.handlers.get(.memcpy).asOpt()) |h| {
+        h.get(types).linkage = .exported;
+        h.get(types).scope.name_pos = .memcpy;
+        h.get(types).queue(.runtime, types);
+    }
+
     if (!has_main and types.handlers.get(.entry) == .invalid) {
         const root_scope = File.Id.root.getScope(types);
 
@@ -6683,8 +6693,6 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
 
     const asts, var kl = try parseExample(&scratch, name, code, wint);
 
-    if (true) return;
-
     var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
     target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
     //target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
@@ -6709,7 +6717,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     var exe: std.ArrayList(u8) =
         if (types.errored == 0) backend.finalizeBytes(gpa, .{
             .optimizations = opt_mode,
-            .builtins = .{},
+            .builtins = types.getBuiltins(),
             .files = types.line_indexes,
         }) else .empty;
     defer exe.deinit(gpa);

@@ -375,32 +375,33 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
     const schedules = tmp.arena.alloc(u32, func.next_id);
 
-    func.gcm.instr_count = 0;
     const should_log = 1 == 0;
+
+    var instr_count: u32 = 0;
     for (func.gcm.postorder, 0..) |bb, i| {
         schedules[bb.base.id] = @intCast(i);
         for (bb.base.outputs()) |instr| {
             if (instr.get().isDef()) {
-                schedules[instr.get().id] = func.gcm.instr_count;
-                func.gcm.instr_count += 1;
+                schedules[instr.get().id] = instr_count;
+                instr_count += 1;
             } else {
                 schedules[instr.get().id] = no_def_sentinel;
             }
         }
     }
 
-    slf.max_instructions = @max(slf.max_instructions, func.gcm.instr_count);
+    slf.max_instructions = @max(slf.max_instructions, instr_count);
 
-    if (func.gcm.instr_count == 0) {
+    if (instr_count == 0) {
         const allcs = func.arena.allocator().alloc(u16, func.next_id) catch unreachable;
         @memset(allcs, no_reg_sentinel);
         return allcs;
     }
 
-    var build_lrgs = tmp.arena.makeArrayList(LiveRange, func.gcm.instr_count);
-    const lrg_table_build = tmp.arena.alloc(?*LiveRange, func.gcm.instr_count);
+    var build_lrgs = tmp.arena.makeArrayList(LiveRange, instr_count);
+    const lrg_table_build = tmp.arena.alloc(?*LiveRange, instr_count);
     @memset(lrg_table_build, null);
-    var failed = tmp.arena.makeArrayList(u16, func.gcm.instr_count);
+    var failed = tmp.arena.makeArrayList(u16, instr_count);
 
     // # Build live ranges
     //

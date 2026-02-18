@@ -9,8 +9,6 @@ pub fn Mixin(comptime Backend: type) type {
         cfg_built: std.debug.SafetyLock = .{},
         loop_tree: []LoopTree = undefined,
         postorder: []*CfgNode = undefined,
-        block_count: u16 = undefined,
-        instr_count: u16 = undefined,
 
         const Func = graph.Func(Backend);
         const Self = @This();
@@ -318,23 +316,16 @@ pub fn Mixin(comptime Backend: type) type {
                 break :sched_late;
             }
 
-            compact_ids: {
+            schedule_blocks: {
                 visited.setRangeValue(.{ .start = 0, .end = visited.capacity() }, false);
-                self.gcm.block_count = 0;
-                self.gcm.instr_count = 0;
 
                 const postorder = self.collectPostorder(tmp.arena.allocator(), &visited);
                 for (postorder) |bb| {
-                    const node = &bb.base;
-                    self.gcm.block_count += 1;
-
                     scheduleBlock(self, bb);
-
-                    self.gcm.instr_count += @intCast(node.outputs().len);
                 }
 
                 gcm.postorder = self.arena.allocator().dupe(*CfgNode, postorder) catch unreachable;
-                break :compact_ids;
+                break :schedule_blocks;
             }
 
             if (graph.is_debug) validate_ssa: {

@@ -572,14 +572,7 @@ pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If 
 pub fn addPhi(self: *Builder, sloc: graph.Sloc, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.Phi) {
     if (self.scope == null) return self.func.addNode(.Phi, sloc, .top, &.{}, .{});
 
-    std.debug.assert(self.control().?.kind == .Region);
-    return self.func.addNode(
-        .Phi,
-        sloc,
-        lhs.data_type.meet(rhs.data_type),
-        &.{ self.control(), lhs, rhs },
-        .{},
-    );
+    return self.func.addPhi(sloc, self.control().?, lhs, rhs);
 }
 
 pub const Loop = struct {

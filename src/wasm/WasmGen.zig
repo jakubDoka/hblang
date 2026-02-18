@@ -641,8 +641,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     var counters: LocalCounts = .initFill(0);
 
-    func.gcm.instr_count = 0;
-
     for (func.gcm.postorder) |block| {
         for (block.base.outputs()) |out| {
             const instr = out.get();

@@ -844,7 +844,8 @@ pub const Scope = extern struct {
     }
 
     pub const NamePos = enum(u32) {
-        entry = std.math.maxInt(u32) - 4,
+        entry = std.math.maxInt(u32) - 5,
+        memcpy,
         tuple,
         file,
         empty,
@@ -863,6 +864,7 @@ pub const Scope = extern struct {
                 .empty => "",
                 .tuple => "tuple",
                 .entry => "_start",
+                .memcpy => "memcpy",
                 _ => |v| {
                     var str = file.get(types).tokenStr(@intFromEnum(v));
                     if (str[0] == '"') str = str[1 .. str.len - 1];
@@ -2038,4 +2040,8 @@ pub fn nextFunc(self: *Types, target: Target, pop_until: usize) ?FuncId {
     }
 
     return null;
+}
+
+pub fn getBuiltins(self: *Types) Machine.Builtins {
+    return .{ .memcpy = @intFromEnum(self.handlers.get(.memcpy)) };
 }

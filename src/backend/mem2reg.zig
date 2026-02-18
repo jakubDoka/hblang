@@ -67,10 +67,9 @@ pub fn Mixin(comptime Backend: type) type {
                         }
                         scope[index] = loop.items[index];
                         if (scope[index].expand().? == .Loop) {
-                            scope[index] = .compact(.{ .Node = resolve(func, loop.items, index, ty) });
+                            unreachable;
                         }
 
-                        // std.debug.dumpCurrentStackTrace(@returnAddress());
                         std.debug.assert(scope[index].expand().?.Node.data_type == ty);
                         return scope[index].expand().?.Node;
                     },
@@ -251,10 +250,6 @@ pub fn Mixin(comptime Backend: type) type {
 
                 if (bbc.base.isBasicBlockStart()) {
                     Func.CfgNode.scheduleBlock(bbc);
-                    for (bbc.base.outputs(), 0..) |o, i| {
-                        if (o.get().isCfg()) break;
-                        schedules[o.get().id] = @intCast(i);
-                    }
                 }
 
                 var stmp = utils.Arena.scrath(tmp.arena);
@@ -319,38 +314,53 @@ pub fn Mixin(comptime Backend: type) type {
                     // either we arrived from the back branch or the other side of the split
                     if (states[schedules[child.id]].expand(locals.len).Join) |s| {
                         if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, schedules[s.ctrl.id], child, schedules[child.id] });
-                        for (s.items, locals, 0..) |clhs, crhs, i| {
-                            var lhs = clhs.expand() orelse continue;
-                            if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
-                                var rhs = crhs.expand() orelse Local.Expanded{
-                                    .Node = self.addUninit(lhs.Node.sloc, lhs.Node.data_type),
-                                };
 
-                                if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
-                                    rhs = .{ .Node = Local.resolve(self, locals, i, lhs.Node.data_type) };
-                                }
+                        if (child.kind == .Region) {
+                            var lhs = s.items;
+                            var rhs = locals;
 
-                                if (rhs == .Node) {
-                                    if (self.setInput(lhs.Node, 2, .intern, rhs.Node)) |nlhs| {
-                                        lhs = .{ .Node = nlhs };
+                            if (child.inputs()[0] == bb) {
+                                std.mem.swap([]Local, &lhs, &rhs);
+                            }
+
+                            const dest = locals;
+
+                            for (lhs, rhs, dest, 0..) |l, r, *d, i| {
+                                if (l == r) continue;
+
+                                const lv = Local.resolve(self, lhs, i, .i64);
+                                const rv = Local.resolve(self, rhs, i, .i64);
+
+                                if (lv == rv) continue;
+
+                                d.* = .compact(.{ .Node = self.addPhi(lv.sloc, child, lv, rv) });
+                            }
+                        } else {
+                            for (s.items, locals, 0..) |clhs, crhs, i| {
+                                var lhs = clhs.expand() orelse continue;
+                                if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
+                                    const rhs = crhs.expand() orelse Local.Expanded{
+                                        .Node = self.addUninit(lhs.Node.sloc, lhs.Node.data_type),
+                                    };
+
+                                    if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
+                                        unreachable;
                                     }
-                                } else {
-                                    const prev = lhs.Node.inputs()[1].?;
-                                    self.subsume(prev, lhs.Node, .intern);
-                                    lhs = .{ .Node = prev };
-                                }
 
-                                if (child.inputs()[0] == bb) {
-                                    self.uninternNode(lhs.Node);
-                                    for (lhs.Node.inputs()[1..3], 1..) |inp, j| {
-                                        const idx = inp.?.posOfOutput(j, lhs.Node);
-                                        inp.?.outputs()[idx] = .init(lhs.Node, 3 - j, null);
+                                    if (rhs == .Node) {
+                                        if (self.setInput(lhs.Node, 2, .intern, rhs.Node)) |nlhs| {
+                                            lhs = .{ .Node = nlhs };
+                                        }
+                                    } else {
+                                        const prev = lhs.Node.inputs()[1].?;
+                                        self.subsume(prev, lhs.Node, .intern);
+                                        lhs = .{ .Node = prev };
                                     }
-                                    std.mem.reverse(?*Node, lhs.Node.inputs()[1..3]);
-                                    if (self.reinternNode(lhs.Node)) |v| lhs = .{ .Node = v };
-                                }
 
-                                s.items[i] = .compact(lhs);
+                                    if (child.inputs()[0] == bb) unreachable;
+
+                                    s.items[i] = .compact(lhs);
+                                }
                             }
                         }
                         s.done = true;
@@ -362,9 +372,12 @@ pub fn Mixin(comptime Backend: type) type {
                             .ctrl = child,
                             .items = tmp.arena.dupe(Local, locals),
                         };
-                        for (locals) |*l| {
-                            if (l.expand() != null) {
-                                l.* = .compact(.{ .Loop = loop });
+                        if (child.kind == .Loop) {
+                            std.debug.assert(child.kind == .Loop);
+                            for (locals) |*l| {
+                                if (l.expand() != null) {
+                                    l.* = .compact(.{ .Loop = loop });
+                                }
                             }
                         }
                         states[schedules[child.id]] = .compact(.{ .Join = loop });

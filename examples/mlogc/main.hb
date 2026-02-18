@@ -1,3 +1,4 @@
+
 bsc := @use("../hb-basic/lib.hb")
 mod := @CurrentScope()
 
@@ -87,7 +88,7 @@ main := fn(argc: uint, argv: ^^u8): int {
 					emit("  end\n")
 				}
 			},
-			_ => {
+			else => {
 				msg := bsc.ArrayList(u8).empty
 				msg.push_slice(tmp.arena, "expected function, got ")
 				msg.push_slice(tmp.arena, parser.tok.kind.name())
@@ -110,7 +111,7 @@ Parser := struct {
 	.tok: Lexer.Token;
 	.scope: bsc.ArrayList(Var) = .empty;
 	.loops: bsc.ArrayList(Loop) = .empty;
-	.tmp: ^bsc.Arena
+	.tmp: ^bsc.Arena;
 
 	Var := struct{.name: []u8; .idx: uint}
 	Loop := struct{.id: uint}
@@ -309,7 +310,7 @@ Parser := struct {
 			},
 			.intrinsic => self.intrinsic(ptok),
 			.semi => {},
-			_ => {
+			else => {
 				tmp := bsc.Arena.scratch(null)
 
 				msg := bsc.ArrayList(u8).empty
@@ -423,7 +424,7 @@ Parser := struct {
 				.star => op_str = "mul",
 				.slash => op_str = "div",
 				.eq => op_str = "equal",
-				_ => {
+				else => {
 					self.report(pos, "TODO: implement operator")
 					die
 				},
@@ -450,7 +451,7 @@ Parser := struct {
 	IntrinsicSpec := struct {
 		.name: []u8;
 		.prefix: []u8;
-		.args: [][]u8
+		.args: [][]u8;
 
 		simple := fn(name: []u8, prefix: []u8, args: [][]u8): IntrinsicSpec {
 			return .{name, prefix, args: @alloc_global(args)}
@@ -575,12 +576,12 @@ report := fn(path: []u8, source: []u8, pos: uint, msg: []u8): void {
 
 Lexer := struct {
 	.pos: uint;
-	.source: []u8
+	.source: []u8;
 
 	Token := struct {
 		.kind: Kind;
 		.pos: uint;
-		.end: uint
+		.end: uint;
 
 		Kind := enum(u8) {
 			.eof := 0;
@@ -611,7 +612,7 @@ Lexer := struct {
 			.minus := '-';
 			.star := '*';
 			.slash := '/';
-			.unknown := 128
+			.unknown := 128;
 
 			prec := fn(self: Kind): ?u8 {
 				match self {
@@ -622,7 +623,7 @@ Lexer := struct {
 					.eq => return 3,
 					.decl => return 15,
 					.assign => return 15,
-					_ => return null,
+					else => return null,
 				}
 			}
 
@@ -735,10 +736,7 @@ Lexer := struct {
 
 	eat_ident := fn(self: ^Lexer): void {
 		c := self.source[self.pos]
-		while c >= 'a' & c <= 'z' |
-			(c >= 'A' & c <= 'Z') |
-			(c >= '0' & c <= '9') |
-			c == '_' {
+		while c >= 'a' & c <= 'z' | (c >= 'A' & c <= 'Z') | (c >= '0' & c <= '9') | c == '_' {
 			self.pos += 1
 			c = self.source[self.pos]
 		}
