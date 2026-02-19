@@ -185,7 +185,7 @@ fmt := enum {
 		$prev_end := 0
 		$index := 0
 		$loop {
-			next_fmt := @eval(mem.index(u8, tmpl[prev_end..], "%")) $|| break
+			next_fmt := mem.index(u8, tmpl[prev_end..], "%") $|| break
 			_ = sys.write(1, tmpl[prev_end..next_fmt])
 
 			$if index >= @len_of(@TypeOf(args)) {

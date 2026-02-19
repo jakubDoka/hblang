@@ -1988,7 +1988,7 @@ pub fn collectPointer(
         for (0..self.funcs.meta.len) |i| {
             const sim = self.ct_backend.mach.out.getFuncSym(@intCast(i)) orelse continue;
             if (sim.offset == value) {
-                std.debug.assert(size == 0);
+                std.debug.assert(size == 4);
                 return .{
                     .target = @intCast(i),
                     .offset = @intCast(offset),

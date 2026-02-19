@@ -1377,11 +1377,7 @@ main := fn(): uint {
 ```
 
 #### float sse call conv 1
-```!hb
-expectations := .{
-    should_error: true,
-}
-
+```hb
 V2 := struct{.a: f32; .b: f32}
 
 fun := fn(v: V2): f32 return v.a + v.b
@@ -1392,11 +1388,7 @@ main := fn(): int {
 ```
 
 #### float sse call conv 2
-```!hb
-expectations := .{
-    should_error: true,
-}
-
+```hb
 V2 := struct{.a: f64; .b: f64}
 
 fun := fn(v: V2): f64 return v.a + v.b
@@ -1407,11 +1399,7 @@ main := fn(): int {
 ```
 
 #### float sse call conv 3
-```!hb
-expectations := .{
-    should_error: true,
-}
-
+```hb
 V2 := struct{.a: f32; .b: f32; .c: f32; .d: f32}
 
 fun := fn(v: V2): f32 return v.a + v.b + v.c + v.d
@@ -1422,7 +1410,7 @@ main := fn(): int {
 ```
 
 #### float load and store 1
-```!hb
+```hb
 Stru := struct{.a: f32; .b: f32; .c: f32}
 
 fun := fn(s: Stru): f32 return s.a + s.b - s.c

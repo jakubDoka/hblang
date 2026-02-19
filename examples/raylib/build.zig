@@ -22,6 +22,7 @@ pub fn build(b: *std.Build) !void {
     const hblang = b.dependency("hblang", .{
         .target = target,
         .optimize = optimize,
+        .@"report-trace-size" = 4,
     });
     const hbc = hblang.artifact("hbc");
 
@@ -51,13 +52,13 @@ pub fn build(b: *std.Build) !void {
         exe.addObjectFile(main_obj);
         exe.linkLibrary(raylib);
 
-        const cmd = b.addSystemCommand(&.{"gdb"});
-        try cmd.getEnvMap().put("DEBUGINFOD_ENABLED", "0");
-        cmd.addFileArg(exe.getEmittedBin());
-        cmd.addArg("-ex");
-        cmd.addArg("run");
+        //const cmd = b.addSystemCommand(&.{"gdb"});
+        //try cmd.getEnvMap().put("DEBUGINFOD_ENABLED", "0");
+        //cmd.addFileArg(exe.getEmittedBin());
+        //cmd.addArg("-ex");
+        //cmd.addArg("run");
 
         const run = b.step(file, "run the example");
-        run.dependOn(&cmd.step);
+        run.dependOn(&b.addRunArtifact(exe).step);
     }
 }

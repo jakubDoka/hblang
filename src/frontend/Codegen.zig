@@ -94,7 +94,7 @@ pub const Value = struct {
     pub fn load(self: Value, pos: u32, gen: *Codegen) *BNode {
         return switch (self.normalized(pos, gen)) {
             .empty => if (self.ty == .never)
-                gen.bl.addUninit(gen.sloc(pos), .top)
+                gen.bl.addUninit(gen.sloc(pos), .bot)
             else {
                 gen.report(pos, "BUG", .{}) catch {};
                 unreachable;
@@ -102,7 +102,7 @@ pub const Value = struct {
             .value => |v| v,
             .ptr => |p| {
                 if (self.ty == .never) {
-                    return gen.bl.addUninit(gen.sloc(pos), .top);
+                    return gen.bl.addUninit(gen.sloc(pos), .bot);
                 }
 
                 const ty = gen.types.abi
@@ -554,9 +554,9 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
     if (lex.eatMatch(.idk)) {
         global.uninit = true;
 
-        if (global.readonly) {
-            self.report(lex.cursor, "readonly uninitialized global is nonsense", .{}) catch {};
-        }
+        //if (global.readonly) {
+        //    self.report(lex.cursor, "readonly uninitialized global is nonsense", .{}) catch {};
+        //}
 
         global.ty = ty orelse .never;
         if (ty == null) self.report(lex.cursor, "cant infer the type of the uninit" ++
@@ -1203,7 +1203,7 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
                 self.emitArbitraryStore(
                     name.pos,
                     self.bl.addFieldOffset(slc, stack_slot, splits[0].Reg.size()),
-                    sigbl.addParam(&self.bl, slc, splits[0], ty.raw()),
+                    sigbl.addParam(&self.bl, slc, splits[1], ty.raw()),
                     ty.size(self.types) - splits[0].Reg.size(),
                 );
 
@@ -1686,7 +1686,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             break :neg .value(oper.ty, self.bl.addUnOp(
                 slc,
-                if (tok.kind == .@"~") .bnot else .ineg,
+                if (tok.kind == .@"~") .bnot else if (oper.ty.isBuiltin(.isFloat)) .fneg else .ineg,
                 Abi.categorizeBuiltinUnwrapped(oper.ty.data().Builtin),
                 oper.load(tok.end, self),
             ));
@@ -2308,7 +2308,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
         .false => .value(.bool, self.bl.addIntImm(slc, .i8, 0)),
         .DecInteger, .BinInteger, .OctInteger, .HexInteger => int: {
             const res = std.fmt.parseInt(u64, tok.view(lex.source), 0);
-            const val = res catch |err| switch (err) {
+            var val = res catch |err| switch (err) {
                 error.Overflow => return self.report(tok.pos, "the integer" ++
                     " value is too large", .{}),
                 error.InvalidCharacter => unreachable,
@@ -2316,7 +2316,10 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             var ty = ctx.ty orelse .uint;
             if (ty.data() == .Option) ty = ty.data().Option.get(self.types).inner;
-            if (!ty.isBuiltin(.isInteger)) ty = .uint;
+            if (!ty.isBuiltin(.isInteger) and !ty.isBuiltin(.isFloat)) ty = .uint;
+
+            if (ty == .f32) val = @as(u32, @bitCast(@as(f32, @floatFromInt(val))));
+            if (ty == .f64) val = @bitCast(@as(f64, @floatFromInt(val)));
 
             break :int .value(ty, self.bl.addIntImm(
                 slc,
@@ -3803,6 +3806,29 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 self.bl.addIntImm(slc, .i8, 0),
             )));
         },
+        .@"$||" => {
+            if (res.value.ty == .bool) {
+                if (try self.peval(top.pos, res.value, bool)) {
+                    res.set(.value(.bool, self.bl.addIntImm(self.sloc(top.pos), .i8, 1)));
+                } else {
+                    res.set(try self.exprPrecAllowUnreachable(ctx, lex, prevPrec));
+                }
+            } else {
+                if (res.value.ty.data() != .Option) {
+                    return self.report(top.pos, "{} is not a boolean nor a option", .{res.value.ty});
+                }
+
+                const cvalue = try self.peval(top.pos, res.value, Types.ComptimeValue);
+                const value = self.ctValueToValue(top.pos, res.value.ty, cvalue);
+
+                const check = self.emitOptionCheck(top.pos, .@"!=", value);
+                if (try self.peval(top.pos, .value(.bool, check), bool)) {
+                    res.set(try self.emitOptionUnwrap(top.pos, value));
+                } else {
+                    res.set(try self.exprPrecAllowUnreachable(ctx, lex, prevPrec));
+                }
+            }
+        },
         .@"||" => or_: {
             ass_lhs.* = res.dupe();
 
@@ -5029,7 +5055,9 @@ pub fn emitArbitraryStore(
         return;
     }
 
-    std.debug.assert(!value.data_type.isFloat()); // TODO
+    if (value.data_type.isFloat()) {
+        utils.panic("{f} {}", .{ value, size });
+    }
 
     // TODO: this will be incorrect on ARM
 
@@ -6953,7 +6981,7 @@ pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
     if (std.mem.indexOf(u8, path, "inf") != null) return;
     if (std.mem.indexOf(u8, path, "struct-niches") != null) return;
     //if (std.mem.indexOf(u8, path, "json") != null) return;
-    if (std.mem.indexOf(u8, path, "float") != null) return;
+    //if (std.mem.indexOf(u8, path, "float") != null) return;
 
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();

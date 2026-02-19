@@ -187,8 +187,8 @@ pub const Reg = enum(u8) {
 
         if (wide) res |= 0b1000;
         if (@intFromEnum(reg) & 0xf >= 8) res |= 0b0100;
-        if (@intFromEnum(ptr) & 0xf >= 8) res |= 0b0001;
         if (@intFromEnum(idx) & 0xf >= 8) res |= 0b0010;
+        if (@intFromEnum(ptr) & 0xf >= 8) res |= 0b0001;
 
         return res;
     }
@@ -1802,6 +1802,20 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     },
                     .fneg => unreachable,
                 }
+            },
+            .GetLane => |extra| {
+                const opcode = switch (instr.data_type) {
+                    .f32 => &.{ 0x0F, 0xC6 },
+                    else => utils.panic("wuh {f}", .{instr.data_type}),
+                };
+
+                const dst = self.getReg(instr);
+                const src = self.getReg(inps[0]);
+
+                self.emitRex(.rax, dst, src, instr.data_type.size());
+                self.emitBytes(opcode);
+                self.emitByte(Reg.Mod.direct.rm(dst, src));
+                self.emitByte(extra.idx);
             },
             .Arg, .Ret, .Mem, .Never, .Jmp, .Return => {},
             else => {

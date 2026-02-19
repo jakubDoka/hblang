@@ -216,19 +216,32 @@ pub fn addBitIndexLoad(
 }
 
 pub fn addBitFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
-    std.debug.assert(base.data_type.isInt());
-    std.debug.assert(ty.isInt());
-
     if (base.data_type == ty) {
         std.debug.assert(offset == 0);
         return base;
     }
 
-    const shift_amount = self.addIntImm(sloc, base.data_type, offset * 8);
-    const shift = self.addBinOp(sloc, .ushr, base.data_type, base, shift_amount);
-    const red = self.addUnOp(sloc, .ired, ty, shift);
+    if (base.data_type.isFloat()) {
+        std.debug.assert(ty.isFloat());
 
-    return red;
+        const idx = offset >> ty.sizePow();
+
+        return self.func.addNode(
+            .GetLane,
+            sloc,
+            ty,
+            &.{ null, base },
+            .{ .idx = @intCast(idx) },
+        );
+    } else {
+        std.debug.assert(base.data_type.isInt());
+        std.debug.assert(ty.isInt());
+
+        const shift_amount = self.addIntImm(sloc, base.data_type, offset * 8);
+        const shift = self.addBinOp(sloc, .ushr, base.data_type, base, shift_amount);
+        const red = self.addUnOp(sloc, .ired, ty, shift);
+        return red;
+    }
 }
 
 pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType, value: *BuildNode) void {

@@ -296,6 +296,6 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
     var i: usize = 0;
     bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types)) });
     if (i * 8 < ty.size(types)) {
-        bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types)) });
+        bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types) - i * 8) });
     }
 }

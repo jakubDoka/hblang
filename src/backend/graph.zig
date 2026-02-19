@@ -376,17 +376,21 @@ pub const DataType = enum(u8) {
         return self.isSse() or self.isFloat();
     }
 
-    pub fn size(self: DataType) u8 {
+    pub fn sizePow(self: DataType) u3 {
         return switch (self) {
             .top, .bot => unreachable,
-            .i8 => 1,
-            .i16 => 2,
-            .i32, .f32 => 4,
-            .i64, .f64 => 8,
-            .v128 => 16,
-            .v254 => 32,
-            .v512 => 64,
+            .i8 => 0,
+            .i16 => 1,
+            .i32, .f32 => 2,
+            .i64, .f64 => 3,
+            .v128 => 4,
+            .v254 => 5,
+            .v512 => 6,
         };
+    }
+
+    pub fn size(self: DataType) u8 {
+        return @as(u8, 1) << self.sizePow();
     }
 
     pub fn mask(self: DataType) i64 {
@@ -681,6 +685,9 @@ pub const builtin = enum {
     };
     pub const Syms = extern struct {
         pub const is_pinned = true;
+    };
+    pub const GetLane = extern struct {
+        idx: u8,
     };
 };
 
@@ -1826,6 +1833,7 @@ pub fn Func(comptime Backend: type) type {
                     .GlobalAddr,
                     .FramePointer,
                     .Syms,
+                    .GetLane,
                     => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),

@@ -1,3 +1,4 @@
+
 rl := @use("rl.hb")
 
 Enemy := struct {
@@ -33,7 +34,6 @@ round: int = idk
 main := fn(): uint {
 	rl.init_window(800, 600, "hblang\0".ptr)
 	defer rl.close_window()
-
 
 	$create_enemy := fn(pos: rl.V2, dir: rl.V2): void {
 		enemyes[enemy_count] = .(pos, dir)
@@ -82,7 +82,7 @@ main := fn(): uint {
 		rl.draw_rectangle_v(player_pos - .xy(player_size * 0.5), .xy(player_size), square)
 
 		{
-			dir := rl.V2.zero
+			dir := #rl.V2.zero
 			if rl.is_key_down('W') dir.y -= 1.0
 			if rl.is_key_down('S') dir.y += 1.0
 			if rl.is_key_down('A') dir.x -= 1.0
@@ -106,7 +106,8 @@ main := fn(): uint {
 			reload_time -= rl.get_frame_time()
 		}
 
-		$wrap_vec := fn(vec: rl.V2, by: rl.V2): rl.V2 {
+		$wrap_vec := fn(vec_: rl.V2, by: rl.V2): rl.V2 {
+			vec := #vec_
 			if vec.x < 0.0 vec.x += by.x
 			if vec.x > by.x vec.x -= by.x
 			if vec.y < 0.0 vec.y += by.y
@@ -117,10 +118,7 @@ main := fn(): uint {
 		$intersects := fn(a_center: rl.V2, a_size: f32, b_center: rl.V2, b_size: f32): bool {
 			a_size *= 0.5
 			b_size *= 0.5
-			return a_center.x - a_size < b_center.x + b_size &
-				a_center.x + a_size > b_center.x - b_size &
-				a_center.y - a_size < b_center.y + b_size &
-				a_center.y + a_size > b_center.y - b_size
+			return a_center.x - a_size < b_center.x + b_size & a_center.x + a_size > b_center.x - b_size & a_center.y - a_size < b_center.y + b_size & a_center.y + a_size > b_center.y - b_size
 		}
 
 		player_pos = wrap_vec(player_pos, screen_size)
@@ -131,7 +129,7 @@ main := fn(): uint {
 			enemy.pos = wrap_vec(enemy.pos, screen_size)
 
 			if intersects(enemy.pos, enemy_size, player_pos, player_size) {
-				player_size -= $damage
+				player_size -= damage
 				if player_size == 0 init_world(screen_size)
 				player_pos += (player_pos - enemy.pos).norm() * .xy(player_size * 2.0)
 			}
@@ -156,7 +154,7 @@ main := fn(): uint {
 			round += 1
 			base_enemy_speed := round * 10
 			for i := 0..@bit_cast(round) {
-				pos: rl.V2 = .xy(@int_to_float(rl.get_random_value(0, rl.get_screen_width())))
+				pos: rl.V2 = #.xy(@int_to_float(rl.get_random_value(0, rl.get_screen_width())))
 				vel: rl.V2 = .xy(@int_to_float(rl.get_random_value(100, base_enemy_speed)))
 
 				if i % 4 == 0 {
