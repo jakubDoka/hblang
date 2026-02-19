@@ -2590,7 +2590,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (self.output_len != 0) {
                 for (self.outputs()) |o| {
-                    std.debug.print("{f}\n", .{o});
+                    print("{f}\n", .{o});
                 }
                 utils.panic("{f}\n", .{self});
             }

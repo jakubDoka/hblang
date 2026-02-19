@@ -566,7 +566,7 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
             .id = @intFromEnum(global_id),
             .value = .{ .uninit = global.ty.size(self.types) },
             .readonly = false,
-            .thread_local = true,
+            .thread_local = false,
             .uuid = @splat(0),
         });
 
@@ -574,6 +574,8 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
     }
 
     if (lex.eatMatch(.@"@thread_local_storage")) {
+        global.uninit = true;
+
         _ = self.expect(lex, .@"(", "to keep the directive syntax consistent") catch {};
         _ = self.expect(lex, .@")", "to keep the directive syntax consistent") catch {};
 
@@ -713,7 +715,7 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
             .getFuncSym(@intFromEnum(func)).?;
 
         self.types.vm.ip = func_sym.offset;
-        self.types.vm.fuel = 1024;
+        self.types.vm.fuel = 1024 * 16;
         // return to hardcoded tx
         regs.set(.ret_addr, Types.stack_size - 1);
     }
@@ -1035,6 +1037,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
     regs.set(.ret(0), value.raw());
 }
 
+// TODO: maked this not generic
 pub fn addDecls(self: *Codegen, e: anytype, slot: *[16]u8) void {
     switch (e.get(self.types).decls) {
         .sourced => |edecls| {
@@ -1051,7 +1054,7 @@ pub fn addDecls(self: *Codegen, e: anytype, slot: *[16]u8) void {
             }
         },
         .generated => {
-            unreachable; // TODO
+            _ = self.addSliceGlobal(self.types.sliceOf(.u8), 0, slot);
         },
     }
 }
@@ -1265,15 +1268,17 @@ pub fn emitToBackend(
                         if (global.get(self.types).runtime_emmited) continue;
 
                         var relocs = std.ArrayList(Machine.DataOptions.Reloc).empty;
-                        self.types.collectGlobalRelocs(global, &relocs, tmp.arena, false);
+                        if (!global.get(self.types).uninit) {
+                            self.types.collectGlobalRelocs(global, &relocs, tmp.arena, false);
 
-                        for (relocs.items) |reloc| {
-                            if (reloc.is_func) {
-                                const func: Types.FuncId = @enumFromInt(reloc.target);
-                                func.get(self.types).queue(.runtime, self.types);
-                            } else {
-                                const oglob: Types.GlobalId = @enumFromInt(reloc.target);
-                                queue.append(tmp.arena.allocator(), oglob) catch unreachable;
+                            for (relocs.items) |reloc| {
+                                if (reloc.is_func) {
+                                    const func: Types.FuncId = @enumFromInt(reloc.target);
+                                    func.get(self.types).queue(.runtime, self.types);
+                                } else {
+                                    const oglob: Types.GlobalId = @enumFromInt(reloc.target);
+                                    queue.append(tmp.arena.allocator(), oglob) catch unreachable;
+                                }
                             }
                         }
 
@@ -1287,7 +1292,8 @@ pub fn emitToBackend(
                             .value = .{ .init = global.get(self.types)
                                 .data.get(self.types) },
                             .readonly = global.get(self.types).readonly,
-                            .thread_local = false,
+                            .thread_local = global.get(self.types)
+                                .data.sym(self.types).kind == .tls_prealloc,
                             .relocs = relocs.items,
                             .uuid = @splat(0),
                         });
@@ -1794,7 +1800,6 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             var else_pos: ?u32 = null;
             var iter = lex.list(.@",", .@"}");
             while (iter.next()) {
-                branch_count += 1;
                 if (lex.eatMatch(.@"else")) {
                     if (else_pos) |p| {
                         _ = self.report(lex.cursor, "duplicate else arm", .{}) catch {};
@@ -1803,9 +1808,11 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
                     _ = try self.expect(lex, .@"=>", "to open a match arm");
                     else_pos = lex.cursor;
-                    try lex.skipExpr();
+                    lex.skipExprDropErr();
                     continue;
                 }
+
+                branch_count += 1;
 
                 const pred = try self.typedExpr(pat.ty, .{}, lex);
                 const pred_value = try self.peval(lex.cursor, pred, i64);
@@ -1935,10 +1942,6 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 slc,
                 cond.load(tok.end, self),
             );
-
-            if (self.bl.scope.?.id == 857) {
-                self.dbgReport(tok.end, "", .{});
-            }
 
             _ = self.branchExpr(lex);
 
@@ -2238,7 +2241,6 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             loop.state.runtime.bl.addControl(&self.bl, .@"break");
             cond_bl.end(&self.bl, tk);
 
-            self.dbgReport(tok.pos, "", .{});
             loop.state.runtime.bl.end(&self.bl);
 
             self.popScope(frame);
@@ -2521,7 +2523,6 @@ pub fn emitString(self: *Codegen, pos: u32, ctx: Ctx, bytes: []const u8) Value {
 }
 
 pub fn loopControl(self: *Codegen, lex: *Lexer, kind: BBuilder.Loop.Control, label: []const u8) !Value {
-    self.dbgReport(lex.cursor, "", .{});
     var cursor = self.loops;
     var seen_runtime = false;
     while (cursor) |loop| : (cursor = loop.prev) {
@@ -4010,6 +4011,18 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
             if (res.value.ty == .never or rhs.value.ty == .never)
                 return self.silentReport();
+
+            if (res.value.ty.data() == .Option and
+                res.value.ty.data().Option.get(self.types).inner.data() == .Pointer)
+            {
+                res.value.ty = res.value.ty.data().Option.get(self.types).inner;
+            }
+
+            if (rhs.value.ty.data() == .Option and
+                rhs.value.ty.data().Option.get(self.types).inner.data() == .Pointer)
+            {
+                rhs.value.ty = rhs.value.ty.data().Option.get(self.types).inner;
+            }
 
             if (res.value.ty.data() == .Pointer and
                 (top.kind == .@"+" or top.kind == .@"-") and
@@ -5781,14 +5794,14 @@ pub fn partialEvalLoad(self: *Codegen, op: *BNode, relocs: ?[]Machine.DataOption
             for (rlocs.items) |reloc| {
                 if (reloc.offset == src_offset) {
                     const rel = if (reloc.target & 0x80000000 != 0)
-                        self.types.collectPointer(
+                        (self.types.collectPointer(
                             op.sloc,
                             reloc.is_func,
                             reloc.offset,
                             (reloc.target & ~@as(u32, 0x80000000)),
                             mem,
                             false,
-                        ) catch return error.Report
+                        ) catch return error.Report).?
                     else
                         reloc;
 

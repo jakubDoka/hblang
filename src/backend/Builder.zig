@@ -26,7 +26,9 @@ pub const BinOp = graph.BinOp;
 pub const UnOp = graph.UnOp;
 pub const classes = enum {
     // [Cfg, mem, ...values]
-    pub const Scope = extern struct {};
+    pub const Scope = extern struct {
+        done: bool = false,
+    };
 
     pub const Stub = extern struct {};
 };
@@ -141,6 +143,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
         for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
             std.debug.assert(node.kind != .Stub);
+            std.debug.assert(node.kind != .Phi or node.inputs()[2] != null);
             if (node.isLocked()) {
                 std.debug.dumpStackTrace(node.lock_at.trace);
                 utils.panic("{f}\n", .{node});
@@ -413,15 +416,17 @@ pub fn _readScopeValue(self: *Builder, index: usize) ?*Func.Node {
 
 pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.Node {
     const values = getScopeValues(scope);
-    return switch (values[index].kind) {
-        .Scope => {
+    return switch (values[index].extra2()) {
+        .Scope => |extra| {
             const loop = values[index];
             const initVal = getScopeValueMulty(func, loop, index);
             const items = getScopeValues(loop);
-            if (!items[index].isLazyPhi(items[0])) {
-                const phi = func.addNode(.Phi, initVal.sloc, initVal.data_type, &.{ items[0], initVal, null }, .{});
-                std.debug.assert(phi.isLazyPhi(items[0]));
-                func.setInputNoIntern(loop, index, phi);
+            if (!extra.done) {
+                if (!items[index].isLazyPhi(items[0])) {
+                    const phi = func.addNode(.Phi, initVal.sloc, initVal.data_type, &.{ items[0], initVal, null }, .{});
+                    std.debug.assert(phi.isLazyPhi(items[0]));
+                    func.setInputNoIntern(loop, index, phi);
+                }
             }
 
             func.setInputNoIntern(scope, index, items[index]);
@@ -501,6 +506,8 @@ pub fn _truncateScope(self: *Builder, scope: SpecificNode(.Scope), back_to: usiz
 
 pub fn killScope(func: *Func, scope: SpecificNode(.Scope)) void {
     scope.input_len = scope.input_ordered_len;
+    scope.extra(.Scope).done = true;
+    if (scope.outputs().len != 0) return;
     func.kill(scope);
 }
 
@@ -593,9 +600,7 @@ pub const Loop = struct {
             const rhs = mergeScopes(&builder.func, builder_scope, ctrl);
             getScopeValues(rhs)[0].extra(.Region).preserve_identity_phys = kind == .@"continue";
         } else {
-            std.debug.print("{f}\n", .{builder_scope});
             builder._truncateScope(builder_scope, self.scope.node.inputs().len);
-            std.debug.print("{f}\n", .{builder_scope});
             self.control.set(kind, builder_scope);
         }
         if (kind == .@"break") self.markBreaking();

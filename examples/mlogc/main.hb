@@ -6,7 +6,7 @@ Args := struct {
 	.root: ^u8;
 }
 
-emit := fn(bytes: []u8): void return @syscall(1, 1, bytes)
+emit := fn(bytes: []u8): void return @syscall(1, 1, bytes.ptr, bytes.len)
 
 main := fn(argc: uint, argv: ^^u8): int {
 	bsc.Arena.init_scratch(4096 * 128)

@@ -922,20 +922,22 @@ pub fn skipSuffix(lex: *Lexer, top: Lexer.Token, prevPrec: u8) SkipError!void {
 pub fn skipUnitExpr(lex: *Lexer) SkipError!void {
     const tok = lex.next();
     return switch (tok.kind.expand()) {
-        .true,
-        .false,
+        .Ident,
+        .@"$",
+        .@"'",
+        .@"\"",
+        .Type,
+        .Float,
+        ._,
         .DecInteger,
         .BinInteger,
         .OctInteger,
         .HexInteger,
-        .Float,
-        .Comment,
-        .@"\"",
-        .@"'",
-        .Type,
-        .Ident,
-        .@"$",
-        ._,
+        .true,
+        .false,
+        .null,
+        .idk,
+        .die,
         => {},
 
         .@"(", .@"{", .@".{" => {

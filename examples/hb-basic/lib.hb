@@ -1,7 +1,8 @@
+
 Arena := struct {
 	.ptr: ^u8;
 	.pos: ^u8;
-	.end: ^u8
+	.end: ^u8;
 
 	comptime_scratch: [1024 * 4 * 2]u8 = idk
 	comptime_arenas: [2]Arena = .[
@@ -45,7 +46,7 @@ Arena := struct {
 
 	Scope := struct {
 		.arena: ^Arena;
-		.pos: ^u8
+		.pos: ^u8;
 
 		pop := fn(self: ^Scope): void {
 			self.arena.pos = self.pos
@@ -136,7 +137,7 @@ Arena := struct {
 
 ArrayList := fn($T: type): type return struct {
 	.items: []T;
-	.capacity: uint
+	.capacity: uint;
 
 	Self := @CurrentScope()
 
@@ -207,7 +208,6 @@ fmt := enum {
 		}
 
 		_ = sys.write(1, tmpl[prev_end..])
-
 	}
 
 	display_int := fn(i: uint, buf: []u8): []u8 {
@@ -377,7 +377,7 @@ mem := enum {
 
 	SplitIter := fn($elem: type): type return struct {
 		.remaining: []elem;
-		.sep: []elem
+		.sep: []elem;
 
 		Self := @CurrentScope()
 
@@ -433,7 +433,7 @@ sys := enum {
 		.unused: [3]i64 = .[0, 0, 0];
 	}
 
-	StatError := enum(i32){
+	StatError := enum(i32) {
 		.EACCES = 13;
 		// Search permission denied for one of the directories in the path prefix
 		.EBADF = 9;
@@ -457,11 +457,11 @@ sys := enum {
 	}
 
 	read := fn(fd: i32, buf: []u8): Result(StatError) {
-		return @syscall(0, fd, buf)
+		return @syscall(0, fd, buf.ptr, buf.len)
 	}
 
 	Result := fn($err: type): type return struct {
-		.value: i32
+		.value: i32;
 
 		Self := @CurrentScope()
 
@@ -499,7 +499,7 @@ sys := enum {
 	}
 
 	// TODO: fix the formatter bug
-	OpenatError := enum(i32){
+	OpenatError := enum(i32) {
 		.ENOENT = 2;
 		// File doesn’t exist
 		.EACCES = 13;
@@ -517,13 +517,13 @@ sys := enum {
 	}
 
 	OpenatFlags := struct {
-		.vl: uint
+		.vl: uint;
 
 		readonly := OpenatFlags.(0)
 	}
 
 	OpenatMode := struct {
-		.vl: uint
+		.vl: uint;
 
 		empty := OpenatMode.(0)
 	}
@@ -534,13 +534,13 @@ sys := enum {
 		return @syscall(257, dirfd, path, open_flags, mode)
 	}
 
-	WriteError := enum(i32){
+	WriteError := enum(i32) {
 		.EFAULT = 14;
 		// Invalid memory address for filename pointer
 	}
 
 	write := fn(fd: i32, buf: []u8): Result(WriteError) {
-		return @syscall(1, fd, buf)
+		return @syscall(1, fd, buf.ptr, buf.len)
 	}
 
 	access := fn(path: ^u8, mode: AccessMode): i32 {
@@ -548,7 +548,7 @@ sys := enum {
 	}
 
 	AccessMode := struct {
-		.bits: uint
+		.bits: uint;
 
 		exists := AccessMode.(0)
 		read := AccessMode.(1)
@@ -590,8 +590,7 @@ sys := enum {
 		while c := cur.* {
 			str := mem.str_to_slice(c)
 
-			if mem.starts_with(u8, str, name) &&
-				str.len > name.len && str[name.len] == '=' {
+			if mem.starts_with(u8, str, name) && str.len > name.len && str[name.len] == '=' {
 				return str[name.len + 1..]
 			}
 
@@ -626,7 +625,7 @@ sys := enum {
 	}
 
 	MmapProt := struct {
-		.vl: uint
+		.vl: uint;
 
 		read := MmapProt.(1)
 		write := MmapProt.(2)
@@ -634,7 +633,7 @@ sys := enum {
 	}
 
 	MmapFlags := struct {
-		.vl: uint
+		.vl: uint;
 
 		private := MmapFlags.(0x02)
 		anonymous := MmapFlags.(0x20)
@@ -650,7 +649,7 @@ bull := enum {
 	GeneratedFile := struct {
 		.by: ^Step;
 		.name: []u8;
-		.path: ?[]u8 = null
+		.path: ?[]u8 = null;
 
 		tmp_dir := "bs-build"
 
@@ -670,7 +669,7 @@ bull := enum {
 	Command := struct {
 		.step: Step = .{vtable: .init(Command)};
 		.args: ArrayList(Arg) = .empty;
-		.env: []Var = &.[]
+		.env: []Var = &.[];
 
 		Arg := union(enum) {
 			.bytes: []u8;
@@ -764,13 +763,13 @@ bull := enum {
 		.dependencies: ArrayList(^Step) = .empty;
 		.last_hash: ?Hash = null;
 		.has_side_effects: bool = false;
-		.seen: bool = false
+		.seen: bool = false;
 
 		Hash := [16]u8
 
 		Vtable := struct{.execute: ^fn(self: ^Step, scratch: ^Arena): ?Hash $init := fn($T: type): ^Vtable {
 			return &struct {
-				vt := Vtable.(&T.execute)
+				vt := Vtable.(&T.execute);
 			}.vt
 		}}
 

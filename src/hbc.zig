@@ -43,7 +43,7 @@ fn entry(_: void) void {
 
     for (0..opts.benchmark_rounds) |_| {
         hb.compile(opts) catch |err| switch (err) {
-            error.Failed => {
+            error.Failed, error.SyntaxError => {
                 diag_writer.interface.flush() catch {};
                 if (hb.utils.lane.isRoot()) std.process.exit(1);
             },

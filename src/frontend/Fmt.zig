@@ -230,17 +230,8 @@ pub fn exprPrec(self: *Fmt, prevPrec: u8) Error!void {
             try self.list(.expr, false, .@",", .@")");
         },
         else => {
-            var out = std.fs.File.stderr().writer(&.{});
-            hb.frontend.Codegen.reportLow(
-                "",
-                self.lex.source,
-                self.lex.cursor,
-                "",
-                &.{""},
-                .no_color,
-                &out.interface,
-            ) catch unreachable;
-            utils.panic("{f}", .{tok.kind});
+            self.error_pos = self.lex.cursor;
+            return error.SyntaxError;
         },
     }
 

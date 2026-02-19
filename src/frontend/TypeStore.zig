@@ -1902,7 +1902,9 @@ pub fn collectRelocsRecur(
                 ctx.bytes,
                 ctx.allow_null,
             )) |reloc| {
-                ctx.relocs.append(ctx.scratch.allocator(), reloc) catch unreachable;
+                if (reloc) |r| {
+                    ctx.relocs.append(ctx.scratch.allocator(), r) catch unreachable;
+                }
             } else |_| {}
         },
         .Slice => |s| {
@@ -1915,7 +1917,9 @@ pub fn collectRelocsRecur(
                 ctx.bytes,
                 ctx.allow_null,
             )) |reloc| {
-                ctx.relocs.append(ctx.scratch.allocator(), reloc) catch unreachable;
+                if (reloc) |r| {
+                    ctx.relocs.append(ctx.scratch.allocator(), r) catch unreachable;
+                }
             } else |_| {}
         },
         .Array => |a| {
@@ -1968,7 +1972,7 @@ pub fn collectPointer(
     size: u64,
     bytes: []const u8,
     allow_null: bool,
-) !Machine.DataOptions.Reloc {
+) !?Machine.DataOptions.Reloc {
     // TODO: if this becomes a bottleneck, optimize it
     const value: u64 = @bitCast(bytes[offset..][0..8].*);
 
@@ -1977,6 +1981,8 @@ pub fn collectPointer(
         .offset = @intCast(offset),
         .is_func = is_func,
     };
+
+    if (size == 0) return null;
 
     if (is_func) {
         for (0..self.funcs.meta.len) |i| {
@@ -2033,10 +2039,9 @@ pub fn nextFunc(self: *Types, target: Target, pop_until: usize) ?FuncId {
     const queue = self.func_queue.getPtr(target);
     while (queue.items.len > pop_until) {
         const func = queue.pop().?;
-        if (!func.get(self).compiled.contains(target)) {
-            func.get(self).compiled.insert(target);
-            return func;
-        }
+        if (func.get(self).compiled.contains(target)) continue;
+        func.get(self).compiled.insert(target);
+        return func;
     }
 
     return null;
