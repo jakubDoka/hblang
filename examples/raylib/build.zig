@@ -43,6 +43,9 @@ pub fn build(b: *std.Build) !void {
         run_hbc.addArg("--optimizations");
         run_hbc.addArg("release");
         run_hbc.addArg("--mangle-terminal");
+
+        run_hbc.addFileInput(b.path("rl.hb"));
+
         const main_obj = captureStdOut(run_hbc, "main.o");
 
         const exe = b.addExecutable(.{

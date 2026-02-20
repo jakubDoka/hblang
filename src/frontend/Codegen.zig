@@ -554,10 +554,6 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
     if (lex.eatMatch(.idk)) {
         global.uninit = true;
 
-        //if (global.readonly) {
-        //    self.report(lex.cursor, "readonly uninitialized global is nonsense", .{}) catch {};
-        //}
-
         global.ty = ty orelse .never;
         if (ty == null) self.report(lex.cursor, "cant infer the type of the uninit" ++
             " variable, use <name>: <type> = idk", .{}) catch {};

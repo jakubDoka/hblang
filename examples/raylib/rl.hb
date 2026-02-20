@@ -19,15 +19,13 @@ set_config_flags := fn(flags: ConfigFlags): void @import("SetConfigFlags")
 set_target_fps := fn(fps: uint): void @import("SetTargetFPS")
 color_lerp := fn(color1: Color, color2: Color, amount: f32): Color @import("ColorLerp")
 color_alpha := fn(color: Color, alpha: f32): Color @import("ColorAlpha")
-sin := fn(value: f32): f32 @import("sin")
-cos := fn(value: f32): f32 @import("cos")
-print_float := fn(str: ^u8, value: f32): void @import("printf")
 draw_text := fn(text: ^u8, pos_x: int, pos_y: int, font_size: int, color: Color): void @import("DrawText")
 draw_fps := fn(pos_x: int, pos_y: int): void @import("DrawFPS")
-
+sin := fn(value: f32): f32 @import("sinf")
+cos := fn(value: f32): f32 @import("cosf")
 
 ConfigFlags := struct {
-	.bits: uint
+	.bits: uint;
 
 	// Set to try enabling V-Sync on GPU
 	VSYNC_HINT := ConfigFlags.(0x00000040)
@@ -69,7 +67,7 @@ $LIGHTGRAY := u8.[200, 200, 200, 255]
 
 V2 := struct {
 	.x: f32;
-	.y: f32
+	.y: f32;
 
 	$zero := V2.(0.0, 0.0)
 

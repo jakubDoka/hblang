@@ -1,5 +1,7 @@
 rl := @use("rl.hb")
-utils := @use("../hb-basic/lib.hb")
+utils := @use("util")
+
+$pi := 3.141592653589793
 
 grv := rl.get_random_value
 
@@ -205,7 +207,7 @@ behemoth_stats := Stats.{
 
 			dirs := f32.[0.5, -0.5, 0.7, -0.7]
 			for d := dirs[..] {
-				dir := rl.V2.(1, 1) * .xy(200)
+				dir := rl.V2.(rl.cos(d.* + pi / 2), rl.sin(d.* + pi / 2)) * .xy(200)
 				ent := sim.add() || break
 				ent.stats = &simpleton_stats
 				ent.pos = behemoth.pos
