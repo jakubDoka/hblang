@@ -1,5 +1,5 @@
-
 rl := @use("rl.hb")
+bsc := @use("util")
 
 Enemy := struct {
 	.pos: rl.V2;
@@ -78,6 +78,7 @@ main := fn(): uint {
 		defer rl.end_drawing()
 
 		rl.clear_background(background)
+
 
 		rl.draw_rectangle_v(player_pos - .xy(player_size * 0.5), .xy(player_size), square)
 

@@ -445,6 +445,7 @@ pub const Data = struct {
     ) !void {
         for (relocs) |rel| {
             if (rel.is_func) {
+                std.debug.assert(rel.addend == 0);
                 try self.addFuncReloc(
                     gpa,
                     rel.target,
@@ -453,7 +454,13 @@ pub const Data = struct {
                     @intCast(size - rel.offset),
                 );
             } else {
-                try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(size - rel.offset));
+                try self.addGlobalReloc(
+                    gpa,
+                    rel.target,
+                    .@"8",
+                    @intCast(rel.addend),
+                    @intCast(size - rel.offset),
+                );
             }
             std.debug.assert(rel.target != id);
         }
@@ -876,8 +883,9 @@ pub const DataOptions = struct {
     thread_local: bool,
     uuid: Data.UUID,
 
-    pub const Reloc = packed struct(u64) {
+    pub const Reloc = struct {
         target: u32,
+        addend: u32,
         offset: u31,
         is_func: bool = false,
     };

@@ -19,7 +19,7 @@ Ent := struct {
 	.free: ?^Ent = null;
 	.damage_taken: u16 = 0;
 	.stats: ^Stats = idk;
-	.timer: f32 = 0.0
+	.timer: f32 = 0.0;
 
 	Id := struct {
 		.index: u32;
@@ -42,7 +42,7 @@ Ent := struct {
 
 Sim := struct {
 	.slots: []Ent;
-	.free: ?^Ent
+	.free: ?^Ent;
 
 	init := fn(scratch: ^utils.Arena): Sim {
 		ents := scratch.alloc(Ent, 256)
@@ -84,7 +84,7 @@ Sim := struct {
 	}
 
 	iter := fn(self: ^Sim): struct {
-		.slots: []Ent
+		.slots: []Ent;
 
 		next := fn(slf: ^@CurrentScope()): ?^Ent {
 			loop {
@@ -114,8 +114,7 @@ $console_height := 900.0
 $padding := 50.0
 
 crash := fn(ent: ^Ent): void {
-	if ent.pos.y > console_height - padding ||
-		ent.pos.y < padding {
+	if ent.pos.y > console_height - padding || ent.pos.y < padding {
 		sim.remove(ent.id)
 	}
 }
@@ -175,8 +174,7 @@ blaster_stats := Stats.{
 		} else if blaster.timer < boost_time + shoot_time {
 			cursor := boost_time
 			for i := 0..shots {
-				if blaster.timer < cursor &&
-					blaster.timer + delta >= cursor {
+				if blaster.timer < cursor && blaster.timer + delta >= cursor {
 					simpleton := sim.add() || break
 					simpleton.stats = &simpleton_stats
 					simpleton.pos = blaster.pos
@@ -206,10 +204,8 @@ behemoth_stats := Stats.{
 			behemoth.timer = 0.0
 
 			dirs := f32.[0.5, -0.5, 0.7, -0.7]
-			utils.fmt.printf("dirs: %\n", .(dirs[0]))
 			for d := dirs[..] {
 				dir := rl.V2.(1, 1) * .xy(200)
-
 				ent := sim.add() || break
 				ent.stats = &simpleton_stats
 				ent.pos = behemoth.pos
@@ -223,8 +219,7 @@ register_hits := fn(blaster: ^Ent): void {
 	iter := sim.iter()
 	while ent := iter.next() {
 		if ent == blaster continue
-		if ent.vel.y < 0 &&
-			rl.check_collision_recs(blaster.rect(), ent.rect()) {
+		if ent.vel.y < 0 && rl.check_collision_recs(blaster.rect(), ent.rect()) {
 			sim.remove(ent.id)
 			blaster.damage_taken += ent.stats.max_health
 			if blaster.damage_taken >= blaster.stats.max_health {
@@ -270,11 +265,7 @@ main := fn(): uint {
 		origin := (screen_size - .(console_width, console_height)) / .xy(2)
 
 		rl.clear_background(rl.BLACK)
-		rl.draw_rectangle_lines_ex(
-			.(origin.x, origin.y, console_width, console_height),
-			1,
-			rl.LIGHTGRAY,
-		)
+		rl.draw_rectangle_lines_ex(.(origin.x, origin.y, console_width, console_height), 1, rl.LIGHTGRAY)
 		rl.draw_fps(10, 10)
 
 		delta := rl.get_frame_time()
@@ -341,8 +332,7 @@ main := fn(): uint {
 			ent.pos += ent.vel * .xy(delta)
 			ent.vel *= .xy(1 - ent.stats.friction * delta)
 
-			health_perc: f32 = @int_to_float(ent.damage_taken) /
-				@int_to_float(ent.stats.max_health)
+			health_perc: f32 = @int_to_float(ent.damage_taken) / @int_to_float(ent.stats.max_health)
 
 			rl.draw_rectangle_v(
 				origin + ent.pos - .xy(ent.stats.size / 2),

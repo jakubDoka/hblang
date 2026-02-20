@@ -824,6 +824,7 @@ pub fn inPlaceSlot(node: *Func.Node) ?usize {
             .ineg, .bnot, .ired, .not => 0,
             .fneg, .fcst, .sext, .uext, .cast, .itf, .fti => return null,
         },
+        .GetLane => 0,
         else => null,
     };
 }
@@ -1803,7 +1804,11 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     .fneg => unreachable,
                 }
             },
-            .GetLane => |extra| {
+            .GetLane => |extra| get_lane: {
+                if (extra.idx == 0 and instr.data_type.isFloat()) {
+                    break :get_lane;
+                }
+
                 const opcode = switch (instr.data_type) {
                     .f32 => &.{ 0x0F, 0xC6 },
                     else => utils.panic("wuh {f}", .{instr.data_type}),
@@ -1815,7 +1820,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitRex(.rax, dst, src, instr.data_type.size());
                 self.emitBytes(opcode);
                 self.emitByte(Reg.Mod.direct.rm(dst, src));
-                self.emitByte(extra.idx);
+                self.emitByte(extra.idx | extra.idx << 2 |
+                    extra.idx << 4 | extra.idx << 6);
             },
             .Arg, .Ret, .Mem, .Never, .Jmp, .Return => {},
             else => {

@@ -98,7 +98,7 @@ pub const Decls = union(enum) {
 
     pub fn fieldName(self: Decls, scope: Scope, types: *Types, index: usize) []const u8 {
         return switch (self) {
-            .sourced => |s| Lexer.peekStr(
+            .sourced => |s| if (s.fields.len == 0) "" else Lexer.peekStr(
                 scope.file.get(types).source,
                 s.fields.items(.offset)[index],
             ),
@@ -597,6 +597,11 @@ pub const Id = enum(u32) {
         return @intCast(switch (self.data()) {
             .Slice, .Pointer, .Builtin, .Option => 0,
             .Array => |a| a.get(types).len.s,
+            .Struct => |s| b: {
+                if (s.get(types).scope.name_pos == .tuple)
+                    break :b s.get(types).layout.?.fields.len;
+                break :b s.get(types).decls.fieldCount();
+            },
             inline else => |s| s.get(types).decls.fieldCount(),
             .FuncTy => |f| f.get(types).args.len,
         });
@@ -1842,7 +1847,7 @@ pub fn collectAnalError(types: *anyopaque, err: hb.backend.static_anal.Error) vo
 
 pub const CollectRelocCtx = struct {
     sloc: graph.Sloc,
-    bytes: []const u8,
+    bytes: []u8,
     relocs: *std.ArrayList(Machine.DataOptions.Reloc),
     scratch: *utils.Arena,
     allow_null: bool,
@@ -1970,7 +1975,7 @@ pub fn collectPointer(
     is_func: bool,
     offset: u64,
     size: u64,
-    bytes: []const u8,
+    bytes: []u8,
     allow_null: bool,
 ) !?Machine.DataOptions.Reloc {
     // TODO: if this becomes a bottleneck, optimize it
@@ -1978,6 +1983,7 @@ pub fn collectPointer(
 
     if (allow_null and value == 0) return .{
         .target = @intCast(size | 0x80000000),
+        .addend = 0,
         .offset = @intCast(offset),
         .is_func = is_func,
     };
@@ -1991,6 +1997,7 @@ pub fn collectPointer(
                 std.debug.assert(size == 4);
                 return .{
                     .target = @intCast(i),
+                    .addend = 0,
                     .offset = @intCast(offset),
                     .is_func = true,
                 };
@@ -2005,7 +2012,7 @@ pub fn collectPointer(
     } else {
         for (0..self.globals.meta.len) |i| {
             const sim = self.ct_backend.mach.out.getGlobalSym(@intCast(i)) orelse continue;
-            if (sim.offset == value) {
+            if (sim.offset <= value and value + size <= sim.offset + sim.size) {
                 if (size > sim.size) {
                     continue;
                     //self.reportSloc(
@@ -2019,6 +2026,7 @@ pub fn collectPointer(
 
                 return .{
                     .target = @intCast(i),
+                    .addend = @intCast(value - sim.offset),
                     .offset = @intCast(offset),
                     .is_func = false,
                 };

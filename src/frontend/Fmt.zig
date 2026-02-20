@@ -49,11 +49,13 @@ pub fn fmt(
 pub fn run(self: *Fmt) Error!void {
     const iter = self.lex.list(.@";", .@"unterminated string");
 
+    var first = true;
     while (iter.next()) {
         if (self.stickyFollows() and self.lex.cursor != 0) {
             try self.out.writeByte(';');
         }
-        try self.preserveNewlines(1);
+        if (!first) try self.preserveNewlines(1);
+        first = false;
         try self.expr();
     }
 }

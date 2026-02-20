@@ -1,4 +1,3 @@
-
 Arena := struct {
 	.ptr: ^u8;
 	.pos: ^u8;
@@ -184,30 +183,72 @@ fmt := enum {
 
 		$prev_end := 0
 		$index := 0
-		$loop {
-			next_fmt := mem.index(u8, tmpl[prev_end..], "%") $|| break
-			_ = sys.write(1, tmpl[prev_end..next_fmt])
+		$loop $if next_fmt := mem.index(u8, tmpl[prev_end..], "%") {
+			_ = sys.write(1, tmpl[prev_end..][..next_fmt])
 
 			$if index >= @len_of(@TypeOf(args)) {
-				@error("too many placeholders")
+				@error("too many placeholders ", @TypeOf(args))
 			}
 
-			$arg_type := @TypeOf(args[index])
+			display_any(args[index])
 
-			$match @type_info(arg_type) {
-				.builtin => {
-					$if arg_type == f32 $|| arg_type == f64 {} else {
-						@error("unsupported type: ", @TypeOf(args[index]))
-					}
-				},
-				_ => @error("unsupported type: ", @TypeOf(args[index])),
-			}
-
-			prev_end = next_fmt + 1
+			prev_end += next_fmt + 1
 			index += 1
-		}
+		} else break
+
+		$if index < @len_of(@TypeOf(args)) @error("too few arguments")
 
 		_ = sys.write(1, tmpl[prev_end..])
+	}
+
+	display_any := fn(value: @Any()): void {
+		$arg_type := @TypeOf(value)
+		$info := @type_info(arg_type)
+
+		$match info {
+			.builtin => {
+				$if arg_type == uint $|| arg_type == u8 {
+					buf: [10]u8 = idk
+					_ = sys.write(1, display_int(value, buf[..]))
+				} else $if arg_type == f32 {
+					buf: [16]u8 = idk
+					_ = sys.write(1, buf[..fmt_float(buf[..], value, 3, 10)])
+				} else {
+					@error("unsupported type: ", arg_type)
+				}
+			},
+			.array => {
+				_ = sys.write(1, ".[")
+				for i := 0.., e := (#value)[..] {
+					if i != 0 _ = sys.write(1, ", ")
+					display_any(e.*)
+				}
+				_ = sys.write(1, "]")
+			},
+			.@struct => $if info.@struct.fields.len != 0
+				$&& info.@struct.fields[0].name.len == 0 {
+				_ = sys.write(1, ".(")
+				$fidx := 0
+				$while fidx < info.@struct.fields.len {
+					$if fidx != 0 _ = sys.write(1, ", ")
+					display_any(value[fidx])
+					fidx += 1
+				}
+				_ = sys.write(1, ")")
+			} else {
+				_ = sys.write(1, ".{")
+				$fidx := 0
+				$while fidx < info.@struct.fields.len {
+					$if fidx != 0 _ = sys.write(1, ", ")
+					_ = sys.write(1, info.@struct.fields[fidx].name)
+					_ = sys.write(1, ": ")
+					display_any(value[fidx])
+					fidx += 1
+				}
+				_ = sys.write(1, "}")
+			},
+			else => @error("unsupported type: ", arg_type),
+		}
 	}
 
 	display_int := fn(i: uint, buf: []u8): []u8 {
@@ -234,13 +275,13 @@ fmt := enum {
 		}
 
 		if radix == 16 {
-			mem.cpy(buf[prefix_len..], "0x")
+			mem.cpy(u8, buf[prefix_len..], "0x")
 			prefix_len += 2
 		} else if radix == 8 {
-			mem.cpy(buf[prefix_len..], "0o")
+			mem.cpy(u8, buf[prefix_len..], "0o")
 			prefix_len += 2
 		} else if radix == 2 {
-			mem.cpy(buf[prefix_len..], "0b")
+			mem.cpy(u8, buf[prefix_len..], "0b")
 			prefix_len += 2
 		}
 

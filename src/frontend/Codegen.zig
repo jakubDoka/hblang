@@ -1908,7 +1908,10 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 " (TODO: display enums properly)", .{pat_value});
         },
         .@"$if" => {
-            const cond = self.peval(tok.pos, try self.typedExpr(.bool, .{}, lex), bool) catch false;
+            const frame = self.vars.len;
+            defer self.popScope(frame);
+
+            const cond = self.peval(tok.pos, try self.typedExpr(.bool, .{ .in_if_or_while = true }, lex), bool) catch false;
             if (cond) {
                 const unreached = self.branchExpr(lex);
 
@@ -1977,7 +1980,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             while (fuel > 0 and (tok.kind == .@"$loop" or try self.peval(
                 tok.pos,
-                try self.expr(.{ .ty = .bool }, lex),
+                try self.expr(.{ .ty = .bool, .in_if_or_while = true }, lex),
                 bool,
             ))) : (fuel -= 1) {
                 const unreached = self.branchExpr(lex);
@@ -2346,7 +2349,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             ));
         },
         .@"(" => par: {
-            const inner = try self.expr(ctx, lex);
+            const inner = try self.exprAllowUnreachable(ctx, lex);
             _ = try self.expect(lex, .@")", "to close the parenthesis");
             break :par inner;
         },
@@ -2406,7 +2409,8 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 var iter = lex.list(.@",", .@")");
 
                 while (iter.next()) {
-                    const value = self.expr(.{ .loc = loc }, lex) catch |err| switch (err) {
+                    const floc = self.bl.addFieldOffset(self.sloc(lex.cursor), loc, offset);
+                    const value = self.expr(.{ .loc = floc }, lex) catch |err| switch (err) {
                         error.Report => if (iter.recover()) break else continue,
                     };
 
@@ -2420,7 +2424,6 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                         .default = .invalid,
                     }) catch unreachable;
 
-                    const floc = self.bl.addFieldOffset(self.sloc(lex.cursor), loc, offset);
                     self.emitGenericStore(tok.pos, floc, value);
 
                     offset += value.ty.size(self.types);
@@ -2435,7 +2438,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                         .parent = .init(.{ .Tail = .end }),
                     },
                     .captures = .empty,
-                    .decls = .{ .sourced = &File.Id.root.get(self.types).decls },
+                    .decls = .{ .sourced = &.empty },
                     .layout = .{
                         .spec = .fromByteUnits(size, alignment),
                         .fields = self.types.arena.dupe(Types.Struct.Layout.Field, fields.items),
@@ -2444,7 +2447,9 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
                 const ty: Types.Id = .nany(struc);
 
-                self.bl.resizeLocal(loc, ty.size(self.types), @intFromEnum(ty));
+                if (ctx.loc == null) {
+                    self.bl.resizeLocal(loc, ty.size(self.types), @intFromEnum(ty));
+                }
 
                 return .ptr(.nany(struc), loc);
             };
@@ -2552,13 +2557,15 @@ pub fn loopControl(self: *Codegen, lex: *Lexer, kind: BBuilder.Loop.Control, lab
             }
             break;
         }
-    } else unreachable;
+    } else {
+        self.report(lex.cursor, "loop control does not match any parent loop", .{}) catch {};
+    }
 
     return error.Unreachable;
 }
 
 pub fn eatLabel(self: *Codegen, lex: *Lexer) ![]const u8 {
-    return if (lex.eatMatch(.@":"))
+    return if (lex.eatMatchOrRevert(.@":"))
         (try self.expect(lex, .Ident, "as a lable name"))
             .view(lex.source)
     else
@@ -2681,7 +2688,8 @@ pub fn directive(
                 }
             }
 
-            return self.report(pos, "{}", .{message.written()});
+            self.report(pos, "{}", .{message.written()}) catch {};
+            return error.Unreachable;
         },
         .use => {
             _ = lex.slit(.@"\"");
@@ -3806,10 +3814,19 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 self.bl.addIntImm(slc, .i8, 0),
             )));
         },
+        .@"$&&" => {
+            if (try self.peval(top.pos, res.value, bool)) {
+                res.set(try self.typedExprPrec(.bool, .{}, lex, prevPrec));
+            } else {
+                res.set(.value(.bool, self.bl.addIntImm(self.sloc(top.pos), .i8, 0)));
+                lex.skipExprPrec(prevPrec) catch {};
+            }
+        },
         .@"$||" => {
             if (res.value.ty == .bool) {
                 if (try self.peval(top.pos, res.value, bool)) {
                     res.set(.value(.bool, self.bl.addIntImm(self.sloc(top.pos), .i8, 1)));
+                    lex.skipExprPrec(prevPrec) catch {};
                 } else {
                     res.set(try self.exprPrecAllowUnreachable(ctx, lex, prevPrec));
                 }
@@ -3824,6 +3841,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 const check = self.emitOptionCheck(top.pos, .@"!=", value);
                 if (try self.peval(top.pos, .value(.bool, check), bool)) {
                     res.set(try self.emitOptionUnwrap(top.pos, value));
+                    lex.skipExprPrec(prevPrec) catch {};
                 } else {
                     res.set(try self.exprPrecAllowUnreachable(ctx, lex, prevPrec));
                 }
@@ -4334,6 +4352,8 @@ pub fn ctor(self: *Codegen, pos: u32, ctx: Ctx, ty: Types.Id, lex: *Lexer) !Valu
 
             const name = try self.expect(lex, .Ident, "to select the union variant");
             const field_idx = uni.lookupField(self.types, name.view(lex.source)) orelse {
+                // TODO: give a usefull message about field decl syntax and
+                // also list the fields and also check for global declarations
                 return self.report(name.pos, "{} does not have this field", .{inner});
             };
 
@@ -5776,6 +5796,14 @@ pub fn partialEvalGlobal(self: *Codegen, addr: *BNode) !*BNode {
                             std.mem.asBytes(&@as(u64, gid.get(self.types).data.sym(self.types).offset)),
                         );
                     },
+                    .BinOp => {
+                        const base, const off = val.knownOffset();
+                        const gid: Types.GlobalId = @enumFromInt(base.extra(.GlobalAddr).id);
+                        @memcpy(
+                            mem[@intCast(offset)..][0..8],
+                            std.mem.asBytes(&@as(i64, gid.get(self.types).data.sym(self.types).offset + off)),
+                        );
+                    },
                     else => self.types.reportSloc(op.sloc, "TODO: handle this store value (debug: {})", .{val}),
                 }
 
@@ -5829,14 +5857,19 @@ pub fn partialEvalLoad(self: *Codegen, op: *BNode, relocs: ?[]Machine.DataOption
                             (reloc.target & ~@as(u32, 0x80000000)),
                             mem,
                             false,
-                        ) catch return error.Report).?
+                        ) catch return error.Report) orelse continue
                     else
                         reloc;
 
                     if (rel.is_func) {
+                        std.debug.assert(rel.addend == 0);
                         res = self.bl.addFuncAddr(op.sloc, rel.target);
                     } else {
                         res = self.bl.addGlobalAddr(op.sloc, rel.target);
+
+                        if (rel.addend != 0) {
+                            res = self.bl.addFieldOffset(op.sloc, res, rel.addend);
+                        }
                     }
 
                     break;
@@ -5914,7 +5947,12 @@ pub fn partialEvalCall(
                     .CInt => |extra| extra.value,
                     .GlobalAddr => |extra| @as(Types.GlobalId, @enumFromInt(extra.id))
                         .get(self.types).data.sym(self.types).offset,
-                    else => return self.reportSloc(argvl.sloc, "TODO: handle this (debug: {})", .{argvl}),
+                    .BinOp => b: {
+                        const base, const off = argvl.knownOffset();
+                        break :b @as(Types.GlobalId, @enumFromInt(base.extra(.GlobalAddr).id))
+                            .get(self.types).data.sym(self.types).offset + off;
+                    },
+                    else => return self.reportSloc(argvl.sloc, "TODO: handle this call arg (debug: {})", .{argvl}),
                 };
                 cursor += 1;
             },

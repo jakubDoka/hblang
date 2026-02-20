@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) !void {
     const hblang = b.dependency("hblang", .{
         .target = target,
         .optimize = optimize,
-        .@"report-trace-size" = 4,
+        //.@"report-trace-size" = 4,
     });
     const hbc = hblang.artifact("hbc");
 
@@ -37,6 +37,9 @@ pub fn build(b: *std.Build) !void {
         run_hbc.addFileArg(b.path(file ++ ".hb"));
         run_hbc.addArg("--target");
         run_hbc.addArg("x86_64-linux");
+        run_hbc.addArg("--path-projection");
+        run_hbc.addArg("util");
+        run_hbc.addFileArg(b.path("../hb-basic/lib.hb"));
         run_hbc.addArg("--optimizations");
         run_hbc.addArg("release");
         run_hbc.addArg("--mangle-terminal");
