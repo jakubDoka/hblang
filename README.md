@@ -2366,23 +2366,22 @@ main := fn(): uint {
     $FnTy := @Type(.{fnty: .{args: &.[u8, u8], ret: u8}})
     $if FnTy != (fn(u8, u8): u8) return 6
 
-    fmm := "foo"
-    $Stru := MakeStruct(fmm, u8)
-    $StruI := MakeStruct(fmm, u8)
+    $Stru := MakeStruct("foo", u8)
+    $StruI := MakeStruct("foo", u8)
 
     s: StruI = .(0)
     b := Stru.(0)
     s = b
 
-    $Unio := MakeUnion(fmm, u8)
-    $UnioI := MakeUnion(fmm, u8)
+    $Unio := MakeUnion("foo", u8)
+    $UnioI := MakeUnion("foo", u8)
 
     u: UnioI = .{foo: 0}
     c := Unio.{foo: 0}
     u = c
 
-    $Enum := MakeEnum(fmm)
-    $EnumI := MakeEnum(fmm)
+    $Enum := MakeEnum("foo")
+    $EnumI := MakeEnum("foo")
 
     e: EnumI = .foo
     d := Enum.foo

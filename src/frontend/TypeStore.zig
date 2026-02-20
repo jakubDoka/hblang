@@ -24,6 +24,7 @@ funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .empty,
 func_index: Interner(FuncId) = .empty,
 globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .empty,
 global_index: Interner(GlobalId) = .empty,
+comptime_global_index: ComptimeGlobalIndex = .empty,
 func_tys: utils.SegmentedList(FuncTy, FuncTyId, 1024, 1024 * 1024) = .empty,
 func_ty_index: Interner(FuncTyId) = .empty,
 templates: utils.SegmentedList(Template, TemplateId, 1024, 1024 * 1024) = .empty,
@@ -58,6 +59,40 @@ handlers: std.EnumArray(Handler, FuncId) = .initFill(.invalid),
 handler_signatures: std.EnumArray(Handler, FuncTyId),
 ct_backend: HbvmGen,
 //metrics: Metrics = .{},
+
+const ComptimeGlobalIndex = std.HashMapUnmanaged(
+    GlobalId,
+    void,
+    ComptimeGlobalCtx,
+    std.hash_map.default_max_load_percentage,
+);
+
+pub const ComptimeGlobalCtx = struct {
+    tys: *Types,
+
+    pub fn eql(_: @This(), a: GlobalId, b: GlobalId) bool {
+        return a == b;
+    }
+
+    pub fn hash(self: anytype, id: GlobalId) u64 {
+        // TODO: should we cache this?
+        return std.hash.Wyhash.hash(0, id.get(self.tys).data.get(self.tys));
+    }
+};
+
+pub const ComptimeGlobalInsertCtx = struct {
+    tys: *Types,
+
+    pub fn eql(self: @This(), a: GlobalId, b: GlobalId) bool {
+        return std.mem.eql(
+            u8,
+            a.get(self.tys).data.get(self.tys),
+            b.get(self.tys).data.get(self.tys),
+        );
+    }
+
+    pub const hash = ComptimeGlobalCtx.hash;
+};
 
 pub const Decls = union(enum) {
     sourced: *const DeclIndex,
@@ -129,6 +164,32 @@ pub const Handler = enum {
 pub const ComptimeValue = extern union {
     spilled: extern struct { id: GlobalId, off: u32 },
     @"inline": i64,
+
+    pub fn bytes(self: anytype, types: *Types, ty: Id) if (@TypeOf(self) == *ComptimeValue)
+        []u8
+    else
+        []const u8 {
+        if (ty.size(types) <= @sizeOf(ComptimeValue)) {
+            return std.mem.asBytes(self)[0..ty.size(types)];
+        } else {
+            return self.spilled.id.get(types).data
+                .get(types)[self.spilled.off..][0..ty.size(types)];
+        }
+    }
+
+    pub const CFmt = struct {
+        types: *Types,
+        ty: Id,
+        self: ComptimeValue,
+
+        pub fn format(self: *const CFmt, writer: *std.Io.Writer) !void {
+            try self.types.formatValue(self.ty, &self.self, writer);
+        }
+    };
+
+    pub fn fmt(self: ComptimeValue, types: *Types, ty: Id) CFmt {
+        return .{ .types = types, .ty = ty, .self = self };
+    }
 };
 
 pub const TmpCheckpoint = struct {
@@ -794,7 +855,10 @@ pub const Captures = struct {
         if (vars.len > 0 and vars[vars.len - 1].value == std.math.maxInt(u32)) {
             vars = vars[0 .. vars.len - 1];
         }
+
         const variables = scratch.alloc(Variable, vars.len);
+        const values = scratch.dupe(ComptimeValue, scope.cmptime_values.items);
+        var ct_i: usize = 0;
 
         for (vars, variables) |vari, *variable| {
             variable.* = .{
@@ -804,9 +868,13 @@ pub const Captures = struct {
                 },
                 .ty = vari.ty,
             };
+
+            if (vari.meta.kind == .cmptime) {
+                scope.types.internValue(vari.ty, &values[ct_i]);
+                ct_i += 1;
+            }
         }
 
-        const values = scratch.alloc(ComptimeValue, scope.cmptime_values.items.len);
         for (scope.cmptime_values.items, values) |v, *slot| slot.* = v;
 
         return .{
@@ -873,6 +941,7 @@ pub const Scope = extern struct {
                 _ => |v| {
                     var str = file.get(types).tokenStr(@intFromEnum(v));
                     if (str[0] == '"') str = str[1 .. str.len - 1];
+                    if (str[0] == '(') str = "";
                     return str;
                 },
             };
@@ -974,6 +1043,21 @@ pub const Option = struct {
             .inner = self.layout,
             .compact = min_size == inner_size,
         };
+    }
+
+    pub fn recurse(self: *Option, types: *Types, bytes: []const u8) ?Id {
+        const layout = self.getLayout(types);
+
+        if (!std.mem.allEqual(
+            u8,
+            bytes[layout.inner.offset..][0..layout
+                .inner.storage.dataType().size()],
+            0,
+        )) {
+            return self.inner;
+        }
+
+        return null;
     }
 
     pub fn findNieche(types: *Types, ty: Id, offset: Size) Layout {
@@ -1341,6 +1425,23 @@ pub const Union = struct {
         try self.scope.format_(types.unions.ptrToIndex(self), types, writer);
     }
 
+    pub fn recurse(self: *Union, types: *Types, bytes: []const u8) !?struct { ty: Id, name: []const u8 } {
+        const layout = self.getLayout(types);
+        const tag = layout.tagLayout() orelse return null;
+
+        const tag_size = Id.nany(tag.id).size(types);
+        var value: i64 = 0;
+        @memcpy(
+            std.mem.asBytes(&value)[0..tag_size],
+            bytes[tag.offset..][0..tag_size],
+        );
+
+        const idx = std.mem.indexOfScalar(i64, tag.id.get(types)
+            .getLayout(types).fields, value) orelse return error.InvalidTag;
+
+        return .{ .ty = layout.fields[idx], .name = self.fieldName(types, idx) };
+    }
+
     pub fn getLayout(self: *Union, types: *Types) *Layout {
         if (self.layout) |*l| return l;
 
@@ -1515,15 +1616,7 @@ pub const Func = struct {
 
             if (cmptime) {
                 try writer.writeByte('=');
-
-                const p = self.params[param_idx];
-                if (ty != .type) {
-                    try writer.writeAll("(TODO)");
-                } else {
-                    const t: Id = @enumFromInt(p.value.@"inline");
-                    try t.format_(types, writer);
-                }
-
+                try types.formatValue(ty, &self.params[param_idx].value, writer);
                 param_idx += 1;
             }
         }
@@ -1883,19 +1976,8 @@ pub fn collectRelocsRecur(
         .Enum => {},
         .FuncTy => {},
         .Option => |o| {
-            const layout = o.get(self).getLayout(self);
-
-            if (!std.mem.allEqual(
-                u8,
-                ctx.bytes[offset + layout.inner.offset ..][0..layout
-                    .inner.storage.dataType().size()],
-                0,
-            )) {
-                self.collectRelocsRecur(
-                    ctx,
-                    o.get(self).inner,
-                    offset,
-                );
+            if (o.get(self).recurse(self, ctx.bytes[offset..])) |inner| {
+                self.collectRelocsRecur(ctx, inner, offset);
             }
         },
         .Pointer => |p| {
@@ -1948,23 +2030,12 @@ pub fn collectRelocsRecur(
             }
         },
         .Union => |u| {
-            const layout = u.get(self).getLayout(self);
-            const tag = layout.tagLayout() orelse return;
-
-            const tag_size = Id.nany(tag.id).size(self);
-            var value: i64 = 0;
-            @memcpy(
-                std.mem.asBytes(&value)[0..tag_size],
-                ctx.bytes[tag.offset..][0..tag_size],
-            );
-
-            const findex = std.mem.indexOfScalar(i64, tag.id.get(self)
-                .getLayout(self).fields, value) orelse {
+            if (u.get(self).recurse(self, ctx.bytes[offset..]) catch {
                 self.reportSloc(ctx.sloc, "tagged union has an invalid tag", .{});
                 return;
-            };
-
-            self.collectRelocsRecur(ctx, layout.fields[findex], offset);
+            }) |tag| {
+                self.collectRelocsRecur(ctx, tag.ty, offset);
+            }
         },
     }
 }
@@ -2057,4 +2128,243 @@ pub fn nextFunc(self: *Types, target: Target, pop_until: usize) ?FuncId {
 
 pub fn getBuiltins(self: *Types) Machine.Builtins {
     return .{ .memcpy = @intFromEnum(self.handlers.get(.memcpy)) };
+}
+
+pub fn internValue(self: *Types, ty: Id, value: *ComptimeValue) void {
+    self.internValueLow(ty, value.bytes(self, ty), 0);
+
+    if (ty.size(self) <= @sizeOf(ComptimeValue)) {
+        return;
+    }
+
+    const entry = self.internGlobal(value.spilled.id);
+
+    if (entry.found_existing) {
+        value.spilled.id = entry.key_ptr.*;
+    }
+}
+
+pub fn internGlobal(self: *Types, pointed: GlobalId) ComptimeGlobalIndex.GetOrPutResult {
+    if (self.comptime_global_index.getEntryContext(pointed, .{ .tys = self })) |entry| {
+        return .{
+            .key_ptr = entry.key_ptr,
+            .value_ptr = entry.value_ptr,
+            .found_existing = true,
+        };
+    }
+
+    self.internValueLow(pointed.get(self).ty, pointed.get(self).data.get(self), 0);
+
+    const entry = self.comptime_global_index.getOrPutContextAdapted(
+        self.allocator(),
+        pointed,
+        ComptimeGlobalInsertCtx{ .tys = self },
+        .{ .tys = self },
+    ) catch unreachable;
+
+    if (!entry.found_existing) {
+        entry.key_ptr.* = pointed;
+    }
+
+    return entry;
+}
+
+// NOTE: modifyes the bytes as needed
+pub fn internValueLow(self: *Types, ty: Id, bytes: []u8, offset: u32) void {
+    switch (ty.data()) {
+        .Builtin => {},
+        .FuncTy => {},
+        .Slice => |s| {
+            const ptr: *align(1) u64 = @ptrCast(bytes[offset..][Types.Slice.ptr_offset..][0..8]);
+            const len: u64 = @bitCast(bytes[offset..][Types.Slice.len_offset..][0..8].*);
+
+            const elem = s.get(self).elem;
+
+            if (len * elem.size(self) == 0) {
+                ptr.* = elem.alignment(self);
+                return;
+            }
+
+            const ralloc = (self.collectPointer(
+                .none,
+                false,
+                offset + Types.Slice.ptr_offset,
+                len * elem.size(self),
+                bytes,
+                false,
+            ) catch unreachable).?;
+
+            const entry = self.internGlobal(@enumFromInt(ralloc.target));
+
+            if (entry.found_existing) {
+                ptr.* = entry.key_ptr.get(self).data.sym(self).offset + ralloc.addend;
+            }
+        },
+        .Pointer => |p| {
+            const ptr: *align(1) u64 = @ptrCast(bytes[offset..][0..8]);
+
+            const elem = p.get(self).ty;
+            if (elem.size(self) == 0) {
+                ptr.* = elem.alignment(self);
+                return;
+            }
+
+            const ralloc = (self.collectPointer(
+                .none,
+                false,
+                offset + Types.Slice.ptr_offset,
+                elem.size(self),
+                bytes,
+                false,
+            ) catch unreachable).?;
+
+            const entry = self.internGlobal(@enumFromInt(ralloc.target));
+
+            if (entry.found_existing) {
+                ptr.* = entry.key_ptr.get(self).data.sym(self).offset + ralloc.addend;
+            }
+        },
+        .Option => |o| {
+            if (o.get(self).recurse(self, bytes[offset..])) |inner| {
+                self.internValueLow(inner, bytes, offset);
+            }
+        },
+        .Array => |a| {
+            const elem = a.get(self).elem;
+            const len = a.get(self).len.s;
+
+            for (0..len) |i| {
+                self.internValueLow(elem, bytes, @intCast(offset + i * elem.size(self)));
+            }
+        },
+        .Struct => |s| {
+            for (s.get(self).getLayout(self).fields) |f| {
+                self.internValueLow(f.ty, bytes, @intCast(offset + f.offset));
+            }
+        },
+        .Enum => {},
+        .Union => |u| {
+            if (u.get(self).recurse(self, bytes[offset..]) catch unreachable) |tag| {
+                self.internValueLow(tag.ty, bytes, offset);
+            }
+        },
+    }
+}
+
+pub fn formatValue(self: *Types, ty: Id, value: *const ComptimeValue, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    try self.formatValueLow(ty, value.bytes(self, ty), writer);
+}
+
+pub fn formatValueLow(self: *Types, ty: Id, bytes: []const u8, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    const vm_mem = self.ct_backend.mach.out.code.items;
+    switch (ty.data()) {
+        .Builtin => |b| switch (b) {
+            .u8, .u16, .u32, .u64, .uint => {
+                std.debug.assert(bytes.len == b.size(self));
+                var tmp: u64 = 0;
+                @memcpy(std.mem.asBytes(&tmp)[0..bytes.len], bytes);
+                try writer.print("{}", .{tmp});
+            },
+            .i8, .i16, .i32, .i64, .int => {
+                std.debug.assert(bytes.len == b.size(self));
+                var tmp: i64 = 0;
+                @memcpy(std.mem.asBytes(&tmp)[0..bytes.len], bytes);
+                try writer.print("{}", .{tmp});
+            },
+            .type => try @as(Id, @enumFromInt(@as(u32, @bitCast(bytes[0..4].*))))
+                .format_(self, writer),
+            .template => try @as(TemplateId, @enumFromInt(@as(u32, @bitCast(bytes[0..4].*))))
+                .get(self).format_(self, writer),
+            else => utils.panic("{}", .{b}),
+        },
+        .FuncTy => {
+            const func: FuncId = @enumFromInt(@as(u32, @bitCast(bytes[0..4].*)));
+            try func.get(self).format_(self, writer);
+        },
+        .Slice => |s| {
+            const ptr: u64 = @bitCast(bytes[Types.Slice.ptr_offset..][0..8].*);
+            const len: u64 = @bitCast(bytes[Types.Slice.len_offset..][0..8].*);
+
+            const nested_bytes = vm_mem[ptr..][0 .. len * s.get(self).elem.size(self)];
+
+            if (s.get(self).elem == .u8) {
+                try writer.print("\"{s}\"", .{nested_bytes});
+            } else {
+                try writer.writeByte('&');
+                try self.formatArray(s.get(self).elem, nested_bytes, len, writer);
+            }
+        },
+        .Pointer => |p| {
+            const ptr: u64 = @bitCast(bytes[0..8].*);
+            const nested_bytes = vm_mem[ptr..][0..p.get(self).ty.size(self)];
+
+            try writer.writeByte('&');
+            try self.formatValueLow(p.get(self).ty, nested_bytes, writer);
+        },
+        .Array => |a| {
+            try self.formatArray(a.get(self).elem, bytes, a.get(self).len.s, writer);
+        },
+        .Option => |o| {
+            if (o.get(self).recurse(self, bytes)) |inner| {
+                try self.formatValueLow(inner, bytes[0..inner.size(self)], writer);
+            } else {
+                try writer.writeAll("null");
+            }
+        },
+        .Struct => |s| {
+            if (s.get(self).scope.name_pos != .tuple) {
+                try writer.writeAll(".(");
+                for (s.get(self).getLayout(self).fields, 0..) |f, i| {
+                    if (i != 0) try writer.writeAll(", ");
+                    try self.formatValueLow(f.ty, bytes[f.offset..][0..f.ty.size(self)], writer);
+                }
+                try writer.writeAll(")");
+            } else {
+                try writer.writeAll(".{");
+                for (s.get(self).getLayout(self).fields, 0..) |f, i| {
+                    if (i != 0) try writer.writeAll(", ");
+                    try writer.print("{s}: ", .{s.get(self).fieldName(self, i)});
+                    try self.formatValueLow(f.ty, bytes[f.offset..][0..f.ty.size(self)], writer);
+                }
+                try writer.writeAll("}");
+            }
+        },
+        .Enum => |e| {
+            var tmp: i64 = 0; // TODO: not nescessarly correct
+            @memcpy(std.mem.asBytes(&tmp)[0..bytes.len], bytes);
+
+            const idx = std.mem.indexOfScalar(i64, e.get(self).getLayout(self).fields, tmp).?;
+            try writer.print(".{s}", .{e.get(self).fieldName(self, idx)});
+        },
+        .Union => |u| {
+            if (u.get(self).recurse(self, bytes) catch unreachable) |tag| {
+                try writer.print(".{{{s}: ", .{tag.name});
+                try self.formatValueLow(tag.ty, bytes[0..tag.ty.size(self)], writer);
+                try writer.writeByte('}');
+            }
+        },
+    }
+}
+
+pub fn formatArray(self: *Types, ty: Id, bytes: []const u8, len: usize, writer: *std.Io.Writer) !void {
+    try writer.writeAll(".[");
+    for (0..len) |i| {
+        if (i != 0) try writer.writeAll(", ");
+        try self.formatValueLow(ty, bytes[i * ty.size(self) ..][0..ty.size(self)], writer);
+    }
+    try writer.writeByte(']');
+}
+
+pub fn loadVmSlice(self: *Types, comptime T: type, slot: *[16]u8, scratch: *utils.Arena) []T {
+    const vm_mem = self.ct_backend.mach.out.code.items;
+
+    const ptr: u64 = @bitCast(slot[0..][Types.Slice.ptr_offset..][0..8].*);
+    const len: u64 = @bitCast(slot[0..][Types.Slice.len_offset..][0..8].*);
+    // TODO: make the memory in the vm aligned
+    const args: []align(1) T = @ptrCast(vm_mem[ptr..][0 .. len * @sizeOf(T)]);
+
+    const aligned_args = scratch.alloc(T, args.len);
+    @memcpy(aligned_args, args);
+
+    return aligned_args;
 }

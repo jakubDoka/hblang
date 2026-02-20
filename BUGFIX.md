@@ -2,6 +2,20 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### capture various types 1
+```hb
+main := fn(): uint {
+    bar(&#0)
+    return foo(.yes)
+}
+
+bar := fn($v: ^uint): void {}
+
+foo := fn($v: enum{.yes}): uint {
+    return v
+}
+```
+
 #### float spill spill 1
 ```hb
 main := fn(): int {

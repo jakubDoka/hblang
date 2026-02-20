@@ -665,20 +665,6 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
     self.runVm(self.sloc(pos), reserved);
 }
 
-pub fn loadVmSlice(self: *Codegen, comptime T: type, slot: *[16]u8, scratch: *utils.Arena) []T {
-    const vm_mem = self.types.ct_backend.mach.out.code.items;
-
-    const ptr: u64 = @bitCast(slot[0..][Types.Slice.ptr_offset..][0..8].*);
-    const len: u64 = @bitCast(slot[0..][Types.Slice.len_offset..][0..8].*);
-    // TODO: make the memory in the vm aligned
-    const args: []align(1) T = @ptrCast(vm_mem[ptr..][0 .. len * @sizeOf(T)]);
-
-    const aligned_args = scratch.alloc(T, args.len);
-    @memcpy(aligned_args, args);
-
-    return aligned_args;
-}
-
 pub fn loadVmTy(self: *Codegen, slc: graph.Sloc, slot: *[4]u8) !Types.Id {
     return self.validateType(slc, @as(u32, @bitCast(slot.*)));
 }
@@ -884,7 +870,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            const args = self.loadVmSlice(Types.Id, mem[0..][0..16], tmp.arena);
+            const args = self.types.loadVmSlice(Types.Id, mem[0..][0..16], tmp.arena);
             const ret = try self.loadVmTy(slc, mem[16..][0..4]);
 
             for (args) |v| {
@@ -908,7 +894,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
                 default: ?*anyopaque,
             };
 
-            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
+            const fields = self.types.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
 
             const decls = Types.GenDecls{
                 .fields = self.types.arena.alloc([]u8, fields.len),
@@ -919,7 +905,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
             };
 
             for (fields, 0..) |*field, i| {
-                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
+                const name = self.types.loadVmSlice(u8, &field.name, tmp.arena);
                 decls.fields[i] = self.types.arena.dupe(u8, name);
                 try self.validateExistingType(slc, field.ty);
                 layout.fields[i].ty = field.ty;
@@ -959,7 +945,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
                 ty: Types.Id,
             };
 
-            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
+            const fields = self.types.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
 
             const decls = Types.GenDecls{
                 .fields = self.types.arena.alloc([]u8, fields.len),
@@ -972,7 +958,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
             };
 
             for (fields, 0..) |*field, i| {
-                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
+                const name = self.types.loadVmSlice(u8, &field.name, tmp.arena);
                 decls.fields[i] = self.types.arena.dupe(u8, name);
                 try self.validateExistingType(slc, field.ty);
                 layout.fields[i] = field.ty;
@@ -1000,7 +986,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
                 value: i64,
             };
 
-            const fields = self.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
+            const fields = self.types.loadVmSlice(Field, mem[8..][0..16], tmp.arena);
 
             const decls = Types.GenDecls{
                 .fields = self.types.arena.alloc([]u8, fields.len),
@@ -1012,7 +998,7 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
             };
 
             for (fields, 0..) |*field, i| {
-                const name = self.loadVmSlice(u8, &field.name, tmp.arena);
+                const name = self.types.loadVmSlice(u8, &field.name, tmp.arena);
                 decls.fields[i] = self.types.arena.dupe(u8, name);
                 layout.fields[i] = field.value;
             }
@@ -2607,10 +2593,10 @@ pub fn directive(
     ctx: Ctx,
     lex: *Lexer,
 ) !Value {
+    const pos = lex.cursor;
     _ = try self.expect(lex, .@"(", "to open the directive arguments");
 
     const iter = lex.list(.@",", .@")");
-    const pos = lex.cursor;
     const slc = self.sloc(pos);
 
     const value: Value = d: switch (d) {
@@ -2678,10 +2664,8 @@ pub fn directive(
                 }
 
                 const vl = self.expr(.{}, lex) catch continue;
-                if (vl.ty == .type) {
-                    const ty = self.peval(lex.cursor, vl, Types.Id) catch .never;
-                    message.writer.print("{f}", .{ty.fmt(self.types)}) catch unreachable;
-                }
+                const cvl = self.peval(lex.cursor, vl, Types.ComptimeValue) catch continue;
+                message.writer.print("{f}", .{cvl.fmt(self.types, vl.ty)}) catch unreachable;
             }
 
             self.report(pos, "{}", .{message.written()}) catch {};
@@ -4849,7 +4833,8 @@ pub fn emitTemplateCall(
 
             slot.ty = value.ty;
 
-            const vl = try self.peval(ps, value, Types.ComptimeValue);
+            var vl = try self.peval(ps, value, Types.ComptimeValue);
+            self.types.internValue(value.ty, &vl);
 
             template_gen.cmptime_values.append(template_gen.bl.arena(), vl) catch unreachable;
             slot.value = @intCast(template_gen.cmptime_values.items.len - 1);
@@ -5343,7 +5328,14 @@ pub fn peval(self: *Codegen, pos: u32, value: Value, comptime T: type) !T {
     if (T == Types.ComptimeValue) {
         if (value.ty.size(self.types) <= @sizeOf(Types.ComptimeValue)) {
             const res = try self.partialEval(value.load(pos, self));
-            return .{ .@"inline" = res.extra(.CInt).value };
+            return switch (res.extra2()) {
+                .CInt => .{ .@"inline" = res.extra(.CInt).value },
+                .GlobalAddr => |extra| .{
+                    .@"inline" = @as(Types.GlobalId, @enumFromInt(extra.id))
+                        .get(self.types).data.sym(self.types).offset,
+                },
+                else => return self.report(pos, "TODO: handle this inline value (debug: {})", .{res}),
+            };
         }
 
         const res = switch (value.normalized(pos, self)) {
