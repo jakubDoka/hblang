@@ -791,10 +791,8 @@ pub const Cfg = extern struct {
 const mod = @This();
 const gcm = @import("gcm.zig");
 const mem2reg = @import("mem2reg.zig");
-const mem2reg2 = @import("mem2reg2.zig");
 const static_anal = @import("static_anal.zig");
 const inliner = @import("inliner.zig");
-const alias_anal = @import("alias_anal.zig");
 
 pub fn FuncNode(comptime Backend: type) type {
     return Func(Backend).Node;
@@ -811,8 +809,6 @@ pub fn Func(comptime Backend: type) type {
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
         mem2reg: mem2reg.Mixin(Backend) = .{},
-        mem2reg2: mem2reg2.Mixin(Backend) = .{},
-        alias_anal: alias_anal.Mixin(Backend) = .{},
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
