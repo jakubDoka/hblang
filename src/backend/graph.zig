@@ -912,6 +912,8 @@ pub fn Func(comptime Backend: type) type {
                 node.assertAlive();
 
                 if (self.in_list.bit_length <= node.id) {
+                    @branchHint(.unlikely);
+
                     try self.in_list.resize(
                         self.allocator,
                         try std.math.ceilPowerOfTwo(usize, node.id + 1),

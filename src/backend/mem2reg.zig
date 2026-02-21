@@ -86,7 +86,6 @@ pub fn Mixin(comptime Backend: type) type {
             slot_ids: []u32,
             locals: []Local,
             states: []?*Local.Join,
-            visited: Set,
             arena: *utils.Arena,
 
             pub fn lookupOffset(ctx: *Ctx, base: *Node, off: i64) usize {
@@ -361,7 +360,6 @@ pub fn Mixin(comptime Backend: type) type {
                 .slot_ids = slot_ids,
                 .locals = tmp.arena.alloc(Local, alloc_offset_count),
                 .states = tmp.arena.alloc(?*Local.Join, self.next_id),
-                .visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id),
                 .arena = tmp.arena,
             };
 

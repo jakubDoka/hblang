@@ -1,16 +1,3 @@
-const frontend2 = opaque {
-    pub const Lexer = @import("frontend2/Lexer.zig");
-    pub const Ast = @import("frontend2/Ast.zig");
-    pub const Abi = @import("frontend2/Abi.zig");
-    pub const Parser = @import("frontend2/Parser.zig");
-    pub const Fmt = @import("frontend2/Fmt.zig");
-    pub const Types = @import("frontend2/TypeStore.zig");
-    pub const types = @import("frontend2/types.zig");
-    pub const Codegen = @import("frontend2/Codegen.zig");
-    pub const Comptime = @import("frontend2/Comptime.zig");
-    pub const test_utils = @import("frontend2/test_util.zig");
-};
-
 pub const frontend = opaque {
     pub const Lexer = @import("frontend/Lexer.zig");
     pub const Codegen = @import("frontend/Codegen.zig");
