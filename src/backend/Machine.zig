@@ -1188,6 +1188,7 @@ pub const EmitOptions = struct {
     special: ?Special = null,
     builtins: Builtins,
     files: []const root.LineIndex = &.{},
+    fn_out: *std.Io.Writer,
     uuid: Data.UUID,
 
     pub const Optimizations = union(enum) {

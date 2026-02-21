@@ -329,7 +329,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     var ctx = Ctx{
         .allocs = allocs,
-        .schedules = tmp.arena.alloc(u16, func.next_id),
+        .schedules = tmp.arena.alloc(u16, func.node_count),
         .block_offsets = tmp.arena.alloc(i32, func.gcm.postorder.len),
         .local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.postorder.len * 2)),
         .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),

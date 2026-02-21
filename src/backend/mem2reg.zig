@@ -279,7 +279,7 @@ pub fn Mixin(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            const slot_ids = tmp.arena.alloc(u32, self.next_id);
+            const slot_ids = tmp.arena.alloc(u32, self.node_count);
             @memset(slot_ids, escaped_schedue);
 
             var alloc_offset_count: usize = 0;
@@ -359,7 +359,7 @@ pub fn Mixin(comptime Backend: type) type {
             var ctx = Ctx{
                 .slot_ids = slot_ids,
                 .locals = tmp.arena.alloc(Local, alloc_offset_count),
-                .states = tmp.arena.alloc(?*Local.Join, self.next_id),
+                .states = tmp.arena.alloc(?*Local.Join, self.node_count),
                 .arena = tmp.arena,
             };
 
@@ -370,7 +370,7 @@ pub fn Mixin(comptime Backend: type) type {
             traverseMemThread(&ctx, self, self.start.outputs()[1]);
 
             if (graph.is_debug) {
-                var worklist = Func.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
+                var worklist = Func.WorkList.init(tmp.arena.allocator(), self.node_count) catch unreachable;
                 worklist.collectAll(self);
 
                 for (worklist.items()) |node| {

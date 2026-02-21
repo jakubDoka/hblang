@@ -47,8 +47,8 @@ pub fn Mixin(comptime Backend: type) type {
             defer tmp.deinit();
 
             var builder = LoopTreeBuilder{
-                .post_walked = try .initEmpty(tmp.arena.allocator(), self.next_id),
-                .pre_levels = tmp.arena.alloc(u16, self.next_id),
+                .post_walked = try .initEmpty(tmp.arena.allocator(), self.node_count),
+                .pre_levels = tmp.arena.alloc(u16, self.node_count),
                 .tree = .empty,
             };
             @memset(builder.pre_levels, 0);
@@ -145,7 +145,7 @@ pub fn Mixin(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var visited = try std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id);
+            var visited = try std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.node_count);
             var stack = std.ArrayList(Func.Frame).empty;
 
             const cfg_rpo: []*CfgNode = cfg_rpo: {
@@ -179,7 +179,7 @@ pub fn Mixin(comptime Backend: type) type {
                         self.setInput(&n.base, i, .nointern, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
-                    try visited.resize(tmp.arena.allocator(), self.next_id, true);
+                    try visited.resize(tmp.arena.allocator(), self.node_count, true);
                 };
                 break :add_mach_moves;
             }
@@ -212,9 +212,9 @@ pub fn Mixin(comptime Backend: type) type {
             }
 
             sched_late: {
-                const late_scheds = tmp.arena.alloc(?*CfgNode, self.next_id);
+                const late_scheds = tmp.arena.alloc(?*CfgNode, self.node_count);
                 @memset(late_scheds, null);
-                const nodes = tmp.arena.alloc(?*Node, self.next_id);
+                const nodes = tmp.arena.alloc(?*Node, self.node_count);
                 @memset(nodes, null);
                 var work_list = std.ArrayList(*Node).empty;
                 visited.setRangeValue(.{ .start = 0, .end = visited.capacity() }, false);

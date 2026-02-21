@@ -803,7 +803,7 @@ pub fn Func(comptime Backend: type) type {
         arena: std.heap.ArenaAllocator,
         interner: InternMap(Uninserter) = .{},
         signature: Signature = .{},
-        next_id: u32 = 0,
+        node_count: u32 = 0,
         waste: usize = 0,
         start: *Node = undefined,
         end: *Node = undefined,
@@ -1882,7 +1882,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn reset(self: *Self) void {
             std.debug.assert(self.arena.reset(.retain_capacity));
-            self.next_id = 0;
+            self.node_count = 0;
             self.waste = 0;
             self.start = self.addNode(.Start, .none, .top, &.{}, .{});
             self.interner = .{};
@@ -2039,8 +2039,8 @@ pub fn Func(comptime Backend: type) type {
             new_node.output_base = @ptrFromInt(@alignOf(Node.Out));
             new_node.output_cap = 0;
             new_node.output_len = 0;
-            new_node.id = self.next_id;
-            self.next_id += 1;
+            new_node.id = self.node_count;
+            self.node_count += 1;
 
             new_node.inputs()[0] = &block.base;
             self.addUse(&block.base, 0, new_node);
@@ -2480,11 +2480,11 @@ pub fn Func(comptime Backend: type) type {
                 .input_ordered_len = @intCast(owned_inputs.len),
                 .output_base = @ptrFromInt(@alignOf(Node.Out)),
                 .kind = kind,
-                .id = self.next_id,
+                .id = self.node_count,
                 .data_type = ty,
             };
 
-            self.next_id += 1;
+            self.node_count += 1;
 
             @memcpy(@as([*]u64, @ptrCast(&node.edata)), extra);
 
@@ -2806,7 +2806,7 @@ pub fn Func(comptime Backend: type) type {
 
             var worklist = WorkList.init(
                 tmp.arena.allocator(),
-                self.next_id,
+                self.node_count,
             ) catch unreachable;
             worklist.collectAll(self);
 
@@ -2906,7 +2906,7 @@ pub fn Func(comptime Backend: type) type {
             const cloned = Inln.cloneNodes(
                 self.start,
                 self.end,
-                self.next_id,
+                self.node_count,
                 &self.arena,
                 0,
                 tmp.arena,
@@ -2914,7 +2914,7 @@ pub fn Func(comptime Backend: type) type {
 
             self.start = cloned.new_node_table[self.start.id];
             self.end = cloned.new_node_table[self.end.id];
-            self.next_id = @intCast(cloned.new_node_table.len);
+            self.node_count = @intCast(cloned.new_node_table.len);
             self.signature = self.signature.dupe(self.arena.allocator());
         }
 
@@ -3529,7 +3529,7 @@ pub fn Func(comptime Backend: type) type {
             defer tmp.deinit();
 
             var worklist = Self.WorkList
-                .init(tmp.arena.allocator(), self.next_id) catch unreachable;
+                .init(tmp.arena.allocator(), self.node_count) catch unreachable;
             worklist.collectAll(self);
 
             for (worklist.items()) |p| {

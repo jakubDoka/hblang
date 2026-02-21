@@ -10,6 +10,7 @@ pub const frontend = opaque {
 pub const backend = opaque {
     pub const Builder = @import("backend/Builder.zig");
     pub const Machine = @import("backend/Machine.zig");
+    pub const Machine2 = @import("backend/Machine2.zig");
     pub const Regalloc = @import("backend/Regalloc.zig");
     pub const mem2reg = @import("backend/mem2reg.zig");
     pub const gcm = @import("backend/gcm.zig");

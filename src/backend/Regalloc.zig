@@ -369,7 +369,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const schedules = tmp.arena.alloc(u32, func.next_id);
+    const schedules = tmp.arena.alloc(u32, func.node_count);
 
     const should_log = 1 == 0;
 
@@ -389,7 +389,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     slf.max_instructions = @max(slf.max_instructions, instr_count);
 
     if (instr_count == 0) {
-        const allcs = func.arena.allocator().alloc(u16, func.next_id) catch unreachable;
+        const allcs = func.arena.allocator().alloc(u16, func.node_count) catch unreachable;
         @memset(allcs, no_reg_sentinel);
         return allcs;
     }
@@ -1123,7 +1123,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     }
 
     // first allocate into tmp since its near in memory
-    var alloc = func.arena.allocator().alloc(u16, func.next_id) catch unreachable;
+    var alloc = func.arena.allocator().alloc(u16, func.node_count) catch unreachable;
     @memset(alloc, no_reg_sentinel);
 
     for (func.gcm.postorder) |bb| {

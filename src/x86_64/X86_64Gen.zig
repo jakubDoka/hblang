@@ -949,7 +949,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         .code_base = @intCast(self.mach.out.code.items.len),
         .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),
         .local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10)),
-        .schedules = tmp.arena.alloc(u16, func.next_id),
+        .schedules = tmp.arena.alloc(u16, func.node_count),
         .block_offsets = tmp.arena.alloc(u32, postorder.len),
         .slot_bases = spill_slot_counts,
         .stack_layout = .{

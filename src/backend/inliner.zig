@@ -212,7 +212,7 @@ pub fn Mixin(comptime Backend: type) type {
             const self_start: *Func.Node = self.start;
             const self_end: *Func.Node = self.end;
 
-            const prev_next_id = func.next_id;
+            const prev_next_id = func.node_count;
 
             var tmp = utils.Arena.scrath(func_work.allocator.ptr);
             defer tmp.deinit();
@@ -220,13 +220,13 @@ pub fn Mixin(comptime Backend: type) type {
             const cloned = cloneNodes(
                 self_start,
                 self_end,
-                self.next_id,
+                self.node_count,
                 arena,
-                func.next_id,
+                func.node_count,
                 tmp.arena,
             );
 
-            func.next_id += @intCast(cloned.new_nodes.len);
+            func.node_count += @intCast(cloned.new_nodes.len);
 
             const end = cloned.new_node_table[self_end.id];
             const start = cloned.new_node_table[self_start.id];

@@ -526,7 +526,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     defer tmp.deinit();
 
     // Its reasonamble to assume we wont insert more nodes that this
-    const count = func.next_id * 3;
+    const count = func.node_count * 3;
 
     stacked = try .initEmpty(tmp.arena.allocator(), count);
 

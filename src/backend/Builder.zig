@@ -137,7 +137,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        var worklist = Func.WorkList.init(tmp.arena.allocator(), self.func.next_id) catch unreachable;
+        var worklist = Func.WorkList.init(tmp.arena.allocator(), self.func.node_count) catch unreachable;
         worklist.collectAll(&self.func);
 
         for (worklist.items()) |node| {
