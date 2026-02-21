@@ -110,15 +110,13 @@ pub fn Mixin(comptime Backend: type) type {
         const Arry = std.ArrayList;
 
         pub const Ctx = struct {
-            schedules: []u32,
-            alloc_offsets: []i64,
-            slots: []StackSlot,
+            slot_ids: []u32,
             locals: []Local,
             states: []BBState,
             visited: Set,
 
             pub fn lookupOffset(ctx: *Ctx, base: *Node, off: i64) usize {
-                const offs = ctx.slots[ctx.schedules[base.id]].offset + off;
+                const offs = ctx.slots[ctx.slot_ids[base.id]].offset + off;
                 return std.sort.binarySearch(i64, ctx.alloc_offsets, offs, struct {
                     pub fn inner(a: i64, b: i64) std.math.Order {
                         return std.math.order(a, b);
@@ -140,14 +138,12 @@ pub fn Mixin(comptime Backend: type) type {
 
             const escaped_schedue = std.math.maxInt(u32);
 
-            const schedules = tmp.arena.alloc(u32, self.next_id);
-            @memset(schedules, escaped_schedue);
+            const slot_ids = tmp.arena.alloc(u32, self.next_id);
+            @memset(slot_ids, escaped_schedue);
 
-            var alloc_offsets = Arry(i64){};
-            var slots = Arry(StackSlot){};
+            var alloc_offset_count: usize = 0;
 
             {
-                var offset: i64 = 0;
                 var offsets = Arry(packed struct(u64) { offset: u62, size: u2 }){};
                 var store_load_nodes = Arry(*Node){};
 
@@ -182,7 +178,7 @@ pub fn Mixin(comptime Backend: type) type {
                     // if so, bail
                     //
                     offsets.items.len = 0;
-                    for (store_load_nodes.items) |use| {
+                    for (store_load_nodes.items, 0..) |use, i| {
                         _, const offs = use.base().knownOffset();
                         // don't touch this and leave the static analysis report the soob
                         //
@@ -191,46 +187,39 @@ pub fn Mixin(comptime Backend: type) type {
                             // vectors eventually
                             o.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
                         {
+                            for (store_load_nodes.items[0..i]) |us| slot_ids[us.id] = escaped_schedue;
                             continue :outer;
                         }
 
-                        for (offsets.items) |off| {
+                        const idx = for (offsets.items, 0..) |off, j| {
                             if (off.offset > offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
                                 continue;
                             }
 
                             if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
+                                for (store_load_nodes.items[0..i]) |us| slot_ids[us.id] = escaped_schedue;
                                 continue :outer;
                             }
 
-                            break;
-                        } else {
+                            break j;
+                        } else b: {
                             try offsets.append(tmp.arena.allocator(), .{
                                 .offset = @intCast(offs),
                                 .size = @intCast(std.math.log2_int(u64, use.data_type.size())),
                             });
-                        }
+                            break :b offsets.items.len - 1;
+                        } + alloc_offset_count;
+
+                        slot_ids[o.id] = @intCast(idx);
                     }
 
-                    for (offsets.items) |off| {
-                        try alloc_offsets.append(tmp.arena.allocator(), offset + off.offset);
-                    }
-                    const new = alloc_offsets.items[alloc_offsets.items.len - offsets.items.len ..];
-                    std.sort.pdq(i64, new, {}, std.sort.asc(i64));
-
-                    schedules[o.id] = @intCast(slots.items.len);
-                    try slots.append(tmp.arena.allocator(), .{ .offset = offset });
-                    offset += @intCast(o.inputs()[1].?.extra(.LocalAlloc).size);
+                    alloc_offset_count += offsets.items.len;
                 }
             }
 
-            std.debug.assert(std.sort.isSorted(i64, alloc_offsets.items, {}, std.sort.asc(i64)));
-
             var ctx = Ctx{
-                .schedules = schedules,
-                .alloc_offsets = alloc_offsets.items,
-                .slots = slots.items,
-                .locals = tmp.arena.alloc(Local, alloc_offsets.items.len),
+                .slot_ids = slot_ids,
+                .locals = tmp.arena.alloc(Local, alloc_offset_count),
                 .states = tmp.arena.alloc(BBState, self.next_id),
                 .visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id),
             };
@@ -281,9 +270,8 @@ pub fn Mixin(comptime Backend: type) type {
                     var should_remove = false;
 
                     if (o.isStore()) {
-                        const base, const off = o.base().knownOffset();
-                        if (base.kind == .Local and schedules[base.id] != escaped_schedue) {
-                            const idx = ctx.lookupOffset(base, off);
+                        const idx = ctx.slot_ids[o.id];
+                        if (idx != escaped_schedue) {
                             ctx.locals[idx] = .compact(.{ .Node = o.value().? });
                             should_remove = true;
                         }
@@ -293,9 +281,8 @@ pub fn Mixin(comptime Backend: type) type {
                         for (stmp.arena.dupe(Node.Out, o.outputs())) |no| {
                             const lo = no.get();
                             if (lo.isLoad()) {
-                                const base, const off = lo.base().knownOffset();
-                                if (base.kind == .Local and schedules[base.id] != escaped_schedue) {
-                                    const idx = ctx.lookupOffset(base, off);
+                                const idx = ctx.slot_ids[o.id];
+                                if (idx != escaped_schedue) {
                                     const su = Local.resolve(self, ctx.locals, idx);
                                     self.subsume(su, lo, .intern);
                                 }
@@ -325,7 +312,10 @@ pub fn Mixin(comptime Backend: type) type {
 
                     // either we arrived from the back branch or the other side of the split
                     if (ctx.states[child.id].expand(ctx.locals.len).Join) |s| {
-                        if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, schedules[s.ctrl.id], child, schedules[child.id] });
+                        if (s.ctrl != child) utils.panic(
+                            "{f} {} {f} {}\n",
+                            .{ s.ctrl, ctx.slot_ids[s.ctrl.id], child, ctx.slot_ids[child.id] },
+                        );
 
                         if (child.kind == .Region) {
                             var lhs = s.items;
