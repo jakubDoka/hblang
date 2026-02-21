@@ -672,9 +672,6 @@ pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: *std.Io.Writer
             if (sym.kind != k) continue;
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rl| {
                 if (reloc_proj[@intFromEnum(rl.target)] > sym_count) {
-                    for (self.globals.items, 0..) |f, i| {
-                        if (f == rl.target) std.debug.print("{}\n", .{i});
-                    }
                     root.utils.panic("{} {} {} {s}\n", .{ rl.target, self.syms.items[@intFromEnum(rl.target)].kind, sym, self.lookupName(sym.name) });
                 }
                 try writer.writeStruct(Rela{
