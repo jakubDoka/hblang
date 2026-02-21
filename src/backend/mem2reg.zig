@@ -74,50 +74,6 @@ pub fn Mixin(comptime Backend: type) type {
             }
         };
 
-        const BBState = packed struct(usize) {
-            flag: enum(u2) { uninit, fork, join } = .uninit,
-            data: packed union {
-                join: u62,
-                fork: packed struct {
-                    remining_visits: u14,
-                    data: u48,
-                },
-            } = undefined,
-
-            fn expand(self: BBState, len: usize) Expanded {
-                return switch (self.flag) {
-                    .uninit => .{},
-                    .fork => .{ .Fork = .{
-                        .saved = @as([*]Local, @ptrFromInt(self.data.fork.data))[0..len],
-                        .remining_visits = self.data.fork.remining_visits,
-                    } },
-                    .join => .{ .Join = @ptrFromInt(self.data.join) },
-                };
-            }
-
-            fn compact(self: Expanded) BBState {
-                std.debug.assert(self.Fork == null or self.Join == null);
-                if (self.Fork) |f| return .{ .flag = .fork, .data = .{ .fork = .{
-                    .data = @intCast(@intFromPtr(f.saved.ptr)),
-                    .remining_visits = @intCast(f.remining_visits),
-                } } };
-                if (self.Join) |j| return .{
-                    .flag = .join,
-                    .data = .{ .join = @intCast(@intFromPtr(j)) },
-                };
-                return .{};
-            }
-
-            const Expanded = struct {
-                Fork: ?struct { saved: []Local, remining_visits: usize } = null,
-                Join: ?*Local.Join = null,
-            };
-        };
-
-        const StackSlot = struct {
-            offset: i64,
-        };
-
         pub fn isGoodMemOp(self: *Node, local: *Node) bool {
             return (self.isStore() and !self.isSub(graph.MemCpy) and
                 self.value() != local) or self.isLoad();
@@ -129,7 +85,7 @@ pub fn Mixin(comptime Backend: type) type {
         pub const Ctx = struct {
             slot_ids: []u32,
             locals: []Local,
-            states: []BBState,
+            states: []?*Local.Join,
             visited: Set,
             arena: *utils.Arena,
 
@@ -180,7 +136,7 @@ pub fn Mixin(comptime Backend: type) type {
                     .Phi => {
                         const child = &cursor.cfg0().base;
 
-                        if (ctx.states[cursor.id].expand(ctx.locals.len).Join) |s| {
+                        if (ctx.states[cursor.id]) |s| {
                             if (child.kind == .Region) {
                                 var lhs = s.items;
                                 var rhs = ctx.locals;
@@ -248,7 +204,7 @@ pub fn Mixin(comptime Backend: type) type {
                                     }
                                 }
                             }
-                            ctx.states[cursor.id] = .compact(.{ .Join = loop });
+                            ctx.states[cursor.id] = loop;
 
                             if (child.kind == .Region) {
                                 return;
@@ -404,13 +360,13 @@ pub fn Mixin(comptime Backend: type) type {
             var ctx = Ctx{
                 .slot_ids = slot_ids,
                 .locals = tmp.arena.alloc(Local, alloc_offset_count),
-                .states = tmp.arena.alloc(BBState, self.next_id),
+                .states = tmp.arena.alloc(?*Local.Join, self.next_id),
                 .visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id),
                 .arena = tmp.arena,
             };
 
             @memset(ctx.locals, .{});
-            @memset(ctx.states, .{});
+            @memset(ctx.states, null);
 
             std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
             traverseMemThread(&ctx, self, self.start.outputs()[1]);
