@@ -2261,7 +2261,7 @@ main := fn(): uint {
 #### directives 23
 ```hb
 expectations := .{
-    return_value: 10,
+    return_value: 14,
 }
 
 main := fn(): uint {

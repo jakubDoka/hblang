@@ -150,10 +150,6 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             if (self.reg != unresolved_reg) {
                 try writer.print("reg: {}", .{self.reg});
             }
-            // if (self.killed_by) |k| {
-            //     try writer.writeAll("\n\tkilled by: ");
-            //     try k.format(a, b, writer);
-            // }
         }
 
         pub fn index(self: *LiveRange, live_ranges: []const LiveRange) u16 {

@@ -109,6 +109,24 @@ pub fn Mixin(comptime Backend: type) type {
         const Set = std.DynamicBitSetUnmanaged;
         const Arry = std.ArrayList;
 
+        pub const Ctx = struct {
+            schedules: []u32,
+            alloc_offsets: []i64,
+            slots: []StackSlot,
+            locals: []Local,
+            states: []BBState,
+            visited: Set,
+
+            pub fn lookupOffset(ctx: *Ctx, base: *Node, off: i64) usize {
+                const offs = ctx.slots[ctx.schedules[base.id]].offset + off;
+                return std.sort.binarySearch(i64, ctx.alloc_offsets, offs, struct {
+                    pub fn inner(a: i64, b: i64) std.math.Order {
+                        return std.math.order(a, b);
+                    }
+                }.inner).?;
+            }
+        };
+
         pub fn run(m2r: *Self) void {
             errdefer unreachable;
 
@@ -122,103 +140,106 @@ pub fn Mixin(comptime Backend: type) type {
 
             const escaped_schedue = std.math.maxInt(u32);
 
-            var visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id);
-            const postorder = self.collectDfs(tmp.arena.allocator(), &visited)[1..];
-
             const schedules = tmp.arena.alloc(u32, self.next_id);
             @memset(schedules, escaped_schedue);
 
-            var slots = Arry(StackSlot){};
-            var offset: i64 = 0;
-            var offsets = Arry(packed struct(u64) { offset: u62, size: u2 }){};
-            var store_load_nodes = Arry(*Node){};
             var alloc_offsets = Arry(i64){};
+            var slots = Arry(StackSlot){};
 
-            outer: for (mem.outputs()) |n| {
-                const ov = n.get();
-                if (ov.kind != .LocalAlloc or ov.outputs().len != 1 or
-                    ov.extra(.LocalAlloc).meta.kind != .variable) continue :outer;
-                const o = ov.outputs()[0].get();
-                std.debug.assert(o.kind == .Local);
+            {
+                var offset: i64 = 0;
+                var offsets = Arry(packed struct(u64) { offset: u62, size: u2 }){};
+                var store_load_nodes = Arry(*Node){};
 
-                // collect all loads and stores, bail on something else
-                //
-                store_load_nodes.items.len = 0;
-                for (o.outputs()) |us| {
-                    const use = us.get();
-                    if (use.kind == .BinOp and use.inputs()[2].?.kind == .CInt) {
-                        for (use.outputs()) |use_use| {
-                            if (isGoodMemOp(use_use.get(), o)) {
-                                try store_load_nodes.append(tmp.arena.allocator(), use_use.get());
-                            } else {
-                                continue :outer;
-                            }
-                        }
-                    } else if (isGoodMemOp(use, o)) {
-                        try store_load_nodes.append(tmp.arena.allocator(), use);
-                    } else {
-                        continue :outer;
-                    }
-                }
+                outer: for (mem.outputs()) |n| {
+                    const ov = n.get();
+                    if (ov.kind != .LocalAlloc or ov.outputs().len != 1 or
+                        ov.extra(.LocalAlloc).meta.kind != .variable) continue :outer;
+                    const o = ov.outputs()[0].get();
+                    std.debug.assert(o.kind == .Local);
 
-                // validate that there are no viredly overlapping stores or loads
-                // if so, bail
-                //
-                offsets.items.len = 0;
-                for (store_load_nodes.items) |use| {
-                    _, const offs = use.base().knownOffset();
-                    // don't touch this and leave the static analysis report the soob
+                    // collect all loads and stores, bail on something else
                     //
-                    if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
-                        // TODO: we ignore elems > 8 for now but we will want mem2reg to work on
-                        // vectors eventually
-                        o.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
-                    {
-                        continue :outer;
+                    store_load_nodes.items.len = 0;
+                    for (o.outputs()) |us| {
+                        const use = us.get();
+                        if (use.kind == .BinOp and use.inputs()[2].?.kind == .CInt) {
+                            for (use.outputs()) |use_use| {
+                                if (isGoodMemOp(use_use.get(), o)) {
+                                    try store_load_nodes.append(tmp.arena.allocator(), use_use.get());
+                                } else {
+                                    continue :outer;
+                                }
+                            }
+                        } else if (isGoodMemOp(use, o)) {
+                            try store_load_nodes.append(tmp.arena.allocator(), use);
+                        } else {
+                            continue :outer;
+                        }
                     }
 
-                    for (offsets.items) |off| {
-                        if (off.offset > offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
-                            continue;
-                        }
-
-                        if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
+                    // validate that there are no viredly overlapping stores or loads
+                    // if so, bail
+                    //
+                    offsets.items.len = 0;
+                    for (store_load_nodes.items) |use| {
+                        _, const offs = use.base().knownOffset();
+                        // don't touch this and leave the static analysis report the soob
+                        //
+                        if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
+                            // TODO: we ignore elems > 8 for now but we will want mem2reg to work on
+                            // vectors eventually
+                            o.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
+                        {
                             continue :outer;
                         }
 
-                        break;
-                    } else {
-                        try offsets.append(tmp.arena.allocator(), .{
-                            .offset = @intCast(offs),
-                            .size = @intCast(std.math.log2_int(u64, use.data_type.size())),
-                        });
+                        for (offsets.items) |off| {
+                            if (off.offset > offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
+                                continue;
+                            }
+
+                            if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
+                                continue :outer;
+                            }
+
+                            break;
+                        } else {
+                            try offsets.append(tmp.arena.allocator(), .{
+                                .offset = @intCast(offs),
+                                .size = @intCast(std.math.log2_int(u64, use.data_type.size())),
+                            });
+                        }
                     }
-                }
 
-                for (offsets.items) |off| {
-                    try alloc_offsets.append(tmp.arena.allocator(), offset + off.offset);
-                }
-                const new = alloc_offsets.items[alloc_offsets.items.len - offsets.items.len ..];
-                std.sort.pdq(i64, new, {}, std.sort.asc(i64));
+                    for (offsets.items) |off| {
+                        try alloc_offsets.append(tmp.arena.allocator(), offset + off.offset);
+                    }
+                    const new = alloc_offsets.items[alloc_offsets.items.len - offsets.items.len ..];
+                    std.sort.pdq(i64, new, {}, std.sort.asc(i64));
 
-                schedules[o.id] = @intCast(slots.items.len);
-                try slots.append(tmp.arena.allocator(), .{ .offset = offset });
-                offset += @intCast(o.inputs()[1].?.extra(.LocalAlloc).size);
+                    schedules[o.id] = @intCast(slots.items.len);
+                    try slots.append(tmp.arena.allocator(), .{ .offset = offset });
+                    offset += @intCast(o.inputs()[1].?.extra(.LocalAlloc).size);
+                }
             }
 
             std.debug.assert(std.sort.isSorted(i64, alloc_offsets.items, {}, std.sort.asc(i64)));
 
-            var locals = tmp.arena.alloc(Local, alloc_offsets.items.len);
-            @memset(locals, .{});
+            var ctx = Ctx{
+                .schedules = schedules,
+                .alloc_offsets = alloc_offsets.items,
+                .slots = slots.items,
+                .locals = tmp.arena.alloc(Local, alloc_offsets.items.len),
+                .states = tmp.arena.alloc(BBState, self.next_id),
+                .visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id),
+            };
 
-            var states = tmp.arena.alloc(BBState, postorder.len);
-            @memset(states, .{});
+            @memset(ctx.locals, .{});
+            @memset(ctx.states, .{});
 
-            for (postorder, 0..) |bb, i| {
-                schedules[bb.base.id] = @intCast(i);
-            }
+            const postorder = self.collectDfs(tmp.arena.allocator(), &ctx.visited)[1..];
 
-            var to_remove = Arry(*Node){};
             for (postorder) |bbc| {
                 const bb = &bbc.base;
 
@@ -235,11 +256,13 @@ pub fn Mixin(comptime Backend: type) type {
                 // handle fork
                 if (parent_succs == 2) {
                     // this is the second branch, restore the value
-                    if (states[schedules[parent.id]].expand(locals.len).Fork) |s| {
-                        locals = s.saved;
+                    if (ctx.states[parent.id].expand(ctx.locals.len).Fork) |s| {
+                        ctx.locals = s.saved;
                     } else {
                         // we will visit this eventually
-                        states[schedules[parent.id]] = .compact(.{ .Fork = .{ .saved = tmp.arena.dupe(Local, locals) } });
+                        ctx.states[parent.id] = .compact(.{ .Fork = .{
+                            .saved = tmp.arena.dupe(Local, ctx.locals),
+                        } });
                     }
                 }
 
@@ -255,22 +278,14 @@ pub fn Mixin(comptime Backend: type) type {
                     if (o.isDead()) continue;
                     std.debug.assert(bb.kind != .Local);
 
+                    var should_remove = false;
+
                     if (o.isStore()) {
                         const base, const off = o.base().knownOffset();
                         if (base.kind == .Local and schedules[base.id] != escaped_schedue) {
-                            try to_remove.append(tmp.arena.allocator(), o);
-                            const offs = slots.items[schedules[base.id]].offset + off;
-                            const idx = std.sort.binarySearch(i64, alloc_offsets.items, offs, struct {
-                                pub fn inner(a: i64, b: i64) std.math.Order {
-                                    return std.math.order(a, b);
-                                }
-                            }.inner) orelse {
-                                utils.panic("{f} {any} {}", .{ o, alloc_offsets.items, offs });
-                            };
-                            if (locals[idx].expand() != null) {
-                                _ = Local.resolve(self, locals, idx);
-                            }
-                            locals[idx] = .compact(.{ .Node = o.value().? });
+                            const idx = ctx.lookupOffset(base, off);
+                            ctx.locals[idx] = .compact(.{ .Node = o.value().? });
+                            should_remove = true;
                         }
                     }
 
@@ -280,17 +295,19 @@ pub fn Mixin(comptime Backend: type) type {
                             if (lo.isLoad()) {
                                 const base, const off = lo.base().knownOffset();
                                 if (base.kind == .Local and schedules[base.id] != escaped_schedue) {
-                                    const offs = slots.items[schedules[base.id]].offset + off;
-                                    const idx = std.sort.binarySearch(i64, alloc_offsets.items, offs, struct {
-                                        pub fn inner(a: i64, b: i64) std.math.Order {
-                                            return std.math.order(a, b);
-                                        }
-                                    }.inner).?;
-                                    const su = Local.resolve(self, locals, idx);
+                                    const idx = ctx.lookupOffset(base, off);
+                                    const su = Local.resolve(self, ctx.locals, idx);
                                     self.subsume(su, lo, .intern);
                                 }
                             }
                         }
+                    }
+
+                    if (should_remove) {
+                        const vl = o.value().?;
+                        vl.lockTmp();
+                        self.subsume(o.mem(), o, .intern);
+                        vl.unlockTmp();
                     }
                 }
 
@@ -307,18 +324,18 @@ pub fn Mixin(comptime Backend: type) type {
                     }
 
                     // either we arrived from the back branch or the other side of the split
-                    if (states[schedules[child.id]].expand(locals.len).Join) |s| {
+                    if (ctx.states[child.id].expand(ctx.locals.len).Join) |s| {
                         if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, schedules[s.ctrl.id], child, schedules[child.id] });
 
                         if (child.kind == .Region) {
                             var lhs = s.items;
-                            var rhs = locals;
+                            var rhs = ctx.locals;
 
                             if (child.inputs()[0] == bb) {
                                 std.mem.swap([]Local, &lhs, &rhs);
                             }
 
-                            const dest = locals;
+                            const dest = ctx.locals;
 
                             for (lhs, rhs, dest, 0..) |l, r, *d, i| {
                                 if (l == r) continue;
@@ -331,7 +348,7 @@ pub fn Mixin(comptime Backend: type) type {
                                 d.* = .compact(.{ .Node = self.addPhi(lv.sloc, child, lv, rv) });
                             }
                         } else {
-                            for (s.items, locals, 0..) |clhs, crhs, i| {
+                            for (s.items, ctx.locals, 0..) |clhs, crhs, i| {
                                 var lhs = clhs.expand() orelse continue;
                                 if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
                                     const rhs = crhs.expand() orelse Local.Expanded{
@@ -365,23 +382,19 @@ pub fn Mixin(comptime Backend: type) type {
                         loop.* = .{
                             .done = false,
                             .ctrl = child,
-                            .items = tmp.arena.dupe(Local, locals),
+                            .items = tmp.arena.dupe(Local, ctx.locals),
                         };
                         if (child.kind == .Loop) {
                             std.debug.assert(child.kind == .Loop);
-                            for (locals) |*l| {
+                            for (ctx.locals) |*l| {
                                 if (l.expand() != null) {
                                     l.* = .compact(.{ .Loop = loop });
                                 }
                             }
                         }
-                        states[schedules[child.id]] = .compact(.{ .Join = loop });
+                        ctx.states[child.id] = .compact(.{ .Join = loop });
                     }
                 }
-            }
-
-            for (to_remove.items) |tr| {
-                self.subsume(tr.mem(), tr, .intern);
             }
 
             if (graph.is_debug) {

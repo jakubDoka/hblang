@@ -353,7 +353,7 @@ fn isKeyword(name: []const u8) bool {
     return name[0] == '@' or (name[0] == '$' and name.len != 1) or std.ascii.isLower(name[0]) or name[0] == '_';
 }
 
-const keyword_map = b: {
+const all_keywords = b: {
     @setEvalBranchQuota(2000);
 
     const auto_migration_mapping = [_]struct { []const u8, Lexeme }{
@@ -388,8 +388,42 @@ const keyword_map = b: {
         i += 1;
     }
 
-    break :b std.StaticStringMap(Lexeme).initComptime(lista);
+    break :b lista;
 };
+
+const QueryVec = @Vector(std.simd.suggestVectorLength(u8).?, u8);
+
+const keyword_prefixes align(@alignOf(QueryVec)) = b: {
+    @setEvalBranchQuota(2000);
+
+    const aligned_count = std.mem.alignForward(usize, all_keywords.len, @sizeOf(QueryVec));
+
+    var prefixes: [aligned_count]u8 = @splat(0);
+
+    for (all_keywords, 0..) |kw, i| {
+        prefixes[i] = @truncate(std.hash.Fnv1a_32.hash(kw[0]));
+    }
+
+    break :b prefixes;
+};
+
+pub fn resolveKeyword(kw: []const u8) ?Lexeme {
+    const prefix: u8 = @truncate(std.hash.Fnv1a_32.hash(kw));
+
+    const search_vec: QueryVec = @splat(prefix);
+
+    for (@as([]const QueryVec, @ptrCast(&keyword_prefixes)), 0..) |prefix_vec, i| {
+        var mask: std.meta.Int(.unsigned, @sizeOf(QueryVec)) = @bitCast(prefix_vec == search_vec);
+        mask &= @as(@TypeOf(mask), std.math.maxInt(@TypeOf(mask))) >>
+            @intCast((i + 1) * @sizeOf(QueryVec) -| all_keywords.len);
+        while (mask != 0) : (mask &= mask - 1) {
+            const index = i * @sizeOf(QueryVec) + @ctz(mask);
+            if (std.mem.eql(u8, all_keywords[index][0], kw)) return all_keywords[index][1];
+        }
+    }
+
+    return null;
+}
 
 pub fn peekNext(self: Lexer) Token {
     var s = self;
@@ -516,7 +550,7 @@ pub fn next(self: *Lexer) Token {
             switch (self.source[self.cursor]) {
                 'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => continue :state .ident,
                 else => {
-                    if (keyword_map.get(self.source[pos..self.cursor])) |k| break :state k;
+                    if (resolveKeyword(self.source[pos..self.cursor])) |k| break :state k;
                     switch (self.source[pos]) {
                         '$' => |c| break :state @enumFromInt(c),
                         else => break :state .Ident,

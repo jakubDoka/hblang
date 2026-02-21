@@ -1237,11 +1237,15 @@ pub fn emitToBackend(
 
     const prev_err_count = self.types.errored;
 
+    self.bl.func.iterPeeps(&self.bl, @TypeOf(self.bl.func).idealizeDead);
+
     if (fnid.get(self.types).linkage != .imported) {
         for (self.bl.func.getSyms().outputs()) |sym| {
             switch (sym.get().extra2()) {
                 .GlobalAddr => |extra| {
                     if (self.target == .cmptime) continue;
+
+                    if (sym.get().outputs().len == 0) unreachable;
 
                     var queue = std.ArrayList(Types.GlobalId).empty;
                     queue.append(tmp.arena.allocator(), @enumFromInt(extra.id)) catch unreachable;
@@ -5808,6 +5812,12 @@ pub fn partialEvalGlobal(self: *Codegen, addr: *BNode) !*BNode {
 }
 
 pub fn partialEvalLoad(self: *Codegen, op: *BNode, relocs: ?[]Machine.DataOptions.Reloc) !*BNode {
+    const node = try self.partialEvalLoadNoSub(op, relocs);
+    self.bl.func.subsume(node, op, .intern);
+    return node;
+}
+
+pub fn partialEvalLoadNoSub(self: *Codegen, op: *BNode, relocs: ?[]Machine.DataOptions.Reloc) !*BNode {
     if (op.isLocked()) return error.InProgress;
 
     var lock = op.lock();
@@ -5870,8 +5880,6 @@ pub fn partialEvalLoad(self: *Codegen, op: *BNode, relocs: ?[]Machine.DataOption
                 );
                 res = self.bl.addIntImm(op.sloc, op.data_type, val);
             }
-
-            self.bl.func.subsume(res, op, .intern);
 
             return res;
         },

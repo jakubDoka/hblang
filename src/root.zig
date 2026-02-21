@@ -456,25 +456,35 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
                 }
             }
 
-            var runtim_functions: usize = 0;
+            var runtime_functions: usize = 0;
             var comptime_functions: usize = 0;
             var dead_functions: usize = 0;
 
             for (0..types.funcs.meta.len) |i| {
                 const f = types.funcs.at(@enumFromInt(i));
                 if (f.compiled.contains(.cmptime)) comptime_functions += 1;
-                if (f.compiled.contains(.runtime)) runtim_functions += 1;
+                if (f.compiled.contains(.runtime)) runtime_functions += 1;
 
-                if (f.compiled.contains(.cmptime) and
-                    f.compiled.contains(.runtime))
+                if (!f.compiled.contains(.cmptime) and
+                    !f.compiled.contains(.runtime))
                 {
                     dead_functions += 1;
                 }
             }
 
-            try diags.print("  runtime functions:  {}\n", .{runtim_functions});
+            var comptime_globals: usize = 0;
+            var runtime_globals: usize = 0;
+            for (0..types.globals.meta.len) |i| {
+                const g = types.globals.at(@enumFromInt(i));
+                if (!g.runtime_emmited) comptime_globals += 1;
+                if (g.runtime_emmited) runtime_globals += 1;
+            }
+
+            try diags.print("  runtime functions:  {}\n", .{runtime_functions});
             try diags.print("  comptime functions: {}\n", .{comptime_functions});
             try diags.print("  dead functions:     {}\n", .{dead_functions});
+            try diags.print("  comptime globals:   {}\n", .{comptime_globals});
+            try diags.print("  runtime globals:    {}\n", .{runtime_globals});
 
             //types.metrics.logStats(diags);
         }

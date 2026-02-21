@@ -1664,17 +1664,17 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn lock(self: *Node) Lock {
-                //if (is_debug and (!self.isLocked() or true)) {
-                //    self.lock_at = arna.allocator().create(Lock.Meta) catch unreachable;
-                //    self.lock_at.* = Lock.Meta{
-                //        .trace = std.builtin.StackTrace{
-                //            .index = undefined,
-                //            .instruction_addresses = arna.allocator().alloc(usize, 10) catch unreachable,
-                //        },
-                //    };
+                if (is_debug and (!self.isLocked() or true) and false) {
+                    self.lock_at = arna.allocator().create(Lock.Meta) catch unreachable;
+                    self.lock_at.* = Lock.Meta{
+                        .trace = std.builtin.StackTrace{
+                            .index = undefined,
+                            .instruction_addresses = arna.allocator().alloc(usize, 10) catch unreachable,
+                        },
+                    };
 
-                //    std.debug.captureStackTrace(@returnAddress(), &self.lock_at.trace);
-                //}
+                    std.debug.captureStackTrace(@returnAddress(), &self.lock_at.trace);
+                }
 
                 self.tmp_rc += 1;
                 return .{ .node = self };
@@ -2574,7 +2574,7 @@ pub fn Func(comptime Backend: type) type {
 
             func.uninternNode(self);
 
-            if (is_debug) {
+            if (is_debug and false) {
                 var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
 
@@ -3009,7 +3009,7 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn compact(self: *Self) void {
-            if (self.arena.queryCapacity() > self.waste * 2) return;
+            if (self.arena.queryCapacity() > self.waste * 2 -| @sizeOf(Node) * 32) return;
 
             const Inln = inliner.Mixin(Backend);
 
