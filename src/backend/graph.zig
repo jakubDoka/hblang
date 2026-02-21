@@ -3099,7 +3099,7 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (Backend != Builder and node.kind == .Call and node.data_type != .bot) {
+            if (Backend != Builder and false and node.kind == .Call and node.data_type != .bot) {
                 const force_inline = node.extra(.Call)
                     .signature.call_conv == .@"inline";
                 if (ctx.mach.out.getInlineFunc(
@@ -3310,6 +3310,36 @@ pub fn Func(comptime Backend: type) type {
                         .global => |g| self.addGlobalAddr(node.sloc, g),
                         .func => |f| self.addFuncAddr(node.sloc, f),
                     };
+                }
+            }
+
+            if (node.kind == .MemCpy) {
+                const ctrl = node.inputs()[0].?;
+                var mem = node.inputs()[1].?;
+                const dst = node.inputs()[2].?;
+                const src = node.inputs()[3].?;
+                const len = node.inputs()[4].?;
+                if (len.kind == .CInt and len.extra(.CInt).value <= 16) {
+                    const size = len.extra(.CInt).value;
+                    var cursor: u64 = 0;
+                    var copy_elem = DataType.i64;
+
+                    while (cursor != size) {
+                        while (cursor + copy_elem.size() > size) : (copy_elem =
+                            @enumFromInt(@intFromEnum(copy_elem) - 1))
+                        {}
+
+                        const dst_off = self.addFieldOffset(node.sloc, dst, @intCast(cursor));
+                        const src_off = self.addFieldOffset(node.sloc, src, @intCast(cursor));
+                        const ld = self.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
+                        work.add(ld);
+                        mem = self.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
+                        work.add(mem);
+
+                        cursor += copy_elem.size();
+                    }
+
+                    return mem;
                 }
             }
 
