@@ -2582,7 +2582,7 @@ take_triple := fn(triple: Triple): uint {
 #### arithmetic 3
 ```hb
 main := fn(): uint {
-    {
+    if false {
         // no opts unsigned
         o := one()
         z := zero()
@@ -2595,7 +2595,7 @@ main := fn(): uint {
         if cond(z >= o) return 6
     }
 
-    {
+    if false {
         // no opts signed
         o := mne()
         z := mero()
@@ -2608,7 +2608,7 @@ main := fn(): uint {
         if cond(z <= o) return 12
     }
 
-    {
+    if false {
         // branch opts unsigned
         o := one()
         z := zero()

@@ -995,7 +995,7 @@ pub const OptOptions = struct {
     }
 
     pub fn finalize(
-        optimizations: @This(),
+        optimizations: OptOptions,
         comptime Backend: type,
         backend: *Backend,
         opts: FinalizeOptionsInterface,

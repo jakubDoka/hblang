@@ -176,8 +176,8 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
         const op = node.inputs()[1].?;
         const shift = node.extra(.GetLane).idx * 8 * node.data_type.size();
         const shift_imm = func.addIntImm(node.sloc, op.data_type, shift);
-        const fly = func.addBinOp(node.sloc, .ushr, op.data_type, op, shift_imm);
-        return func.addUnOp(node.sloc, .ired, node.data_type, fly);
+        const fly = func.addBinOp(node.sloc, .ushr, .i64, op, shift_imm);
+        return func.addUnOp(node.sloc, .ired, .f32, fly);
     }
 
     return null;

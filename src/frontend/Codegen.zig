@@ -6377,15 +6377,15 @@ pub fn collectExports(types: *Types) !void {
         }
     }
 
-    if (types.handlers.get(.entry).asOpt()) |h| {
-        h.get(types).linkage = .exported;
-        h.get(types).scope.name_pos = .entry;
-        h.get(types).queue(.runtime, types);
-    }
-
     if (types.handlers.get(.memcpy).asOpt()) |h| {
         h.get(types).linkage = .exported;
         h.get(types).scope.name_pos = .memcpy;
+        h.get(types).queue(.runtime, types);
+    }
+
+    if (types.handlers.get(.entry).asOpt()) |h| {
+        h.get(types).linkage = .exported;
+        h.get(types).scope.name_pos = .entry;
         h.get(types).queue(.runtime, types);
     }
 
@@ -6773,8 +6773,8 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     const asts, var kl = try parseExample(&scratch, name, code, wint);
 
     var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
-    target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
-    //target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
+    // target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
+    // target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
 
     const backend = target.toMachine(&scratch, gpa);
     defer backend.deinit();
