@@ -2905,58 +2905,6 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        pub fn collectDfs(
-            self: *Self,
-            arena: std.mem.Allocator,
-            visited: *std.DynamicBitSetUnmanaged,
-        ) []*CfgNode {
-            var postorder = std.ArrayList(*CfgNode).empty;
-            collectPostorder3(
-                self,
-                self.start,
-                arena,
-                &postorder,
-                visited,
-                true,
-            );
-            return postorder.items;
-        }
-
-        pub fn collectPostorder3(
-            self: *Self,
-            node: *Node,
-            arena: std.mem.Allocator,
-            pos: *std.ArrayList(*CfgNode),
-            visited: *std.DynamicBitSetUnmanaged,
-            comptime only_basic: bool,
-        ) void {
-            if (node.kind == .Region) {
-                if (!visited.isSet(node.id)) {
-                    visited.set(node.id);
-                    pos.append(arena, node.asCfg().?) catch unreachable;
-                    return;
-                }
-            } else {
-                if (visited.isSet(node.id)) {
-                    return;
-                }
-                visited.set(node.id);
-                pos.append(arena, node.asCfg().?) catch unreachable;
-            }
-            for (node.outputs()) |o| {
-                if (o.get().isCfg()) {
-                    collectPostorder3(
-                        self,
-                        o.get(),
-                        arena,
-                        pos,
-                        visited,
-                        only_basic,
-                    );
-                }
-            }
-        }
-
         pub fn collectPostorder(
             self: *Self,
             arena: std.mem.Allocator,

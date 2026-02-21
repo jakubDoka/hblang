@@ -8,6 +8,8 @@ pub fn Mixin(comptime Backend: type) type {
         const Self = @This();
         const Node = Func.Node;
 
+        const escaped_schedue = std.math.maxInt(u32);
+
         pub fn getGraph(self: *Self) *Func {
             return @alignCast(@fieldParentPtr("mem2reg", self));
         }
@@ -114,6 +116,7 @@ pub fn Mixin(comptime Backend: type) type {
             locals: []Local,
             states: []BBState,
             visited: Set,
+            arena: *utils.Arena,
 
             pub fn lookupOffset(ctx: *Ctx, base: *Node, off: i64) usize {
                 const offs = ctx.slots[ctx.slot_ids[base.id]].offset + off;
@@ -125,6 +128,191 @@ pub fn Mixin(comptime Backend: type) type {
             }
         };
 
+        pub fn traverse(
+            ctx: *Ctx,
+            self: *Func,
+            node: *Func.CfgNode,
+        ) void {
+            if (node.base.kind == .Region) {
+                if (!ctx.visited.isSet(node.base.id)) {
+                    ctx.visited.set(node.base.id);
+                    return;
+                }
+            } else {
+                if (ctx.visited.isSet(node.base.id)) {
+                    return;
+                }
+                ctx.visited.set(node.base.id);
+            }
+
+            doBlock(ctx, self, node);
+
+            for (node.base.outputs()) |o| {
+                if (o.get().asCfg()) |cfg| {
+                    traverse(ctx, self, cfg);
+                }
+            }
+        }
+
+        pub fn doBlock(ctx: *Ctx, self: *Func, bbc: *Func.CfgNode) void {
+            const bb = &bbc.base;
+
+            if (bb.outputs().len == 0) return;
+
+            var parent_succs: usize = 0;
+            const parent = bb.inputs()[0] orelse {
+                std.debug.assert(bb.kind == .Return);
+                return;
+            };
+            std.debug.assert(parent.isCfg());
+            for (parent.outputs()) |o| parent_succs += @intFromBool(o.get().isCfg());
+            if (!(parent_succs >= 1 and parent_succs <= 2)) utils.panic("{f}\n", .{bb});
+            // handle fork
+            if (parent_succs == 2) {
+                // this is the second branch, restore the value
+                if (ctx.states[parent.id].expand(ctx.locals.len).Fork) |s| {
+                    ctx.locals = s.saved;
+                } else {
+                    // we will visit this eventually
+                    ctx.states[parent.id] = .compact(.{ .Fork = .{
+                        .saved = ctx.arena.dupe(Local, ctx.locals),
+                    } });
+                }
+            }
+
+            if (bbc.base.isBasicBlockStart()) {
+                Func.CfgNode.scheduleBlock(bbc);
+            }
+
+            var stmp = utils.Arena.scrath(ctx.arena);
+            defer stmp.deinit();
+
+            for (stmp.arena.dupe(Node.Out, bb.outputs())) |n| {
+                const o = n.get();
+                if (o.isDead()) continue;
+                std.debug.assert(bb.kind != .Local);
+
+                var should_remove = false;
+
+                if (o.isStore()) {
+                    const idx = ctx.slot_ids[o.id];
+                    if (idx != escaped_schedue) {
+                        ctx.locals[idx] = .compact(.{ .Node = o.value().? });
+                        should_remove = true;
+                    }
+                }
+
+                if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
+                    for (stmp.arena.dupe(Node.Out, o.outputs())) |no| {
+                        const lo = no.get();
+                        if (lo.isLoad()) {
+                            const idx = ctx.slot_ids[o.id];
+                            if (idx != escaped_schedue) {
+                                const su = Local.resolve(self, ctx.locals, idx);
+                                self.subsume(su, lo, .intern);
+                            }
+                        }
+                    }
+                }
+
+                if (should_remove) {
+                    const vl = o.value().?;
+                    vl.lockTmp();
+                    self.subsume(o.mem(), o, .intern);
+                    vl.unlockTmp();
+                }
+            }
+
+            const child: *Node = for (bb.outputs()) |o| {
+                if (o.get().isCfg()) break o.get();
+            } else return;
+
+            var child_preds: usize = 0;
+            for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg());
+            std.debug.assert((child_preds >= 1 and child_preds <= 2) or child.kind == .TrapRegion);
+            // handle joins
+            if (child_preds == 2 and child.kind != .TrapRegion and child.kind != .Return) {
+                if (!(child.kind == .Region or child.kind == .Loop)) {
+                    utils.panic("{f}\n", .{child});
+                }
+
+                // either we arrived from the back branch or the other side of the split
+                if (ctx.states[child.id].expand(ctx.locals.len).Join) |s| {
+                    if (s.ctrl != child) utils.panic(
+                        "{f} {} {f} {}\n",
+                        .{ s.ctrl, ctx.slot_ids[s.ctrl.id], child, ctx.slot_ids[child.id] },
+                    );
+
+                    if (child.kind == .Region) {
+                        var lhs = s.items;
+                        var rhs = ctx.locals;
+
+                        if (child.inputs()[0] == bb) {
+                            std.mem.swap([]Local, &lhs, &rhs);
+                        }
+
+                        const dest = ctx.locals;
+
+                        for (lhs, rhs, dest, 0..) |l, r, *d, i| {
+                            if (l == r) continue;
+
+                            const lv = Local.resolve(self, lhs, i);
+                            const rv = Local.resolve(self, rhs, i);
+
+                            if (lv == rv) continue;
+
+                            d.* = .compact(.{ .Node = self.addPhi(lv.sloc, child, lv, rv) });
+                        }
+                    } else {
+                        for (s.items, ctx.locals, 0..) |clhs, crhs, i| {
+                            var lhs = clhs.expand() orelse continue;
+                            if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
+                                const rhs = crhs.expand() orelse Local.Expanded{
+                                    .Node = self.addUninit(lhs.Node.sloc, lhs.Node.data_type),
+                                };
+
+                                if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
+                                    unreachable;
+                                }
+
+                                if (rhs == .Node) {
+                                    if (self.setInput(lhs.Node, 2, .intern, rhs.Node)) |nlhs| {
+                                        lhs = .{ .Node = nlhs };
+                                    }
+                                } else {
+                                    const prev = lhs.Node.inputs()[1].?;
+                                    self.subsume(prev, lhs.Node, .intern);
+                                    lhs = .{ .Node = prev };
+                                }
+
+                                if (child.inputs()[0] == bb) unreachable;
+
+                                s.items[i] = .compact(lhs);
+                            }
+                        }
+                    }
+                    s.done = true;
+                } else {
+                    // first time seeing, this ca also be a region, needs renaming I guess
+                    const loop = ctx.arena.create(Local.Join);
+                    loop.* = .{
+                        .done = false,
+                        .ctrl = child,
+                        .items = ctx.arena.dupe(Local, ctx.locals),
+                    };
+                    if (child.kind == .Loop) {
+                        std.debug.assert(child.kind == .Loop);
+                        for (ctx.locals) |*l| {
+                            if (l.expand() != null) {
+                                l.* = .compact(.{ .Loop = loop });
+                            }
+                        }
+                    }
+                    ctx.states[child.id] = .compact(.{ .Join = loop });
+                }
+            }
+        }
+
         pub fn run(m2r: *Self) void {
             errdefer unreachable;
 
@@ -135,8 +323,6 @@ pub fn Mixin(comptime Backend: type) type {
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
-
-            const escaped_schedue = std.math.maxInt(u32);
 
             const slot_ids = tmp.arena.alloc(u32, self.next_id);
             @memset(slot_ids, escaped_schedue);
@@ -222,170 +408,13 @@ pub fn Mixin(comptime Backend: type) type {
                 .locals = tmp.arena.alloc(Local, alloc_offset_count),
                 .states = tmp.arena.alloc(BBState, self.next_id),
                 .visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id),
+                .arena = tmp.arena,
             };
 
             @memset(ctx.locals, .{});
             @memset(ctx.states, .{});
 
-            const postorder = self.collectDfs(tmp.arena.allocator(), &ctx.visited)[1..];
-
-            for (postorder) |bbc| {
-                const bb = &bbc.base;
-
-                if (bb.outputs().len == 0) continue;
-
-                var parent_succs: usize = 0;
-                const parent = bb.inputs()[0] orelse {
-                    std.debug.assert(bb.kind == .Return);
-                    continue;
-                };
-                std.debug.assert(parent.isCfg());
-                for (parent.outputs()) |o| parent_succs += @intFromBool(o.get().isCfg());
-                if (!(parent_succs >= 1 and parent_succs <= 2)) utils.panic("{f}\n", .{bb});
-                // handle fork
-                if (parent_succs == 2) {
-                    // this is the second branch, restore the value
-                    if (ctx.states[parent.id].expand(ctx.locals.len).Fork) |s| {
-                        ctx.locals = s.saved;
-                    } else {
-                        // we will visit this eventually
-                        ctx.states[parent.id] = .compact(.{ .Fork = .{
-                            .saved = tmp.arena.dupe(Local, ctx.locals),
-                        } });
-                    }
-                }
-
-                if (bbc.base.isBasicBlockStart()) {
-                    Func.CfgNode.scheduleBlock(bbc);
-                }
-
-                var stmp = utils.Arena.scrath(tmp.arena);
-                defer stmp.deinit();
-
-                for (stmp.arena.dupe(Node.Out, bb.outputs())) |n| {
-                    const o = n.get();
-                    if (o.isDead()) continue;
-                    std.debug.assert(bb.kind != .Local);
-
-                    var should_remove = false;
-
-                    if (o.isStore()) {
-                        const idx = ctx.slot_ids[o.id];
-                        if (idx != escaped_schedue) {
-                            ctx.locals[idx] = .compact(.{ .Node = o.value().? });
-                            should_remove = true;
-                        }
-                    }
-
-                    if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
-                        for (stmp.arena.dupe(Node.Out, o.outputs())) |no| {
-                            const lo = no.get();
-                            if (lo.isLoad()) {
-                                const idx = ctx.slot_ids[o.id];
-                                if (idx != escaped_schedue) {
-                                    const su = Local.resolve(self, ctx.locals, idx);
-                                    self.subsume(su, lo, .intern);
-                                }
-                            }
-                        }
-                    }
-
-                    if (should_remove) {
-                        const vl = o.value().?;
-                        vl.lockTmp();
-                        self.subsume(o.mem(), o, .intern);
-                        vl.unlockTmp();
-                    }
-                }
-
-                const child: *Node = for (bb.outputs()) |o| {
-                    if (o.get().isCfg()) break o.get();
-                } else continue;
-                var child_preds: usize = 0;
-                for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg());
-                std.debug.assert((child_preds >= 1 and child_preds <= 2) or child.kind == .TrapRegion);
-                // handle joins
-                if (child_preds == 2 and child.kind != .TrapRegion and child.kind != .Return) {
-                    if (!(child.kind == .Region or child.kind == .Loop)) {
-                        utils.panic("{f}\n", .{child});
-                    }
-
-                    // either we arrived from the back branch or the other side of the split
-                    if (ctx.states[child.id].expand(ctx.locals.len).Join) |s| {
-                        if (s.ctrl != child) utils.panic(
-                            "{f} {} {f} {}\n",
-                            .{ s.ctrl, ctx.slot_ids[s.ctrl.id], child, ctx.slot_ids[child.id] },
-                        );
-
-                        if (child.kind == .Region) {
-                            var lhs = s.items;
-                            var rhs = ctx.locals;
-
-                            if (child.inputs()[0] == bb) {
-                                std.mem.swap([]Local, &lhs, &rhs);
-                            }
-
-                            const dest = ctx.locals;
-
-                            for (lhs, rhs, dest, 0..) |l, r, *d, i| {
-                                if (l == r) continue;
-
-                                const lv = Local.resolve(self, lhs, i);
-                                const rv = Local.resolve(self, rhs, i);
-
-                                if (lv == rv) continue;
-
-                                d.* = .compact(.{ .Node = self.addPhi(lv.sloc, child, lv, rv) });
-                            }
-                        } else {
-                            for (s.items, ctx.locals, 0..) |clhs, crhs, i| {
-                                var lhs = clhs.expand() orelse continue;
-                                if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
-                                    const rhs = crhs.expand() orelse Local.Expanded{
-                                        .Node = self.addUninit(lhs.Node.sloc, lhs.Node.data_type),
-                                    };
-
-                                    if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
-                                        unreachable;
-                                    }
-
-                                    if (rhs == .Node) {
-                                        if (self.setInput(lhs.Node, 2, .intern, rhs.Node)) |nlhs| {
-                                            lhs = .{ .Node = nlhs };
-                                        }
-                                    } else {
-                                        const prev = lhs.Node.inputs()[1].?;
-                                        self.subsume(prev, lhs.Node, .intern);
-                                        lhs = .{ .Node = prev };
-                                    }
-
-                                    if (child.inputs()[0] == bb) unreachable;
-
-                                    s.items[i] = .compact(lhs);
-                                }
-                            }
-                        }
-                        s.done = true;
-                    } else {
-                        // first time seeing, this ca also be a region, needs renaming I guess
-                        const loop = tmp.arena.create(Local.Join);
-                        loop.* = .{
-                            .done = false,
-                            .ctrl = child,
-                            .items = tmp.arena.dupe(Local, ctx.locals),
-                        };
-                        if (child.kind == .Loop) {
-                            std.debug.assert(child.kind == .Loop);
-                            for (ctx.locals) |*l| {
-                                if (l.expand() != null) {
-                                    l.* = .compact(.{ .Loop = loop });
-                                }
-                            }
-                        }
-                        ctx.states[child.id] = .compact(.{ .Join = loop });
-                    }
-                }
-            }
+            traverse(&ctx, self, self.start.outputs()[0].get().asCfg().?);
 
             if (graph.is_debug) {
                 var worklist = Func.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
