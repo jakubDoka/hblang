@@ -103,6 +103,12 @@ pub const Data = struct {
     pub const UUID = [2]u64;
     pub const UUIDHasher = std.hash.SipHash128(1, 1);
 
+    pub fn inlineFuncIndex(self: *Data, idx: u32) ?u32 {
+        const func = self.syms.items[@intFromEnum(self.funcs.items[idx])].inline_func;
+        if (func == Sym.no_inline_func) return null;
+        return func;
+    }
+
     pub fn uuidConst(id: []const u8) UUID {
         var h = UUIDHasher.init(&@splat(0));
         h.update(id);
@@ -161,7 +167,10 @@ pub const Data = struct {
         };
     };
 
-    pub const SymIdx = enum(u32) { invalid = std.math.maxInt(u32), _ };
+    pub const SymIdx = enum(u32) {
+        invalid = std.math.maxInt(u32),
+        _,
+    };
 
     pub fn setInlineFunc(
         self: *Data,
@@ -181,7 +190,7 @@ pub const Data = struct {
         if (self.funcs.items.len <= at or self.funcs.items[at] == .invalid) return null;
         const sym = &self.syms.items[@intFromEnum(self.funcs.items[at])];
         if (!sym.is_inline and !force_inline) return null;
-        return if (sym.inline_func != Sym.no_inline_func)
+        return if (sym.inline_func != Sym.no_inline_func and self.inline_funcs.items.len > sym.inline_func)
             @ptrCast(&self.inline_funcs.items[sym.inline_func])
         else
             null;
@@ -931,7 +940,7 @@ pub const OptOptions = struct {
         }
     }
 
-    pub fn idealizeDead(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
+    pub fn idealizeDead(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
         const Func = graph.Func(Backend);
 
         func.start.assertAlive();
@@ -939,7 +948,7 @@ pub const OptOptions = struct {
         func.start.assertAlive();
     }
 
-    pub fn idealizeGeneric(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend), minimal_only: bool) void {
+    pub fn idealizeGeneric(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend), minimal_only: bool) void {
         const Func = graph.Func(Backend);
 
         func.start.assertAlive();
@@ -951,7 +960,7 @@ pub const OptOptions = struct {
         }
     }
 
-    pub fn idealizeMach(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
+    pub fn idealizeMach(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
         if (@hasDecl(Backend, "idealizeMach")) {
             func.iterPeeps(ctx, Backend.idealizeMach);
         }
@@ -1003,6 +1012,70 @@ pub const OptOptions = struct {
         errdefer unreachable;
 
         if (optimizations.mode == .release) {
+            const undefined_index = std.math.maxInt(u32);
+            const SccExtra = struct {
+                index: u32 = undefined_index,
+                low_link: u32 = 0,
+                scc_id: u32 = undefined,
+                // this is cyclic
+                next_member: u32 = undefined,
+                on_stack: bool = false,
+                self_ref: bool = false,
+
+                const SccExtra = @This();
+
+                const Ctx = struct {
+                    index: u32,
+                    extra: []SccExtra,
+                    stack: std.ArrayList(u32),
+                    scc_counter: u32,
+                };
+
+                pub fn strongConnect(
+                    idx: usize,
+                    bout: *Data,
+                    ctx: *Ctx,
+                ) void {
+                    const v = &ctx.extra[idx];
+
+                    v.index = ctx.index;
+                    v.low_link = ctx.index;
+                    ctx.index += 1;
+                    ctx.stack.appendAssumeCapacity(@intCast(idx));
+                    v.on_stack = true;
+
+                    var iter = bout.inline_funcs.items[idx].callIter();
+                    while (iter.next()) |n| {
+                        const index = bout.inlineFuncIndex(n.ext.id) orelse continue;
+
+                        const w = &ctx.extra[index];
+
+                        if (w == v) v.self_ref = true;
+
+                        if (w.index == undefined_index) {
+                            strongConnect(index, bout, ctx);
+                            v.low_link = @min(v.low_link, w.low_link);
+                        } else if (w.on_stack) {
+                            v.low_link = @min(v.low_link, w.index);
+                        }
+                    }
+
+                    if (v.low_link == v.index) {
+                        var prev: u32 = @intCast(idx);
+                        var limit = ctx.extra.len;
+                        while (true) : (limit -= 1) {
+                            const w = ctx.stack.pop().?;
+                            ctx.extra[w].on_stack = false;
+                            ctx.extra[w].scc_id = ctx.scc_counter;
+                            ctx.extra[w].next_member = prev;
+                            prev = w;
+                            if (w == idx) break;
+                        }
+                        ctx.scc_counter += 1;
+                    }
+                }
+            };
+
             var metrics = utils.TimeMetrics(enum {
                 regalloc,
                 mem2reg,
@@ -1024,6 +1097,107 @@ pub const OptOptions = struct {
             // hanlde stacked inlines as well
             //
 
+            var ctx = SccExtra.Ctx{
+                .index = 0,
+                .stack = tmp.arena.makeArrayList(u32, bout.inline_funcs.items.len),
+                .extra = tmp.arena.alloc(SccExtra, bout.inline_funcs.items.len),
+                .scc_counter = 0,
+            };
+            @memset(ctx.extra, .{});
+
+            for (ctx.extra, 0..) |e, i| {
+                if (e.index == undefined_index) {
+                    SccExtra.strongConnect(i, bout, &ctx);
+                }
+            }
+
+            const Scc = struct {
+                ref_count: u32 = 0,
+                caller_ptr: u32 = 0,
+                caller_count: u32 = 0,
+                member: u32 = undefined,
+            };
+
+            const sccs = tmp.arena.alloc(Scc, ctx.scc_counter);
+            var worklist = tmp.arena.makeArrayList(u32, ctx.scc_counter);
+            @memset(sccs, .{});
+            for (bout.inline_funcs.items, ctx.extra, 0..) |*f, extra, i| {
+                const scc = &sccs[extra.scc_id];
+                scc.member = @intCast(i);
+                var iter = f.callIter();
+                while (iter.next()) |n| {
+                    const index = bout.inlineFuncIndex(n.ext.id) orelse continue;
+                    if (ctx.extra[index].scc_id != extra.scc_id) {
+                        sccs[ctx.extra[index].scc_id].caller_ptr += 1;
+                        scc.ref_count += 1;
+                    }
+                }
+            }
+
+            var caller_map_size: u32 = 0;
+            for (sccs) |*scc| {
+                const prev = scc.caller_ptr;
+                scc.caller_ptr = caller_map_size;
+                caller_map_size += prev;
+            }
+
+            const caller_map = tmp.arena.alloc(u32, caller_map_size);
+            for (bout.inline_funcs.items, ctx.extra) |*f, extra| {
+                var iter = f.callIter();
+                while (iter.next()) |n| {
+                    const index = bout.inlineFuncIndex(n.ext.id) orelse continue;
+                    const scc = &sccs[ctx.extra[index].scc_id];
+                    if (ctx.extra[index].scc_id != extra.scc_id) {
+                        caller_map[scc.caller_ptr + scc.caller_count] = extra.scc_id;
+                        scc.caller_count += 1;
+                    }
+                }
+            }
+
+            for (sccs, 0..) |scc, i| {
+                if (scc.ref_count == 0)
+                    worklist.appendAssumeCapacity(@intCast(i));
+            }
+
+            const funcs: []graph.Func(Backend) = @ptrCast(bout.inline_funcs.items);
+
+            var limit = sccs.len;
+            while (worklist.pop()) |scc_idx| : (limit -= 1) {
+                const scc = sccs[scc_idx];
+                const callers = caller_map[scc.caller_ptr..][0..scc.caller_count];
+
+                var cursor = scc.member;
+                var limita = ctx.extra.len;
+                while (true) : (limita -= 1) {
+                    const extra = ctx.extra[cursor];
+
+                    const self_ref = extra.self_ref or extra.next_member != cursor;
+
+                    const func = &funcs[cursor];
+                    idealizeDead(Backend, backend, func);
+                    doMem2Reg(Backend, func);
+                    idealizeGeneric(Backend, backend, func, false);
+                    if (!self_ref) {
+                        if (scc.caller_count == 1) {
+                            // basically inline always if we are called only once
+                            func.cost = 0;
+                        } else {
+                            func.computeCost();
+                        }
+                    }
+
+                    cursor = extra.next_member;
+                    if (cursor == scc.member) break;
+                }
+
+                for (callers) |cscc_idx| {
+                    const cscc = &sccs[cscc_idx];
+                    cscc.ref_count -= 1;
+                    if (cscc.ref_count != 0) continue;
+                    worklist.appendAssumeCapacity(cscc_idx);
+                }
+            }
+
             const sym_to_idx = tmp.arena.alloc(u32, bout.syms.items.len);
 
             for (bout.funcs.items, 0..) |sym, i| {
@@ -1036,10 +1210,6 @@ pub const OptOptions = struct {
                 sym_to_idx[@intFromEnum(sym)] = @intCast(i);
             }
 
-            // might be faster like this
-
-            const funcs: []graph.Func(Backend) = @ptrCast(bout.inline_funcs.items);
-
             var emit_waste: usize = 0;
             var dead_waste: usize = 0;
             var mem2reg_waste: usize = 0;
@@ -1048,14 +1218,17 @@ pub const OptOptions = struct {
             var gcm_waste: usize = 0;
             var total_waste: usize = 0;
             var regalloc = root.backend.Regalloc{};
-            const reg_alloc_results = tmp.arena.alloc([]u16, bout.inline_funcs.items.len);
+            const reg_alloc_results = tmp.arena.alloc(
+                []u16,
+                bout.inline_funcs.items.len,
+            );
 
             for (funcs) |*sym| {
                 emit_waste += sym.waste;
 
-                var dead = metrics.begin(.dead);
-                idealizeDead(Backend, backend, sym);
-                dead.end();
+                //var dead = metrics.begin(.dead);
+                //idealizeDead(Backend, backend, sym);
+                //dead.end();
 
                 dead_waste += sym.waste;
 

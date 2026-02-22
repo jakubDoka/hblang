@@ -355,8 +355,11 @@ pub fn Mixin(comptime Backend: type) type {
             } else {
                 func_work.add(call_end);
             }
-            dest.data_type = .bot;
-            func_work.add(dest);
+
+            if (!dest.isDead()) {
+                dest.data_type = .bot;
+                func_work.add(dest);
+            }
 
             func.kill(end);
 

@@ -369,9 +369,9 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const schedules = tmp.arena.alloc(u32, func.node_count);
-
     const should_log = 1 == 0;
+
+    const schedules = tmp.arena.alloc(u32, func.node_count);
 
     var instr_count: u32 = 0;
     for (func.gcm.postorder, 0..) |bb, i| {

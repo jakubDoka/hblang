@@ -7017,7 +7017,7 @@ pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
     //if (std.mem.indexOf(u8, path, "json") != null) return;
     //if (std.mem.indexOf(u8, path, "float") != null) return;
 
-    utils.Arena.initScratch(1024 * 1024 * 32);
+    utils.Arena.initScratch(1024 * 1024 * 64);
     defer utils.Arena.deinitScratch();
 
     if (projs.len == 0) { // for hblsp tests

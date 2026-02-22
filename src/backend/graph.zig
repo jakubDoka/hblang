@@ -8,6 +8,13 @@ pub const is_debug = @import("builtin").mode == .Debug;
 
 const print = (std.debug).print;
 
+fn sext(int: i64, dt: DataType) i64 {
+    return if (int & @as(i64, 1) << @intCast(dt.size() * 8 - 1) != 0)
+        int | ~dt.mask()
+    else
+        int;
+}
+
 fn tu(int: i64) u64 {
     return @bitCast(int);
 }
@@ -125,6 +132,8 @@ pub const BinOp = enum(u8) {
             else
                 @as(u32, @bitCast(tf32(lhs) * tf32(rhs))),
             .udiv => if (rhs == 0) 0 else @bitCast(tu(lhs) / tu(rhs)),
+            // TODO: we can refactor this to not branch, but its questionable
+            // since division is expensive
             .sdiv => if (rhs == 0) 0 else switch (dt) {
                 .i8 => @divFloor(
                     @as(i8, @truncate(lhs)),
@@ -180,10 +189,10 @@ pub const BinOp = enum(u8) {
             else
                 @intFromBool(tf32(lhs) <= tf32(rhs)),
 
-            .sgt => @intFromBool(lhs > rhs),
-            .slt => @intFromBool(lhs < rhs),
-            .sge => @intFromBool(lhs >= rhs),
-            .sle => @intFromBool(lhs <= rhs),
+            .sgt => @intFromBool(sext(lhs, dt) > sext(rhs, dt)),
+            .slt => @intFromBool(sext(lhs, dt) < sext(rhs, dt)),
+            .sge => @intFromBool(sext(lhs, dt) >= sext(rhs, dt)),
+            .sle => @intFromBool(sext(lhs, dt) <= sext(rhs, dt)),
         }) & dt.mask();
     }
 
@@ -805,6 +814,7 @@ pub fn Func(comptime Backend: type) type {
         signature: Signature = .{},
         node_count: u32 = 0,
         waste: usize = 0,
+        cost: u32 = std.math.maxInt(u32),
         start: *Node = undefined,
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
@@ -1767,6 +1777,7 @@ pub fn Func(comptime Backend: type) type {
                     .FramePointer,
                     .Syms,
                     .GetLane,
+                    .Local,
                     => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
@@ -2025,6 +2036,26 @@ pub fn Func(comptime Backend: type) type {
             } else unreachable;
         }
 
+        pub const CallIter = struct {
+            rem_syms: []Node.Out,
+
+            pub fn next(self: *CallIter) ?*LayoutOf(builtin.Call) {
+                while (self.rem_syms.len != 0) {
+                    const o = self.rem_syms[0];
+                    self.rem_syms = self.rem_syms[1..];
+                    if (o.get().kind != .Call) continue;
+                    if (o.get().extra(.Call).id == indirect_call) unreachable;
+                    return o.get().subclass(builtin.Call);
+                }
+
+                return null;
+            }
+        };
+
+        pub fn callIter(self: *Self) CallIter {
+            return .{ .rem_syms = self.getSyms().outputs() };
+        }
+
         pub fn clone(self: *Self, def: *Node, block: *CfgNode) *Node {
             errdefer unreachable;
 
@@ -2069,7 +2100,9 @@ pub fn Func(comptime Backend: type) type {
                 .{},
             ) catch unreachable;
 
-            if (!int.found_existing) int.key_ptr.hash = hash;
+            if (!int.found_existing) {
+                int.key_ptr.hash = hash;
+            }
 
             return int;
         }
@@ -2559,6 +2592,10 @@ pub fn Func(comptime Backend: type) type {
             const lock = this.lock();
             defer lock.unlock();
 
+            if (this.id == 101) {
+                //std.debug.dumpCurrentStackTrace(@returnAddress());
+            }
+
             if (target.outputs().len == 0) {
                 self.kill(target);
                 return;
@@ -2691,6 +2728,9 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addDep(self: *Self, use: *Node, def: *Node) usize {
+            use.assertAlive();
+            def.assertAlive();
+
             if (use.input_ordered_len == use.input_len or
                 std.mem.indexOfScalar(
                     ?*Node,
@@ -3099,15 +3139,15 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (Backend != Builder and false and node.kind == .Call and node.data_type != .bot) {
-                const force_inline = node.extra(.Call)
-                    .signature.call_conv == .@"inline";
-                if (ctx.mach.out.getInlineFunc(
+            if (Backend != Builder and node.kind == .Call and node.data_type != .bot) {
+                if (@as(*Machine, &ctx.mach).out.getInlineFunc(
                     Backend,
                     node.extra(.Call).id,
-                    force_inline,
+                    true,
                 )) |inline_func| {
-                    inline_func.inliner.inlineInto(self, node, work);
+                    if (inline_func.cost < 20 and self.node_count < 5_000) {
+                        inline_func.inliner.inlineInto(self, node, work);
+                    }
                     return null;
                 }
             }
@@ -3270,8 +3310,7 @@ pub fn Func(comptime Backend: type) type {
 
                 // We cause side effects if our dest is not .Local
                 //
-                if (dst.kind != .Local and (dst.kind != .BinOp or
-                    dst.inputs()[1].?.kind != .Local)) break :memcpy;
+                if (dst.knownOffset()[0].kind != .Local) break :memcpy;
 
                 // NOTE: if the size of the memcpy does not match, we do not
                 // care since reading uninitialized memory is undefined
@@ -3351,6 +3390,34 @@ pub fn Func(comptime Backend: type) type {
 
         fn IdealSig(C: type) type {
             return fn (C, *Self, *Node, *WorkList) ?*Node;
+        }
+
+        const weights = b: {
+            var values = std.EnumArray(Kind, u8).initFill(0);
+
+            values.set(.Loop, 5);
+            values.set(.Load, 1);
+            values.set(.Store, 1);
+            values.set(.BinOp, 1);
+            values.set(.Call, 2);
+
+            break :b values;
+        };
+
+        pub fn computeCost(self: *Self) void {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            var worklist = WorkList.init(
+                tmp.arena.allocator(),
+                self.node_count,
+            ) catch unreachable;
+            worklist.collectAll(self);
+
+            self.cost = 0;
+            for (worklist.items()) |n| {
+                self.cost += weights.get(n.kind);
+            }
         }
 
         pub fn logNid(

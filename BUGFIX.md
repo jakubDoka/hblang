@@ -1089,6 +1089,10 @@ main := fn(): uint loop if false return blackbox()
 
 #### regalloc crash 3
 ```hb
+expectations := .{
+    should_error: true,
+}
+
 Broken := struct{.inner: ?[]u8}
 broken := fn(self: Broken): ?[]u8 return self.inner
 
@@ -1112,6 +1116,10 @@ main := fn(): uint loop if A == A return 0 else {
 
 #### regalloc crash 4
 ```hb
+expectations := .{
+    should_error: true,
+}
+
 blackbox := fn(self: ^u32): void {}
 blackbox2: ?int = null
 main := fn(): uint {
