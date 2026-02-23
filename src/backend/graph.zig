@@ -809,6 +809,7 @@ pub fn FuncNode(comptime Backend: type) type {
 
 pub fn Func(comptime Backend: type) type {
     return struct {
+        name: []const u8 = "",
         arena: std.heap.ArenaAllocator,
         interner: InternMap(Uninserter) = .{},
         signature: Signature = .{},
@@ -1123,6 +1124,14 @@ pub fn Func(comptime Backend: type) type {
                     try writer.print("{}:{f}", .{ self.pos(), self.get() });
                 }
             };
+
+            pub fn isNextInThread(node: *Node) bool {
+                return node.kind == .Store or
+                    node.kind == .Call or
+                    node.kind == .MemCpy or
+                    node.kind == .Phi or
+                    node.kind == .Return;
+            }
 
             pub fn assertAlive(node: *Node) void {
                 if (node.isDead()) {
@@ -1520,10 +1529,10 @@ pub fn Func(comptime Backend: type) type {
                     logNid(writer, o.id, colors);
                 };
 
-                if (!scheduled) {
+                if (true or !scheduled) {
                     writer.writeAll(" [") catch unreachable;
-                    for (self.output_base[0..self.output_len]) |o| {
-                        writer.writeAll(", ") catch unreachable;
+                    for (self.output_base[0..self.output_len], 0..) |o, i| {
+                        if (i != 0) writer.writeAll(", ") catch unreachable;
                         writer.print("{}:", .{o.pos()}) catch unreachable;
                         logNid(writer, o.get().id, colors);
                     }
@@ -2850,6 +2859,16 @@ pub fn Func(comptime Backend: type) type {
             ) catch unreachable;
             worklist.collectAll(self);
 
+            for (worklist.items()) |node| {
+                if (node.kind == .Store) {
+                    for (node.outputs()) |o| {
+                        if (o.get().isNextInThread()) break;
+                    } else {
+                        utils.panic("{f}\n", .{node});
+                    }
+                }
+            }
+
             while (worklist.pop()) |t| {
                 if (t.isDead()) continue;
 
@@ -2859,6 +2878,7 @@ pub fn Func(comptime Backend: type) type {
                     }
                     self.uninternNode(t);
                     self.kill(t);
+
                     continue;
                 }
 
@@ -2873,6 +2893,15 @@ pub fn Func(comptime Backend: type) type {
                     nt.assertAlive();
 
                     self.subsume(nt, t, .intern);
+
+                    if (nt.kind == .Store) {
+                        for (nt.outputs()) |o| {
+                            if (o.get().isNextInThread()) break;
+                        } else {
+                            utils.panic("{f}\n", .{nt});
+                        }
+                    }
+
                     continue;
                 }
             }
@@ -3139,6 +3168,36 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
+            if (node.kind == .MemCpy) {
+                const ctrl = node.inputs()[0].?;
+                var mem = node.inputs()[1].?;
+                const dst = node.inputs()[2].?;
+                const src = node.inputs()[3].?;
+                const len = node.inputs()[4].?;
+                if (len.kind == .CInt and len.extra(.CInt).value <= 16) {
+                    const size = len.extra(.CInt).value;
+                    var cursor: u64 = 0;
+                    var copy_elem = DataType.i64;
+
+                    while (cursor != size) {
+                        while (cursor + copy_elem.size() > size) : (copy_elem =
+                            @enumFromInt(@intFromEnum(copy_elem) - 1))
+                        {}
+
+                        const dst_off = self.addFieldOffset(node.sloc, dst, @intCast(cursor));
+                        const src_off = self.addFieldOffset(node.sloc, src, @intCast(cursor));
+                        const ld = self.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
+                        work.add(ld);
+                        mem = self.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
+                        work.add(mem);
+
+                        cursor += copy_elem.size();
+                    }
+
+                    return mem;
+                }
+            }
+
             if (Backend != Builder and node.kind == .Call and node.data_type != .bot) {
                 if (@as(*Machine, &ctx.mach).out.getInlineFunc(
                     Backend,
@@ -3352,36 +3411,6 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (node.kind == .MemCpy) {
-                const ctrl = node.inputs()[0].?;
-                var mem = node.inputs()[1].?;
-                const dst = node.inputs()[2].?;
-                const src = node.inputs()[3].?;
-                const len = node.inputs()[4].?;
-                if (len.kind == .CInt and len.extra(.CInt).value <= 16) {
-                    const size = len.extra(.CInt).value;
-                    var cursor: u64 = 0;
-                    var copy_elem = DataType.i64;
-
-                    while (cursor != size) {
-                        while (cursor + copy_elem.size() > size) : (copy_elem =
-                            @enumFromInt(@intFromEnum(copy_elem) - 1))
-                        {}
-
-                        const dst_off = self.addFieldOffset(node.sloc, dst, @intCast(cursor));
-                        const src_off = self.addFieldOffset(node.sloc, src, @intCast(cursor));
-                        const ld = self.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
-                        work.add(ld);
-                        mem = self.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
-                        work.add(mem);
-
-                        cursor += copy_elem.size();
-                    }
-
-                    return mem;
-                }
-            }
-
             return if (comptime optApi("idealize", IdealSig(@TypeOf(ctx))))
                 Backend.idealize(ctx, self, node, work)
             else
@@ -3592,6 +3621,8 @@ pub fn Func(comptime Backend: type) type {
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
+
+            if (self.name.len != 0) try writer.print("{s}\n", .{self.name});
 
             self.start.fmt(true, writer, colors);
             if (self.start.outputs().len > 1 and

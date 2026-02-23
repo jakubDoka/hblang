@@ -122,6 +122,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
     const unresolved_reg = std.math.maxInt(u16);
     const no_def_sentinel = std.math.maxInt(u32);
+    const innactive_tmp_id = std.math.maxInt(u16);
 
     const LiveRange = struct {
         parent: ?*LiveRange = null,
@@ -132,6 +133,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         failed_to_color: bool = false,
         self_conflict: bool = false,
         reg: u16 = unresolved_reg,
+        tmp_id: u16 = innactive_tmp_id,
 
         const LiveRange = @This();
 
@@ -360,7 +362,99 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         }
     };
 
-    const LiveMap = Map(u16, *Node);
+    const LiveMap = struct {
+        const lane_count = std.simd.suggestVectorLength(u16).?;
+        const KeyVec = @Vector(lane_count, u16);
+
+        keys: []align(@alignOf(KeyVec)) u16,
+        values: []*Node,
+        len: usize,
+
+        const LiveMap2 = @This();
+
+        const no_value_sentinel = std.math.maxInt(u16);
+        const init_cap = 32;
+
+        pub fn init(scratch: *utils.Arena) LiveMap2 {
+            const keys = scratch.allocAligned(u16, init_cap, @alignOf(KeyVec));
+            @memset(keys, no_value_sentinel);
+            const nodes = scratch.alloc(*Node, init_cap);
+
+            return .{ .keys = keys, .values = nodes, .len = 0 };
+        }
+
+        pub fn keySlice(self: *LiveMap2) []u16 {
+            return self.keys[0..self.len];
+        }
+
+        pub fn valueSlice(self: *LiveMap2) []*Node {
+            return self.values[0..self.len];
+        }
+
+        pub fn copyInto(self: *LiveMap2, scratch: *utils.Arena, other: LiveMap2) void {
+            if (self.keys.len < other.keys.len) {
+                @branchHint(.unlikely);
+                self.keys = scratch.allocAligned(u16, other.keys.len, @alignOf(KeyVec));
+                self.values = scratch.alloc(*Node, other.values.len);
+            }
+
+            @memcpy(self.keys[0..other.keys.len], other.keys);
+            @memset(self.keys[other.keys.len..], no_value_sentinel);
+            @memcpy(self.values[0..other.values.len], other.values);
+            self.len = other.len;
+        }
+
+        pub fn findKey(self: LiveMap2, key: u16) ?usize {
+            std.debug.assert(key != no_def_sentinel);
+
+            const search_vec: KeyVec = @splat(key);
+
+            for (@as([]const KeyVec, @ptrCast(self.keys)), 0..) |prefix_vec, i| {
+                var mask: std.meta.Int(.unsigned, lane_count) = @bitCast(prefix_vec == search_vec);
+                while (mask != 0) : (mask &= mask - 1) {
+                    return i * lane_count + @ctz(mask);
+                }
+            }
+
+            return null;
+        }
+
+        pub fn fetchSwapRemove(self: *LiveMap2, key: u16) ?*Node {
+            const idx = self.findKey(key) orelse return null;
+            self.len -= 1;
+            std.mem.swap(u16, &self.keys[idx], &self.keys[self.len]);
+            self.keys[self.len] = no_value_sentinel;
+            std.mem.swap(*Node, &self.values[idx], &self.values[self.len]);
+            return self.values[self.len];
+        }
+
+        pub fn ensureCapacity(self: *LiveMap2, scratch: *utils.Arena, additional: usize) void {
+            if (self.keys.len < self.len + additional) {
+                @branchHint(.unlikely);
+                self.keys = scratch.allocator().realloc(self.keys, self.len * 2) catch unreachable;
+                @memset(self.keys[self.len..], no_value_sentinel);
+                self.values = scratch.allocator().realloc(self.values, self.len * 2) catch unreachable;
+            }
+        }
+
+        pub fn append(self: *LiveMap2, key: u16, value: *Node) void {
+            self.keys[self.len] = key;
+            self.values[self.len] = value;
+            self.len += 1;
+        }
+
+        pub fn fetchPut(self: *LiveMap2, scratch: *utils.Arena, key: u16, value: *Node) ?*Node {
+            const idx = self.findKey(key) orelse {
+                self.ensureCapacity(scratch, 1);
+                self.append(key, value);
+                return null;
+            };
+
+            const prev = self.values[idx];
+            self.values[idx] = value;
+            return prev;
+        }
+    };
 
     slf.max_blocks = @max(slf.max_blocks, func.gcm.postorder.len);
 
@@ -643,7 +737,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
     const BitSet = std.DynamicBitSetUnmanaged;
     const block_liveouts = tmp.arena.alloc(LiveMap, func.gcm.postorder.len);
-    @memset(block_liveouts, LiveMap.empty);
+    for (block_liveouts) |*slt| slt.* = .init(tmp.arena);
     var interference = BitSet.initEmpty(tmp.arena.allocator(), lrgs.len * lrgs.len) catch unreachable;
 
     var conflicts = Map(LiveRange.Conflict, void).empty;
@@ -656,34 +750,26 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     for (0..func.gcm.postorder.len) |i| {
         work_list.appendAssumeCapacity(@intCast(i));
     }
-    var tmp_liveins = LiveMap.empty;
+    var tmp_liveins = LiveMap.init(tmp.arena);
     while (work_list.pop()) |task| {
         in_work_list.unset(task);
         const bb = func.gcm.postorder[task];
         const liveouts = block_liveouts[task];
 
-        tmp_liveins.clearRetainingCapacity();
-        tmp_liveins.ensureTotalCapacity(
-            tmp.arena.allocator(),
-            liveouts.entries.len,
-        ) catch unreachable;
-        for (
-            liveouts.entries.items(.key),
-            liveouts.entries.items(.value),
-        ) |k, v| tmp_liveins.putAssumeCapacity(k, v);
+        tmp_liveins.copyInto(tmp.arena, liveouts);
 
         var iter = std.mem.reverseIterator(bb.base.outputs());
         while (iter.next()) |in| {
             const instr: *Node = in.get();
             if (!LiveRange.isNoDef(instr, schedules)) {
                 const instr_lrg = lrg_table[schedules[instr.id]];
-                const value = if (tmp_liveins.fetchSwapRemove(instr_lrg.index(lrgs))) |v| v.value else null;
+                const value = tmp_liveins.fetchSwapRemove(instr_lrg.index(lrgs));
                 _ = instr_lrg.selfConflict(instr, value, &conflicts, tmp.arena);
             }
 
             if (instr.kind == .Phi) continue;
 
-            if (instr.kills()) for (tmp_liveins.entries.items(.key)) |al| {
+            if (instr.kills()) for (tmp_liveins.keySlice()) |al| {
                 const active_lrg: *LiveRange = &lrgs[al];
 
                 const kills = instr.clobbers(active_lrg.mask.tag);
@@ -701,7 +787,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
             if (!LiveRange.isNoDef(instr, schedules)) {
                 const instr_lrg = lrg_table[schedules[instr.id]];
-                for (tmp_liveins.entries.items(.key)) |id| {
+                for (tmp_liveins.keySlice()) |id| {
                     const concu_lrg = &lrgs[id];
                     std.debug.assert(concu_lrg != instr_lrg);
 
@@ -729,8 +815,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 const out = instr.regMask(func, i, tmp.arena);
                 if (out.count() == 1) {
                     for (
-                        tmp_liveins.entries.items(.key),
-                        @as([]*Node, tmp_liveins.entries.items(.value)),
+                        tmp_liveins.keySlice(),
+                        tmp_liveins.valueSlice(),
                     ) |concu, nd| {
                         const concu_lrg = &lrgs[concu];
 
@@ -744,11 +830,11 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     }
                 }
 
-                const other = if (tmp_liveins.fetchPut(
-                    tmp.arena.allocator(),
+                const other = tmp_liveins.fetchPut(
+                    tmp.arena,
                     lrg_table[schedules[def.id]].index(lrgs),
                     def,
-                ) catch unreachable) |o| o.value else null;
+                );
 
                 _ = lrg_table[schedules[def.id]].selfConflict(def, other, &conflicts, tmp.arena);
             }
@@ -765,13 +851,27 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
             var dirty: bool = false;
 
-            for (
-                tmp_liveins.entries.items(.key),
-                tmp_liveins.entries.items(.value),
-            ) |k, v| {
-                const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
-                _ = lrgs[k].selfConflict(v, if (other) |o| o.value else null, &conflicts, tmp.arena);
+            for (pred_block.keySlice(), 0..) |k, j| {
+                lrgs[k].tmp_id = @intCast(j);
+            }
+
+            for (tmp_liveins.keySlice(), tmp_liveins.valueSlice()) |k, v| {
+                const prev_id = lrgs[k].tmp_id;
+                var other: ?*Node = null;
+                if (prev_id == innactive_tmp_id) {
+                    pred_block.ensureCapacity(tmp.arena, 1);
+                    pred_block.append(k, v);
+                } else {
+                    other = pred_block.values[prev_id];
+                    pred_block.values[prev_id] = v;
+                }
+
+                _ = lrgs[k].selfConflict(v, other, &conflicts, tmp.arena);
                 dirty = other == null or dirty;
+            }
+
+            for (pred_block.keySlice()) |k| {
+                lrgs[k].tmp_id = innactive_tmp_id;
             }
 
             for (bb.base.outputs(), 0..) |ot, j| {
@@ -784,7 +884,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     break;
                 }
                 const k, const v = .{ lrg_table[schedules[out.id]].index(lrgs), out.dataDeps()[i] };
-                const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
+                const other = pred_block.fetchPut(tmp.arena, k, v);
                 dirty = other == null or dirty;
             }
 
@@ -914,7 +1014,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     //
     var coalesced = false;
     for (func.gcm.postorder, 0..) |bb, j| {
-        slf.max_liveouts = @max(slf.max_liveouts, block_liveouts[j].entries.len);
+        slf.max_liveouts = @max(slf.max_liveouts, block_liveouts[j].len);
 
         var removed: usize = 0;
         coalesce: for (tmp.arena.dupe(Node.Out, bb.base.outputs()), 0..) |in, i| {

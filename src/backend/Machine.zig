@@ -1118,6 +1118,12 @@ pub const OptOptions = struct {
                 member: u32 = undefined,
             };
 
+            for (bout.syms.items) |s| {
+                if (s.inline_func != Data.Sym.no_inline_func) {
+                    bout.inline_funcs.items[s.inline_func].name = bout.lookupName(s.name);
+                }
+            }
+
             const sccs = tmp.arena.alloc(Scc, ctx.scc_counter);
             var worklist = tmp.arena.makeArrayList(u32, ctx.scc_counter);
             @memset(sccs, .{});
@@ -1161,6 +1167,11 @@ pub const OptOptions = struct {
 
             const funcs: []graph.Func(Backend) = @ptrCast(bout.inline_funcs.items);
 
+            var emit_waste: usize = 0;
+            var dead_waste: usize = 0;
+            var mem2reg_waste: usize = 0;
+            var generic_waste: usize = 0;
+
             var limit = sccs.len;
             while (worklist.pop()) |scc_idx| : (limit -= 1) {
                 const scc = sccs[scc_idx];
@@ -1174,9 +1185,13 @@ pub const OptOptions = struct {
                     const self_ref = extra.self_ref or extra.next_member != cursor;
 
                     const func = &funcs[cursor];
+                    emit_waste += func.waste;
                     idealizeDead(Backend, backend, func);
+                    dead_waste += func.waste;
                     doMem2Reg(Backend, func);
+                    mem2reg_waste += func.waste;
                     idealizeGeneric(Backend, backend, func, false);
+                    generic_waste += func.waste;
                     if (!self_ref) {
                         if (scc.caller_count == 1) {
                             // basically inline always if we are called only once
@@ -1210,10 +1225,6 @@ pub const OptOptions = struct {
                 sym_to_idx[@intFromEnum(sym)] = @intCast(i);
             }
 
-            var emit_waste: usize = 0;
-            var dead_waste: usize = 0;
-            var mem2reg_waste: usize = 0;
-            var generic_waste: usize = 0;
             var mach_waste: usize = 0;
             var gcm_waste: usize = 0;
             var total_waste: usize = 0;
@@ -1222,32 +1233,6 @@ pub const OptOptions = struct {
                 []u16,
                 bout.inline_funcs.items.len,
             );
-
-            for (funcs) |*sym| {
-                emit_waste += sym.waste;
-
-                //var dead = metrics.begin(.dead);
-                //idealizeDead(Backend, backend, sym);
-                //dead.end();
-
-                dead_waste += sym.waste;
-
-                var mem2reg = metrics.begin(.mem2reg);
-                doMem2Reg(Backend, sym);
-                mem2reg.end();
-
-                mem2reg_waste += sym.waste;
-            }
-
-            for (funcs) |*sym| {
-                var generic = metrics.begin(.generic);
-                idealizeGeneric(Backend, backend, sym, false);
-                generic.end();
-
-                doAliasAnal(Backend, sym);
-
-                generic_waste += sym.waste;
-            }
 
             for (funcs, reg_alloc_results) |*sym, *res| {
                 var mach = metrics.begin(.mach);

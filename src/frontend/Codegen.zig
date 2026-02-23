@@ -1305,14 +1305,16 @@ pub fn emitToBackend(
         return;
     }
 
+    const name = if (self.target == .runtime)
+        fnid.get(self.types).fmt(self.types).toString(tmp.arena)
+    else
+        "";
+
     backend.emitFunc(&self.bl.func, .{
         .id = @intFromEnum(fnid),
         .files = self.types.line_indexes,
         .is_inline = false,
-        .name = if (self.target == .runtime)
-            fnid.get(self.types).fmt(self.types).toString(tmp.arena)
-        else
-            "",
+        .name = name,
         .linkage = fnid.get(self.types).linkage,
         .optimizations = .{ .opts = opts },
         .builtins = .{},

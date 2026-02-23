@@ -480,6 +480,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
         .optimizations = opt_options,
         .builtins = types.getBuiltins(),
         .files = types.line_indexes,
+        .logs = if (opts.log_stats) opts.diagnostics else null,
     };
 
     const name = try std.mem.replaceOwned(

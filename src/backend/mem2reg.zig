@@ -38,37 +38,37 @@ pub fn Mixin(comptime Backend: type) type {
                 Loop: *Join,
             };
 
-            const Join = struct { done: bool, ctrl: *Node, items: []L };
+            const Join = struct { done: bool, ctrl: *Node, items: Scope };
 
             const L = @This();
 
-            fn resolve(func: *Func, scope: []L, index: usize) *Node {
-                return switch (scope[index].expand() orelse {
+            fn resolve(func: *Func, scope: *Scope, index: usize) *Node {
+                return switch (scope.locals[index].expand() orelse {
                     return func.addUninit(.none, .i64);
                 }) {
                     .Node => |n| n,
                     .Loop => |loop| {
-                        if (loop.items[index].expand() == null) {
+                        if (loop.items.locals[index].expand() == null) {
                             unreachable;
                         }
                         if (!loop.done) {
-                            const initVal = resolve(func, loop.items, index);
+                            const initVal = resolve(func, &loop.items, index);
 
-                            if (!loop.items[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
-                                loop.items[index] = .compact(.{ .Node = func.addNode(
+                            if (!loop.items.locals[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
+                                loop.items.set(func, index, func.addNode(
                                     .Phi,
                                     initVal.sloc,
                                     initVal.data_type,
                                     &.{ loop.ctrl, initVal, null },
                                     .{},
-                                ) });
+                                ));
                             }
                         } else {
-                            _ = resolve(func, loop.items, index);
+                            _ = resolve(func, &loop.items, index);
                         }
-                        scope[index] = loop.items[index];
+                        scope.set(func, index, loop.items.locals[index].expand().?.Node);
 
-                        return scope[index].expand().?.Node;
+                        return scope.locals[index].expand().?.Node;
                     },
                 };
             }
@@ -82,9 +82,69 @@ pub fn Mixin(comptime Backend: type) type {
         const Set = std.DynamicBitSetUnmanaged;
         const Arry = std.ArrayList;
 
+        pub const Scope = struct {
+            locals: []Local,
+            rc: usize = 1,
+
+            var count: usize = 0;
+
+            pub fn init(size: usize, scratch: *utils.Arena) Scope {
+                count += 1;
+                const scope = Scope{ .locals = scratch.alloc(Local, size) };
+                @memset(scope.locals, .{});
+                return scope;
+            }
+
+            pub fn set(self: *Scope, func: *Func, idx: usize, value: *Node) void {
+                value.lockTmp();
+                self.clearSlot(func, idx);
+                self.locals[idx] = .compact(.{ .Node = value });
+            }
+
+            pub fn clearSlot(self: *Scope, func: *Func, idx: usize) void {
+                if (self.locals[idx].expand()) |l| {
+                    switch (l) {
+                        .Loop => |lp| lp.items.deinit(func),
+                        .Node => |n| {
+                            n.unlockTmp();
+                            if (n.outputs().len == 0) func.kill(n);
+                        },
+                    }
+                }
+                self.locals[idx] = undefined;
+            }
+
+            pub fn clone(self: *Scope, scratch: *utils.Arena) Scope {
+                const new = Scope{ .locals = scratch.dupe(Local, self.locals) };
+                for (new.locals) |l| {
+                    switch (l.expand() orelse continue) {
+                        .Loop => |lp| lp.items.rc += 1,
+                        .Node => |n| n.lockTmp(),
+                    }
+                }
+                count += 1;
+                return new;
+            }
+
+            pub fn deinit(self: *Scope, func: *Func) void {
+                self.rc -= 1;
+                if (self.rc == 0) {
+                    for (0..self.locals.len) |idx| {
+                        self.clearSlot(func, idx);
+                    }
+                    self.* = undefined;
+                    count -= 1;
+                }
+            }
+        };
+
+        comptime {
+            std.testing.refAllDeclsRecursive(Scope);
+        }
+
         pub const Ctx = struct {
             slot_ids: []u32,
-            locals: []Local,
+            scope: Scope,
             states: []?*Local.Join,
             arena: *utils.Arena,
 
@@ -122,13 +182,13 @@ pub fn Mixin(comptime Backend: type) type {
             var da_cursor = node;
             while (true) {
                 var should_remove = false;
-                const cursor = da_cursor.get();
+                var cursor = da_cursor.get();
 
                 switch (cursor.kind) {
                     .Store => {
                         const idx = ctx.slot_ids[cursor.id];
                         if (idx != escaped_schedue) {
-                            ctx.locals[idx] = .compact(.{ .Node = cursor.value().? });
+                            ctx.scope.set(self, idx, cursor.value().?);
                             should_remove = true;
                         }
                     },
@@ -137,16 +197,16 @@ pub fn Mixin(comptime Backend: type) type {
 
                         if (ctx.states[cursor.id]) |s| {
                             if (child.kind == .Region) {
-                                var lhs = s.items;
-                                var rhs = ctx.locals;
+                                var lhs = &s.items;
+                                var rhs = &ctx.scope;
 
                                 if (da_cursor.pos() == 1) {
-                                    std.mem.swap([]Local, &lhs, &rhs);
+                                    std.mem.swap(*Scope, &lhs, &rhs);
                                 }
 
-                                const dest = ctx.locals;
+                                const dest = &ctx.scope;
 
-                                for (lhs, rhs, dest, 0..) |l, r, *d, i| {
+                                for (lhs.locals, rhs.locals, 0..) |l, r, i| {
                                     if (l == r) continue;
 
                                     const lv = Local.resolve(self, lhs, i);
@@ -154,10 +214,10 @@ pub fn Mixin(comptime Backend: type) type {
 
                                     if (lv == rv) continue;
 
-                                    d.* = .compact(.{ .Node = self.addPhi(lv.sloc, child, lv, rv) });
+                                    dest.set(self, i, self.addPhi(lv.sloc, child, lv, rv));
                                 }
                             } else {
-                                for (s.items, ctx.locals, 0..) |clhs, crhs, i| {
+                                for (s.items.locals, ctx.scope.locals, 0..) |clhs, crhs, i| {
                                     var lhs = clhs.expand() orelse continue;
                                     if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
                                         const rhs = crhs.expand() orelse Local.Expanded{
@@ -180,12 +240,18 @@ pub fn Mixin(comptime Backend: type) type {
 
                                         if (da_cursor.pos() == 1) unreachable;
 
-                                        s.items[i] = .compact(lhs);
+                                        s.items.set(self, i, lhs.Node);
                                     }
                                 }
                             }
 
-                            if (child.kind == .Loop) return;
+                            s.done = true;
+
+                            s.items.deinit(self);
+
+                            if (child.kind == .Loop) {
+                                break;
+                            }
 
                             ctx.states[cursor.id] = undefined;
                         } else {
@@ -193,12 +259,15 @@ pub fn Mixin(comptime Backend: type) type {
                             loop.* = .{
                                 .done = false,
                                 .ctrl = child,
-                                .items = ctx.arena.dupe(Local, ctx.locals),
+                                .items = undefined,
                             };
                             if (child.kind == .Loop) {
+                                loop.items = ctx.scope.clone(ctx.arena);
                                 std.debug.assert(child.kind == .Loop);
-                                for (ctx.locals) |*l| {
+                                for (ctx.scope.locals, 0..) |*l, i| {
                                     if (l.expand() != null) {
+                                        loop.items.rc += 1;
+                                        ctx.scope.clearSlot(self, i);
                                         l.* = .compact(.{ .Loop = loop });
                                     }
                                 }
@@ -206,11 +275,15 @@ pub fn Mixin(comptime Backend: type) type {
                             ctx.states[cursor.id] = loop;
 
                             if (child.kind == .Region) {
+                                loop.items = ctx.scope;
+                                ctx.scope = undefined;
                                 return;
                             }
                         }
                     },
-                    .Return => break,
+                    .Return => {
+                        break;
+                    },
                     else => {},
                 }
 
@@ -224,20 +297,15 @@ pub fn Mixin(comptime Backend: type) type {
                         if (lo.kind == .Load) {
                             const idx = ctx.slot_ids[lo.id];
                             if (idx != escaped_schedue) {
-                                const su = Local.resolve(self, ctx.locals, idx);
+                                const su = Local.resolve(self, &ctx.scope, idx);
                                 self.subsume(su, lo, .intern);
                             }
                         }
                     }
                 }
 
-                if (should_remove) {
-                    const vl = cursor.value().?;
-                    vl.lockTmp();
-                    const tmp = cursor;
-                    da_cursor = .init(tmp.mem(), 1, null);
-                    self.subsume(tmp.mem(), tmp, .intern);
-                    vl.unlockTmp();
+                if (cursor.isDead()) {
+                    break;
                 }
 
                 var next_opt: ?Func.Node.Out = null;
@@ -249,23 +317,55 @@ pub fn Mixin(comptime Backend: type) type {
                     }
                 }
 
+                const should_break = next_count != 1;
                 if (next_count != 1) {
-                    const saved = ctx.arena.dupe(Local, ctx.locals);
+                    var tmp = utils.Arena.scrath(ctx.arena);
+                    defer tmp.deinit();
 
-                    for (cursor.outputs()) |o| {
+                    var saved = ctx.scope.clone(ctx.arena);
+
+                    for (tmp.arena.dupe(Node.Out, cursor.outputs())) |o| {
                         if (isNextInThread(o.get())) {
-                            traverseMemThread(ctx, self, bypassCall(o) orelse continue);
                             next_count -= 1;
+                            traverseMemThread(ctx, self, bypassCall(o) orelse {
+                                if (next_count == 1) {
+                                    ctx.scope.deinit(self);
+                                    ctx.scope = saved;
+                                } else if (next_count == 0) {
+                                    saved.deinit(self);
+                                } else {}
+                                continue;
+                            });
 
-                            ctx.locals = ctx.arena.dupe(Local, saved);
+                            if (next_count > 1) {
+                                ctx.scope = saved.clone(ctx.arena);
+                            } else if (next_count > 0) {
+                                ctx.scope = saved;
+                            } else {}
                         }
                     }
 
-                    break;
+                    std.debug.assert(next_count == 0);
                 } else {
-                    da_cursor = bypassCall(next_opt.?) orelse break;
+                    da_cursor = bypassCall(next_opt.?) orelse {
+                        break;
+                    };
+                }
+
+                if (should_remove) {
+                    const vl = cursor.value().?;
+                    vl.lockTmp();
+                    const tmp = cursor;
+                    self.subsume(tmp.mem(), tmp, .intern);
+                    vl.unlockTmp();
+                }
+
+                if (should_break) {
+                    return;
                 }
             }
+
+            ctx.scope.deinit(self);
         }
 
         pub fn run(m2r: *Self) void {
@@ -331,7 +431,7 @@ pub fn Mixin(comptime Backend: type) type {
                         continue :outer;
                     }
 
-                    const idx = for (offsets.items, 0..) |off, j| {
+                    const idx = alloc_offset_count + for (offsets.items, 0..) |off, j| {
                         if (off.offset > offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
                             continue;
                         }
@@ -348,26 +448,33 @@ pub fn Mixin(comptime Backend: type) type {
                             .size = @intCast(std.math.log2_int(u64, use.data_type.size())),
                         });
                         break :b offsets.items.len - 1;
-                    } + alloc_offset_count;
+                    };
 
-                    slot_ids[o.id] = @intCast(idx);
+                    slot_ids[use.id] = @intCast(idx);
                 }
 
                 alloc_offset_count += offsets.items.len;
             }
 
+            //if (alloc_offset_count == 0) return;
+
             var ctx = Ctx{
                 .slot_ids = slot_ids,
-                .locals = tmp.arena.alloc(Local, alloc_offset_count),
+                .scope = .init(alloc_offset_count, tmp.arena),
                 .states = tmp.arena.alloc(?*Local.Join, self.node_count),
                 .arena = tmp.arena,
             };
 
-            @memset(ctx.locals, .{});
             @memset(ctx.states, null);
 
             std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
             traverseMemThread(&ctx, self, self.start.outputs()[1]);
+
+            if (Scope.count != 0) {
+                self.gcm.buildCfg();
+                self.fmtScheduledLog();
+                utils.panic("{}", .{Scope.count});
+            }
 
             if (graph.is_debug) {
                 var worklist = Func.WorkList.init(tmp.arena.allocator(), self.node_count) catch unreachable;
@@ -375,6 +482,9 @@ pub fn Mixin(comptime Backend: type) type {
 
                 for (worklist.items()) |node| {
                     if (!(node.kind != .Phi or node.inputs()[2] != null)) {
+                        utils.panic("{f}", .{node});
+                    }
+                    if (node.tmp_rc != 0) {
                         utils.panic("{f}", .{node});
                     }
                 }
