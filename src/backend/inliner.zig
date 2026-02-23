@@ -34,14 +34,6 @@ pub fn Mixin(comptime Backend: type) type {
             while (i < work.items().len) : (i += 1) {
                 const node = work.items()[i];
 
-                if (node.kind == .Store) {
-                    for (node.outputs()) |o| {
-                        if (isNextInThread(o.get())) break;
-                    } else {
-                        utils.panic("{f}\n", .{node});
-                    }
-                }
-
                 for (node.outputs()) |o| work.add(o.get());
                 for (node.inputs()) |inp| if (inp != null) work.add(inp.?);
 
@@ -374,22 +366,7 @@ pub fn Mixin(comptime Backend: type) type {
 
             for (cloned.new_nodes) |nn| if (!nn.isDead()) {
                 func_work.add(nn);
-                if (nn.id == 90 and nn.kind == .Store) {
-                    for (nn.outputs()) |o| {
-                        if (isNextInThread(o.get())) break;
-                    } else {
-                        utils.panic("{f}\n", .{nn});
-                    }
-                }
             };
-        }
-
-        pub fn isNextInThread(node: *graph.FuncNode(Backend)) bool {
-            return node.kind == .Store or
-                node.kind == .Call or
-                node.kind == .MemCpy or
-                node.kind == .Phi or
-                node.kind == .Return;
         }
     };
 }

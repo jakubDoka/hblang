@@ -158,14 +158,6 @@ pub fn Mixin(comptime Backend: type) type {
             }
         };
 
-        pub fn isNextInThread(node: *Func.Node) bool {
-            return node.kind == .Store or
-                node.kind == .Call or
-                node.kind == .MemCpy or
-                node.kind == .Phi or
-                node.kind == .Return;
-        }
-
         pub fn bypassCall(nd: Node.Out) ?Node.Out {
             var node = nd;
             if (node.get().kind == .Call) {
@@ -220,12 +212,12 @@ pub fn Mixin(comptime Backend: type) type {
                                 for (s.items.locals, ctx.scope.locals, 0..) |clhs, crhs, i| {
                                     var lhs = clhs.expand() orelse continue;
                                     if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
-                                        const rhs = crhs.expand() orelse Local.Expanded{
+                                        var rhs = crhs.expand() orelse Local.Expanded{
                                             .Node = self.addUninit(lhs.Node.sloc, lhs.Node.data_type),
                                         };
 
-                                        if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
-                                            unreachable;
+                                        if (rhs == .Loop and rhs.Loop != s) {
+                                            rhs = .{ .Node = Local.resolve(self, &ctx.scope, i) };
                                         }
 
                                         if (rhs == .Node) {
@@ -311,7 +303,7 @@ pub fn Mixin(comptime Backend: type) type {
                 var next_opt: ?Func.Node.Out = null;
                 var next_count: usize = 0;
                 for (cursor.outputs()) |o| {
-                    if (isNextInThread(o.get())) {
+                    if (o.get().isNextInMemThread()) {
                         next_count += 1;
                         next_opt = o;
                     }
@@ -325,7 +317,7 @@ pub fn Mixin(comptime Backend: type) type {
                     var saved = ctx.scope.clone(ctx.arena);
 
                     for (tmp.arena.dupe(Node.Out, cursor.outputs())) |o| {
-                        if (isNextInThread(o.get())) {
+                        if (o.get().isNextInMemThread()) {
                             next_count -= 1;
                             traverseMemThread(ctx, self, bypassCall(o) orelse {
                                 if (next_count == 1) {

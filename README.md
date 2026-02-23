@@ -2157,7 +2157,7 @@ foo := fn(): uint {
 ```
 
 #### directives 19 (@frame_pointer())
-```hb
+```!hb
 expectations := .{
     return_value: 8,
 }

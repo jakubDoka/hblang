@@ -148,14 +148,6 @@ pub fn end(self: *Builder, _: BuildToken) void {
                 std.debug.dumpStackTrace(node.lock_at.trace);
                 utils.panic("{f}\n", .{node});
             }
-
-            if (node.kind == .Store) {
-                for (node.outputs()) |o| {
-                    if (o.get().isNextInThread()) break;
-                } else {
-                    utils.panic("{f}\n", .{node});
-                }
-            }
         }
     }
 }

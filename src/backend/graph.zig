@@ -1125,7 +1125,7 @@ pub fn Func(comptime Backend: type) type {
                 }
             };
 
-            pub fn isNextInThread(node: *Node) bool {
+            pub fn isNextInMemThread(node: *Node) bool {
                 return node.kind == .Store or
                     node.kind == .Call or
                     node.kind == .MemCpy or
@@ -2859,16 +2859,6 @@ pub fn Func(comptime Backend: type) type {
             ) catch unreachable;
             worklist.collectAll(self);
 
-            for (worklist.items()) |node| {
-                if (node.kind == .Store) {
-                    for (node.outputs()) |o| {
-                        if (o.get().isNextInThread()) break;
-                    } else {
-                        utils.panic("{f}\n", .{node});
-                    }
-                }
-            }
-
             while (worklist.pop()) |t| {
                 if (t.isDead()) continue;
 
@@ -2893,14 +2883,6 @@ pub fn Func(comptime Backend: type) type {
                     nt.assertAlive();
 
                     self.subsume(nt, t, .intern);
-
-                    if (nt.kind == .Store) {
-                        for (nt.outputs()) |o| {
-                            if (o.get().isNextInThread()) break;
-                        } else {
-                            utils.panic("{f}\n", .{nt});
-                        }
-                    }
 
                     continue;
                 }
