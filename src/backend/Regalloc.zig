@@ -137,6 +137,38 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
         const LiveRange = @This();
 
+        const TableEntry = enum(u16) {
+            null = std.math.maxInt(u16),
+            _,
+
+            pub fn get(self: TableEntry, lrgs: []LiveRange) ?*LiveRange {
+                return switch (self) {
+                    .null => null,
+                    _ => &lrgs[@intFromEnum(self)],
+                };
+            }
+
+            pub fn init(lrg: *LiveRange, lrgs: []LiveRange) TableEntry {
+                return @enumFromInt(lrg.index(lrgs));
+            }
+        };
+
+        const FinalTableEntry = enum(u16) {
+            _,
+
+            pub fn id(self: FinalTableEntry) u16 {
+                return @intFromEnum(self);
+            }
+
+            pub fn init(lrg: *LiveRange, lrgs: []LiveRange) FinalTableEntry {
+                return @enumFromInt(lrg.index(lrgs));
+            }
+
+            pub fn get(self: FinalTableEntry, lrgs: []LiveRange) *LiveRange {
+                return &lrgs[@intFromEnum(self)];
+            }
+        };
+
         pub fn isNoDef(node: *Node, schedules: []const u32) bool {
             return node.id >= schedules.len or schedules[node.id] == no_def_sentinel;
         }
@@ -227,7 +259,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             return false;
         }
 
-        pub fn isSame(self: *LiveRange, other: *Node, lrg_table: []const *LiveRange, schedules: []const u32) bool {
+        pub fn isSame(self: *LiveRange, other: *Node, lrg_table: []FinalTableEntry, schedules: []const u32, lrgs: []LiveRange) bool {
             var cursor = other;
             while (isNoDef(cursor, schedules) and cursor.kind == .MachSplit) {
                 cursor = cursor.inputs()[1].?;
@@ -238,12 +270,12 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             if (isNoDef(cursor, schedules)) {
                 utils.panic("{f}", .{cursor});
             }
-            return lrg_table[schedules[cursor.id]] == self;
+            return lrg_table[schedules[cursor.id]].get(lrgs) == self;
         }
 
-        pub fn hasDef(self: *LiveRange, def: *Node, lrg_table: []const *LiveRange, schedules: []const u32) bool {
+        pub fn hasDef(self: *LiveRange, def: *Node, lrg_table: []FinalTableEntry, schedules: []const u32, lrgs: []LiveRange) bool {
             if (isNoDef(def, schedules)) return false;
-            return lrg_table[schedules[def.id]] == self;
+            return lrg_table[schedules[def.id]].get(lrgs) == self;
         }
 
         pub fn collectLoopDepth(fnc: *Func, member: *Node, cfg: *CfgNode, min: u32, max: u32) struct { u32, u32 } {
@@ -278,10 +310,11 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             self: *Func,
             def: *Node,
             must: bool,
-            lrg_table: []const *LiveRange,
+            lrg_table: []FinalTableEntry,
             dbg: graph.builtin.MachSplit.Dbg,
             counter: *usize,
             schedules: []const u32,
+            lrgs: []LiveRange,
         ) void {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -299,7 +332,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     if (use == def) continue;
                     if (!use.hasUseFor(us.pos(), def)) continue;
                     if (!must and use.kind == .MachSplit and
-                        isSameBlockNoClobber(use, lrg_table, schedules)) continue;
+                        isSameBlockNoClobber(use, lrg_table, schedules, lrgs)) continue;
 
                     std.debug.assert(use.dataDepOffset() <= us.pos());
 
@@ -322,13 +355,13 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
         }
 
-        pub fn isSameBlockNoClobber(split: *Node, lrg_table: []const *LiveRange, schedules: []const u32) bool {
+        pub fn isSameBlockNoClobber(split: *Node, lrg_table: []FinalTableEntry, schedules: []const u32, lrgs: []LiveRange) bool {
             std.debug.assert(split.kind == .MachSplit);
             const def = split.dataDeps()[0];
             const cfg = split.cfg0();
             if (def.cfg0() != cfg) return false;
-            var reg = lrg_table[schedules[def.id]].reg;
-            if (reg == unresolved_reg) reg = @intCast(lrg_table[schedules[def.id]].mask.findFirstSet() orelse
+            var reg = lrg_table[schedules[def.id]].get(lrgs).reg;
+            if (reg == unresolved_reg) reg = @intCast(lrg_table[schedules[def.id]].get(lrgs).mask.findFirstSet() orelse
                 return false);
             var iter = std.mem.reverseIterator(cfg.base.outputs()[0..cfg.base.posOfOutput(0, split)]);
             while (iter.next()) |in| {
@@ -336,7 +369,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 if (instr == split) return true;
                 if (isNoDef(instr, schedules)) continue;
                 if (lrg_table[schedules[def.id]] == lrg_table[schedules[instr.id]]) return false;
-                if (lrg_table[schedules[instr.id]].reg == reg) return false;
+                if (lrg_table[schedules[instr.id]].get(lrgs).reg == reg) return false;
             } else unreachable;
         }
 
@@ -488,9 +521,9 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         return allcs;
     }
 
-    var build_lrgs = tmp.arena.makeArrayList(LiveRange, instr_count);
-    const lrg_table_build = tmp.arena.alloc(?*LiveRange, instr_count);
-    @memset(lrg_table_build, null);
+    var blrgs = tmp.arena.makeArrayList(LiveRange, instr_count);
+    const lrg_table_build = tmp.arena.alloc(LiveRange.TableEntry, instr_count);
+    @memset(lrg_table_build, .null);
     var failed = tmp.arena.makeArrayList(u16, instr_count);
 
     // # Build live ranges
@@ -502,30 +535,31 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
             var lrg = if (instr.kind == .Phi) lrg: {
                 std.debug.assert(instr.isDataPhi());
-                var lrg = lrg_table_build[schedules[instr.id]] orelse
+                var lrg = lrg_table_build[schedules[instr.id]].get(blrgs.items) orelse
                     for (instr.dataDeps()) |d| {
-                        if (lrg_table_build[schedules[d.id]]) |*l| {
-                            l.* = l.*.unionFind();
-                            l.*.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
-                            if (l.*.mask.count() == 0) {
-                                l.*.fail(build_lrgs.items, &failed);
+                        if (lrg_table_build[schedules[d.id]].get(blrgs.items)) |l| {
+                            const ll = l.unionFind();
+                            lrg_table_build[schedules[d.id]] = .init(ll, blrgs.items);
+                            ll.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
+                            if (ll.mask.count() == 0) {
+                                ll.fail(blrgs.items, &failed);
                             }
-                            break l.*;
+                            break ll;
                         }
-                    } else LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
+                    } else LiveRange.init(&blrgs, instr.regMask(func, 0, tmp.arena), instr);
 
                 lrg = lrg.unionFind();
 
-                lrg_table_build[schedules[instr.id]] = lrg;
+                lrg_table_build[schedules[instr.id]] = .init(lrg, blrgs.items);
 
                 for (instr.dataDeps()) |d| {
-                    if (lrg_table_build[schedules[d.id]]) |l| {
-                        if (lrg.unify(l.unionFind(), build_lrgs.items)) {
-                            lrg.unionFind().fail(build_lrgs.items, &failed);
+                    if (lrg_table_build[schedules[d.id]].get(blrgs.items)) |l| {
+                        if (lrg.unify(l.unionFind(), blrgs.items)) {
+                            lrg.unionFind().fail(blrgs.items, &failed);
                         }
                         lrg = lrg.unionFind();
                     } else {
-                        lrg_table_build[schedules[d.id]] = lrg;
+                        lrg_table_build[schedules[d.id]] = .init(lrg, blrgs.items);
                     }
                 }
 
@@ -533,25 +567,25 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             } else lrg: {
                 var blrg: ?*LiveRange = null;
 
-                blrg = blrg orelse lrg_table_build[schedules[instr.id]];
+                blrg = blrg orelse lrg_table_build[schedules[instr.id]].get(blrgs.items);
                 if (instr.inPlaceSlot()) |idx| {
-                    const next_lrg = lrg_table_build[schedules[instr.dataDeps()[idx].id]].?.unionFind();
-                    if (blrg) |l| _ = l.unify(next_lrg, build_lrgs.items);
+                    const next_lrg = lrg_table_build[schedules[instr.dataDeps()[idx].id]].get(blrgs.items).?.unionFind();
+                    if (blrg) |l| _ = l.unify(next_lrg, blrgs.items);
                     blrg = blrg orelse next_lrg;
                 }
 
                 const is_new = blrg == null;
-                var lrg = blrg orelse LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
+                var lrg = blrg orelse LiveRange.init(&blrgs, instr.regMask(func, 0, tmp.arena), instr);
 
                 if (!is_new) {
                     lrg.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
                     if (lrg.mask.count() == 0) {
-                        lrg.unionFind().fail(build_lrgs.items, &failed);
+                        lrg.unionFind().fail(blrgs.items, &failed);
                     }
                 }
 
                 lrg = lrg.unionFind();
-                lrg_table_build[schedules[instr.id]] = lrg;
+                lrg_table_build[schedules[instr.id]] = .init(lrg, blrgs.items);
 
                 break :lrg lrg;
             };
@@ -569,21 +603,21 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 lrg.mask.setIntersection(use.regMask(func, idx, tmp.arena));
 
                 if (lrg.mask.count() == 0) {
-                    lrg.fail(build_lrgs.items, &failed);
+                    lrg.fail(blrgs.items, &failed);
                     break;
                 }
             }
         }
     }
 
-    slf.max_lrgs = @max(slf.max_lrgs, build_lrgs.items.len);
+    slf.max_lrgs = @max(slf.max_lrgs, blrgs.items.len);
 
     for (lrg_table_build) |*lrg| {
-        lrg.* = lrg.*.?.unionFind();
-        std.debug.assert(lrg_table_build[schedules[lrg.*.?.def.id]] == lrg.*);
+        lrg.* = .init(lrg.get(blrgs.items).?.unionFind(), blrgs.items);
+        std.debug.assert(lrg_table_build[schedules[lrg.*.get(blrgs.items).?.def.id]] == lrg.*);
     }
-    const lrg_table: []*LiveRange = @ptrCast(lrg_table_build);
-    const lrgs: []LiveRange = build_lrgs.items;
+    const lrg_table: []LiveRange.FinalTableEntry = @ptrCast(lrg_table_build);
+    const lrgs: []LiveRange = blrgs.items;
 
     if (should_log) {
         print("\n", .{});
@@ -622,13 +656,13 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             while (i < members.entries.len) : (i += 1) {
                 const def: *Node = members.entries.items(.key)[i];
                 if (LiveRange.isNoDef(def, schedules)) continue;
-                if (lrg_table[schedules[def.id]] != lrg) continue;
+                if (lrg_table[schedules[def.id]].get(lrgs) != lrg) continue;
                 for (def.outputs()) |o| {
                     if (!o.get().hasUseFor(o.pos(), def)) continue;
                     members.put(alc, o.get(), {}) catch unreachable;
                 }
                 for (def.dataDeps()) |d| {
-                    if (lrg.hasDef(d, lrg_table, schedules)) {
+                    if (lrg.hasDef(d, lrg_table, schedules, lrgs)) {
                         members.put(alc, d, {}) catch unreachable;
                     }
                 }
@@ -646,7 +680,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             var min: u32, var max: u32 = .{ 1000, 0 };
             for (@as([]*Node, members.entries.items(.key))) |member| {
                 if (member.kind == .Call) call_cnt += 1;
-                if (lrg.hasDef(member, lrg_table, schedules)) {
+                if (lrg.hasDef(member, lrg_table, schedules, lrgs)) {
                     min, max = LiveRange
                         .collectLoopDepth(func, member, member.cfg0(), min, max);
                 }
@@ -661,7 +695,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         if (!member.hasUseFor(j, dep)) {
                             continue;
                         }
-                        if (lrg.isSame(dep, lrg_table, schedules)) {
+                        if (lrg.isSame(dep, lrg_table, schedules, lrgs)) {
                             min, max = LiveRange
                                 .collectLoopDepth(func, member, member.cfg0(), min, max);
                         }
@@ -689,13 +723,13 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             for (@as([]*Node, members.entries.items(.key))) |member| {
                 if (min == max and member.kind == .MachSplit) continue;
 
-                if (lrg.hasDef(member, lrg_table, schedules) and
+                if (lrg.hasDef(member, lrg_table, schedules, lrgs) and
                     (min == max or func.loopDepth(member) <= min) and
                     !member.isClone() and !member.isReadonly() and
                     !(member.outputs().len == 1 and member.outputs()[0].get().kind == .MachSplit and
-                        LiveRange.isSameBlockNoClobber(member.outputs()[0].get(), lrg_table, schedules)))
+                        LiveRange.isSameBlockNoClobber(member.outputs()[0].get(), lrg_table, schedules, lrgs)))
                 {
-                    LiveRange.splitAfterSubsume(func, member, true, lrg_table, .@"def/loop", scnt, schedules);
+                    LiveRange.splitAfterSubsume(func, member, true, lrg_table, .@"def/loop", scnt, schedules, lrgs);
                 }
 
                 if (member.kind == .Phi) {
@@ -714,7 +748,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 } else {
                     for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
                         if (!member.hasUseFor(j, dep)) continue;
-                        if (!lrg.isSame(dep, lrg_table, schedules)) continue;
+                        if (!lrg.isSame(dep, lrg_table, schedules, lrgs)) continue;
 
                         if (min != max and func.loopDepth(member) > min and
                             !dep.isClone() and !dep.isReadonly() and
@@ -763,8 +797,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             const instr: *Node = in.get();
             if (!LiveRange.isNoDef(instr, schedules)) {
                 const instr_lrg = lrg_table[schedules[instr.id]];
-                const value = tmp_liveins.fetchSwapRemove(instr_lrg.index(lrgs));
-                _ = instr_lrg.selfConflict(instr, value, &conflicts, tmp.arena);
+                const value = tmp_liveins.fetchSwapRemove(instr_lrg.id());
+                _ = instr_lrg.get(lrgs).selfConflict(instr, value, &conflicts, tmp.arena);
             }
 
             if (instr.kind == .Phi) continue;
@@ -786,7 +820,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             };
 
             if (!LiveRange.isNoDef(instr, schedules)) {
-                const instr_lrg = lrg_table[schedules[instr.id]];
+                const instr_lrg = lrg_table[schedules[instr.id]].get(lrgs);
                 for (tmp_liveins.keySlice()) |id| {
                     const concu_lrg = &lrgs[id];
                     std.debug.assert(concu_lrg != instr_lrg);
@@ -832,11 +866,11 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
                 const other = tmp_liveins.fetchPut(
                     tmp.arena,
-                    lrg_table[schedules[def.id]].index(lrgs),
+                    lrg_table[schedules[def.id]].id(),
                     def,
                 );
 
-                _ = lrg_table[schedules[def.id]].selfConflict(def, other, &conflicts, tmp.arena);
+                _ = lrg_table[schedules[def.id]].get(lrgs).selfConflict(def, other, &conflicts, tmp.arena);
             }
         }
 
@@ -883,7 +917,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     } else true);
                     break;
                 }
-                const k, const v = .{ lrg_table[schedules[out.id]].index(lrgs), out.dataDeps()[i] };
+                const k, const v = .{ lrg_table[schedules[out.id]].id(), out.dataDeps()[i] };
                 const other = pred_block.fetchPut(tmp.arena, k, v);
                 dirty = other == null or dirty;
             }
@@ -933,6 +967,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     .@"conflict/phi/def",
                     scnt,
                     schedules,
+                    lrgs,
                 );
                 func.splitBefore(
                     instr,
@@ -1022,8 +1057,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             if (instr.kind != .MachSplit) continue;
             if (instr.dataDeps().len != 1) continue;
 
-            const splitLrg = lrg_table[schedules[instr.id]].unionFind();
-            const defLrg = lrg_table[schedules[instr.dataDeps()[0].id]].unionFind();
+            const splitLrg = lrg_table[schedules[instr.id]].get(lrgs).unionFind();
+            const defLrg = lrg_table[schedules[instr.dataDeps()[0].id]].get(lrgs).unionFind();
             if (splitLrg != defLrg) {
                 const lhs, const rhs = if (ifg[splitLrg.index(lrgs)].len >
                     ifg[defLrg.index(lrgs)].len)
@@ -1111,7 +1146,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     }
 
     if (coalesced) for (lrg_table) |*lrg| {
-        lrg.* = lrg.*.unionFind();
+        lrg.* = .init(lrg.get(lrgs).unionFind(), lrgs);
     };
 
     // coloring
@@ -1233,7 +1268,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 continue;
             }
             std.debug.assert(instr.isDef());
-            const instr_lrg = lrg_table[schedules[instr.id]];
+            const instr_lrg = lrg_table[schedules[instr.id]].get(lrgs);
             alloc[instr.id] = instr_lrg.reg;
         }
     }
