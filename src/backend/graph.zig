@@ -2947,9 +2947,10 @@ pub fn Func(comptime Backend: type) type {
 
             const prev_arena = self.arena;
             defer prev_arena.deinit();
+
             self.arena = .init(self.arena.child_allocator);
+            self.interner = .empty;
             self.waste = 0;
-            self.interner = undefined;
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -2967,6 +2968,8 @@ pub fn Func(comptime Backend: type) type {
             self.end = cloned.new_node_table[self.end.id];
             self.node_count = @intCast(cloned.new_node_table.len);
             self.signature = self.signature.dupe(self.arena.allocator());
+
+            Inln.internBatch(self.start, self.end, 0, self, cloned.new_nodes);
         }
 
         pub fn idealizeDead(
@@ -3186,7 +3189,7 @@ pub fn Func(comptime Backend: type) type {
                     node.extra(.Call).id,
                     true,
                 )) |inline_func| {
-                    if (inline_func.cost < 20 and self.node_count < 5_000) {
+                    if (inline_func.cost < 20 and self.node_count + inline_func.node_count < 2_000) {
                         inline_func.inliner.inlineInto(self, node, work);
                     }
                     return null;
@@ -3426,7 +3429,8 @@ pub fn Func(comptime Backend: type) type {
             worklist.collectAll(self);
 
             self.cost = 0;
-            for (worklist.items()) |n| {
+            for (worklist.items(), 0..) |n, i| {
+                n.id = @intCast(i);
                 self.cost += weights.get(n.kind);
             }
         }
