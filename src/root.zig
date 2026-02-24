@@ -508,7 +508,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
         return;
     }
 
-    if (opts.vendored_test and !@import("options").dont_simulate) {
+    if (opts.vendored_test) {
         const expectations: frontend.Codegen.Expectations = .init(asts[0].source);
 
         const out = bckend.finalizeBytes(types.arena.allocator(), options);
@@ -531,21 +531,25 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
                 })) catch unreachable;
             }
 
-            expectations.assert(bckend.run(.{
-                .name = name,
-                .code = out.items,
-            })) catch |err| {
-                opts.logDiag("failed to run the test: {s}", .{@errorName(err)});
-                if (true) unreachable;
-                return error.Failed;
-            };
-
-            if (false) bckend.disasm(.{
-                .name = name,
-                .bin = out.items,
-                .out = opts.diagnostics,
-                .colors = .no_color,
-            });
+            if (!@import("options").dont_simulate) {
+                expectations.assert(bckend.run(.{
+                    .name = name,
+                    .code = out.items,
+                    //.output = opts.diagnostics,
+                    .colors = .escape_codes,
+                })) catch |err| {
+                    opts.logDiag("failed to run the test: {s}", .{@errorName(err)});
+                    if (true) unreachable;
+                    return error.Failed;
+                };
+            } else {
+                bckend.disasm(.{
+                    .name = name,
+                    .bin = out.items,
+                    .out = opts.diagnostics,
+                    .colors = .no_color,
+                });
+            }
         }
 
         return;

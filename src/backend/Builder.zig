@@ -143,7 +143,9 @@ pub fn end(self: *Builder, _: BuildToken) void {
         for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
             std.debug.assert(node.kind != .Stub);
-            std.debug.assert(node.kind != .Phi or node.inputs()[2] != null);
+            std.debug.assert(node.kind != .Phi or for (node.ordInps()) |i| {
+                if (i == null) break false;
+            } else true);
             if (node.isLocked()) {
                 std.debug.dumpStackTrace(node.lock_at.trace);
                 utils.panic("{f}\n", .{node});
@@ -956,25 +958,27 @@ pub fn addCall(
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
     const scope = self.scope orelse return;
 
+    const ctrl = self.control().?;
+    const mem = self.memory().?;
+
     const ret = self.func.end;
     const inps = ret.inputs();
-    if (inps[0] != null) {
-        const new_ctrl = self.func.addNode(.Region, .none, .top, &.{ inps[0].?, self.control() }, .{});
-        self.func.setInputNoIntern(ret, 0, new_ctrl);
-        const new_mem = self.func.addNode(.Phi, .none, .top, &.{ new_ctrl, inps[1], self.memory() }, .{});
-        self.func.setInputNoIntern(ret, 1, new_mem);
-        for (inps[3..ret.input_ordered_len], values, 3..) |curr, next, vidx| {
-            const new_value = self.func.addNode(.Phi, curr.?.sloc, curr.?.data_type.meet(next.data_type), &.{ new_ctrl, curr, next }, .{});
-            self.func.setInputNoIntern(ret, vidx, new_value);
+    if (inps[0]) |inp| {
+        self.func.connectOrd(ctrl, inp);
+        self.func.connectOrd(mem, inps[1].?);
+        for (inps[3..ret.input_ordered_len], values) |curr, next| {
+            self.func.connectOrd(next, curr.?);
+            curr.?.data_type = next.data_type.meet(curr.?.data_type);
         }
     } else {
-        self.func.setInputNoIntern(ret, 0, self.control());
-        self.func.setInputNoIntern(ret, 1, self.memory());
+        const ctl = self.func.addNode(.Region, mem.sloc, .top, &.{ctrl}, .{});
+        self.func.setInputNoIntern(ret, 0, ctl);
+        const mm = self.func.addNode(.Phi, mem.sloc, .top, &.{ ctl, mem }, .{});
+        self.func.setInputNoIntern(ret, 1, mm);
 
-        for (values) |v| {
-            const idx = self.func.addDep(ret, v);
-            self.func.addUse(v, idx, ret);
-            ret.input_ordered_len += 1;
+        for (values) |vl| {
+            const v = self.func.addNode(.Phi, mem.sloc, vl.data_type, &.{ ctl, vl }, .{});
+            self.func.connectOrd(v, ret);
         }
     }
 

@@ -38,7 +38,7 @@ pub fn Mixin(comptime Backend: type) type {
                 Loop: *Join,
             };
 
-            const Join = struct { done: bool, ctrl: *Node, items: Scope };
+            const Join = struct { done: bool, ctrl: *Node, items: []Scope, visit_count: usize };
 
             const L = @This();
 
@@ -48,14 +48,16 @@ pub fn Mixin(comptime Backend: type) type {
                 }) {
                     .Node => |n| n,
                     .Loop => |loop| {
-                        if (loop.items.locals[index].expand() == null) {
+                        std.debug.assert(loop.items.len == 1);
+                        const itms = &loop.items[0];
+                        if (itms.locals[index].expand() == null) {
                             unreachable;
                         }
                         if (!loop.done) {
-                            const initVal = resolve(func, &loop.items, index);
+                            const initVal = resolve(func, itms, index);
 
-                            if (!loop.items.locals[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
-                                loop.items.set(func, index, func.addNode(
+                            if (!itms.locals[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
+                                itms.set(func, index, func.addNode(
                                     .Phi,
                                     initVal.sloc,
                                     initVal.data_type,
@@ -64,9 +66,9 @@ pub fn Mixin(comptime Backend: type) type {
                                 ));
                             }
                         } else {
-                            _ = resolve(func, &loop.items, index);
+                            _ = resolve(func, itms, index);
                         }
-                        scope.set(func, index, loop.items.locals[index].expand().?.Node);
+                        scope.set(func, index, itms.locals[index].expand().?.Node);
 
                         return scope.locals[index].expand().?.Node;
                     },
@@ -104,10 +106,12 @@ pub fn Mixin(comptime Backend: type) type {
             pub fn clearSlot(self: *Scope, func: *Func, idx: usize) void {
                 if (self.locals[idx].expand()) |l| {
                     switch (l) {
-                        .Loop => |lp| lp.items.deinit(func),
+                        .Loop => |lp| lp.items[0].deinit(func),
                         .Node => |n| {
                             n.unlockTmp();
-                            if (n.outputs().len == 0) func.kill(n);
+                            if (n.outputs().len == 0) {
+                                func.kill(n);
+                            }
                         },
                     }
                 }
@@ -118,7 +122,7 @@ pub fn Mixin(comptime Backend: type) type {
                 const new = Scope{ .locals = scratch.dupe(Local, self.locals) };
                 for (new.locals) |l| {
                     switch (l.expand() orelse continue) {
-                        .Loop => |lp| lp.items.rc += 1,
+                        .Loop => |lp| lp.items[0].rc += 1,
                         .Node => |n| n.lockTmp(),
                     }
                 }
@@ -189,27 +193,50 @@ pub fn Mixin(comptime Backend: type) type {
 
                         if (ctx.states[cursor.id]) |s| {
                             if (child.kind == .Region) {
-                                var lhs = &s.items;
-                                var rhs = &ctx.scope;
-
-                                if (da_cursor.pos() == 1) {
-                                    std.mem.swap(*Scope, &lhs, &rhs);
+                                s.items[da_cursor.pos() - 1] = ctx.scope;
+                                ctx.scope = undefined;
+                                s.visit_count += 1;
+                                if (s.visit_count != s.items.len) {
+                                    std.debug.assert(s.visit_count < s.items.len);
+                                    return;
                                 }
 
-                                const dest = &ctx.scope;
+                                const dest = &s.items[0];
 
-                                for (lhs.locals, rhs.locals, 0..) |l, r, i| {
-                                    if (l == r) continue;
+                                for (0..dest.locals.len) |i| {
+                                    var tmp = utils.Arena.scrath(null);
+                                    defer tmp.deinit();
 
-                                    const lv = Local.resolve(self, lhs, i);
-                                    const rv = Local.resolve(self, rhs, i);
+                                    const inps = tmp.arena.alloc(?*Node, 1 + s.items.len);
+                                    inps[0] = child;
 
-                                    if (lv == rv) continue;
+                                    var all_same = true;
+                                    const ref = s.items[0].locals[i];
+                                    for (s.items[1..]) |sc| {
+                                        const next = sc.locals[i];
+                                        all_same = ref == next and all_same;
+                                    }
 
-                                    dest.set(self, i, self.addPhi(lv.sloc, child, lv, rv));
+                                    var res_ty = graph.DataType.top;
+                                    if (!all_same) {
+                                        all_same = true;
+                                        for (inps[1..], s.items, 0..) |*n, *sc, j| {
+                                            const next = Local.resolve(self, sc, i);
+                                            n.* = next;
+                                            res_ty = res_ty.meet(next.data_type);
+                                            all_same = inps[1..][j -| 1] == next and all_same;
+                                        }
+                                    }
+
+                                    if (!all_same) {
+                                        dest.set(self, i, self.addNode(.Phi, inps[1].?.sloc, res_ty, inps, .{}));
+                                    }
                                 }
+
+                                ctx.scope = dest.*;
+                                dest.* = .init(0, ctx.arena);
                             } else {
-                                for (s.items.locals, ctx.scope.locals, 0..) |clhs, crhs, i| {
+                                for (s.items[0].locals, ctx.scope.locals, 0..) |clhs, crhs, i| {
                                     var lhs = clhs.expand() orelse continue;
                                     if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
                                         var rhs = crhs.expand() orelse Local.Expanded{
@@ -232,14 +259,14 @@ pub fn Mixin(comptime Backend: type) type {
 
                                         if (da_cursor.pos() == 1) unreachable;
 
-                                        s.items.set(self, i, lhs.Node);
+                                        s.items[0].set(self, i, lhs.Node);
                                     }
                                 }
                             }
 
                             s.done = true;
 
-                            s.items.deinit(self);
+                            for (s.items) |*si| si.deinit(self);
 
                             if (child.kind == .Loop) {
                                 break;
@@ -252,22 +279,23 @@ pub fn Mixin(comptime Backend: type) type {
                                 .done = false,
                                 .ctrl = child,
                                 .items = undefined,
+                                .visit_count = 1,
                             };
+                            ctx.states[cursor.id] = loop;
                             if (child.kind == .Loop) {
-                                loop.items = ctx.scope.clone(ctx.arena);
+                                loop.items = ctx.arena.alloc(Scope, 1);
+                                loop.items[0] = ctx.scope.clone(ctx.arena);
                                 std.debug.assert(child.kind == .Loop);
                                 for (ctx.scope.locals, 0..) |*l, i| {
                                     if (l.expand() != null) {
-                                        loop.items.rc += 1;
+                                        loop.items[0].rc += 1;
                                         ctx.scope.clearSlot(self, i);
                                         l.* = .compact(.{ .Loop = loop });
                                     }
                                 }
-                            }
-                            ctx.states[cursor.id] = loop;
-
-                            if (child.kind == .Region) {
-                                loop.items = ctx.scope;
+                            } else {
+                                loop.items = ctx.arena.alloc(Scope, child.ordInps().len);
+                                loop.items[da_cursor.pos() - 1] = ctx.scope;
                                 ctx.scope = undefined;
                                 return;
                             }
@@ -345,11 +373,7 @@ pub fn Mixin(comptime Backend: type) type {
                 }
 
                 if (should_remove) {
-                    const vl = cursor.value().?;
-                    vl.lockTmp();
-                    const tmp = cursor;
-                    self.subsume(tmp.mem(), tmp, .intern);
-                    vl.unlockTmp();
+                    self.subsume(cursor.mem(), cursor, .intern);
                 }
 
                 if (should_break) {

@@ -173,15 +173,15 @@ pub fn Mixin(comptime Backend: type) type {
                 break :cfg_rpo rpo.items;
             };
 
-            add_mach_moves: {
+            add_jmps: {
                 for (cfg_rpo) |n| if (n.base.kind == .Loop or n.base.kind == .Region) {
-                    for (0..2) |i| {
+                    for (0..n.base.ordInps().len) |i| {
                         self.setInput(&n.base, i, .nointern, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
                     try visited.resize(tmp.arena.allocator(), self.node_count, true);
                 };
-                break :add_mach_moves;
+                break :add_jmps;
             }
 
             sched_early: {
@@ -308,10 +308,26 @@ pub fn Mixin(comptime Backend: type) type {
                     };
                 }
 
-                for (nodes, late_scheds) |on, l| if (on) |n| {
-                    std.debug.assert(!n.isFloating());
-                    self.setInput(n, 0, .nointern, &l.?.base);
-                };
+                for (nodes, late_scheds) |on, l| {
+                    if (on) |n| {
+                        std.debug.assert(!n.isFloating());
+                        self.setInput(n, 0, .nointern, &l.?.base);
+                    }
+                }
+
+                if (graph.is_debug) {
+                    var worklist = Func.WorkList.init(
+                        tmp.arena.allocator(),
+                        self.node_count,
+                    ) catch unreachable;
+                    worklist.collectAll(self);
+
+                    for (worklist.items()) |n| {
+                        if (n.inputs().len > 0 and n.inputs()[0] == null and n.kind != .Return) {
+                            utils.panic("unscheduled node {f}", .{n});
+                        }
+                    }
+                }
 
                 break :sched_late;
             }
@@ -370,6 +386,15 @@ pub fn Mixin(comptime Backend: type) type {
                 var frontier = std.ArrayList(*Func.CfgNode).empty;
                 try frontier.append(tmp.arena.allocator(), lca);
 
+                const fucked = lca_.idepth() < early.idepth();
+
+                if (fucked) {
+                    std.debug.print("early: {f}\n", .{early});
+                    std.debug.print("lca: {f}\n", .{lca});
+                    for (load.outputs()) |o| {
+                        std.debug.print("{f}\n", .{o});
+                    }
+                }
                 while (frontier.pop()) |cursor| {
                     if (cursor.ext.antidep == load.id) continue;
                     cursor.ext.antidep = load.id;
@@ -377,10 +402,12 @@ pub fn Mixin(comptime Backend: type) type {
                     std.debug.assert(cursor.base.kind != .Start);
                     if (cursor.base.kind == .Region) {
                         for (cursor.base.ordInps()) |i| {
+                            if (fucked) std.debug.print("mup {f}\n", .{i.?});
                             try frontier.append(tmp.arena.allocator(), i.?.cfg0());
                         }
                     } else {
-                        try frontier.append(tmp.arena.allocator(), cursor.idom());
+                        if (fucked) std.debug.print("one up {f}\n", .{cursor});
+                        frontier.appendAssumeCapacity(cursor.idom());
                     }
                 }
 

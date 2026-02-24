@@ -357,7 +357,9 @@ fn readOpArgs(self: *Vm, op: isa.Op, argTys: []const u8, ctx: anytype, wrt: *std
         if (i > 0) try wrt.writeAll(", ") else try wrt.writeAll(" ");
         try self.displayArg(prev_ip, argt, ctx, &seen_regs, switch (op) {
             .fadd64, .fsub64, .fmul64, .fdiv64, .fti64 => .f64,
+            .fcmplt32, .fcmpgt32 => .f32,
             .fadd32, .fsub32, .fmul32, .fdiv32, .fti32 => .f32,
+            .fcmplt64, .fcmpgt64 => .f64,
             else => .int,
         }, wrt);
     }

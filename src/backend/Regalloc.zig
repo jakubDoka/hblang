@@ -1268,7 +1268,9 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             if (LiveRange.isNoDef(instr, lrg_table)) {
                 continue;
             }
-            std.debug.assert(instr.isDef());
+            if (!instr.isDef()) {
+                utils.panic("{f}", .{instr});
+            }
             const instr_lrg = lrg_table[instr.id].get(lrgs);
             alloc[instr.id] = instr_lrg.reg;
         }

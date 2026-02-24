@@ -35,7 +35,7 @@ pub fn Anal(comptime Backend: type) type {
         func: *Func,
         collector: Machine.OptOptions.ErrorCollector,
 
-        pub fn analize(self: Self) void {
+        pub fn run(self: Self) void {
             self.findTrivialStackEscapes();
             self.tryHardToFindMemoryEscapes();
             self.findConstantOobMemOps();
@@ -284,8 +284,8 @@ pub fn Mixin(comptime Backend: type) type {
             return @alignCast(@fieldParentPtr("static_anal", self));
         }
 
-        pub fn analize(self: *Self, collector: Machine.OptOptions.ErrorCollector) void {
-            (Anal(Backend){ .func = self.getGraph(), .collector = collector }).analize();
+        pub fn run(self: *Self, collector: Machine.OptOptions.ErrorCollector) void {
+            (Anal(Backend){ .func = self.getGraph(), .collector = collector }).run();
         }
     };
 }

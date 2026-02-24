@@ -308,9 +308,10 @@ pub fn Mixin(comptime Backend: type) type {
 
             if (end.inputs()[0] != null)
                 for (end.dataDeps(), 0..) |dep, j| {
-                    const ret = for (call_end.outputs()) |o| {
+                    const ret: *Func.Node = for (call_end.outputs()) |o| {
                         if (o.get().kind == .Ret and o.get().extra(.Ret).index == j) break o.get();
                     } else continue;
+                    for (ret.outputs()) |o| func_work.add(o.get());
                     func.subsume(dep, ret, .intern);
                 };
 

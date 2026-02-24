@@ -975,7 +975,7 @@ pub const OptOptions = struct {
         comptime Backend: type,
         func: *graph.Func(Backend),
     ) void {
-        func.static_anal.analize(self.error_collector);
+        func.static_anal.run(self.error_collector);
     }
 
     pub fn doMem2Reg(comptime Backend: type, func: *graph.Func(Backend)) void {

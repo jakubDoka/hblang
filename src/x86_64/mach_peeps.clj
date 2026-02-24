@@ -9,7 +9,7 @@
   Backend.postporcessRepStosb(func, res, mem, loop_if, node, worklist);
 }
 
-(Store ?c m bs @ (Local _ LocalAlloc:l) dis = {bs.knownOffset()}
+(Store ?c m bs @ LocalAlloc:l dis = {bs.knownOffset()}
   (BinOp _ (:op op & .iadd | .isub | .bor | .band | .bxor)
     (Load _ (&m) (&bs)) (CInt (:value value & {Backend.clampI32(value)})))) :
   (ConstOpStackStore (:dis {@intCast(dis)}) (:op) (:imm {@intCast(value)}) c m l)

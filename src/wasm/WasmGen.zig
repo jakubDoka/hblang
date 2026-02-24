@@ -232,6 +232,8 @@ pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkL
 }
 
 pub fn idealizeMach(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+    if (Func.idealizeDead(self, func, node, work)) |n| return n;
+
     if (matcher.idealize(self, func, node, work)) |n| return n;
 
     return null;

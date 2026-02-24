@@ -65,20 +65,6 @@
 
 (MemCpy _ mem _ _ (CInt _ (:value 0))) : mem
 
-(Phi c && {!c.preservesIdentityPhys()} l (&l)) : l
-
-(Phi:p _ l (&p)) : l
-
-;(Phi reg
-;  (Store:l _ (:data_type dt) lmem base lv)
-;  (Store:r _ (:data_type &dt) rmem (&base) rv)
-;) : (Store reg (:data_type dt)
-;  (Phi (:data_type .top) reg lmem rmem)
-;  base (Phi (:data_type dt) reg lv rv)) && {
-;  worklist.add(l);
-;  worklist.add(r);
-;}
-
 (UnOp ?c :op (:data_type dst) (CInt (:data_type src) (:value oper))) :
   (CInt c (:value {op.eval(src, dst, oper)}))
 

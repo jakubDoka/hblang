@@ -989,10 +989,13 @@ pub fn Func(comptime Backend: type) type {
                     if (extra.idepth != 0) return extra.idepth;
                     extra.idepth = switch (cfg.base.kind) {
                         .Start => return 0,
-                        .Region => @max(
-                            cfg.base.inputs()[0].?.asCfg().?.idepth(),
-                            cfg.base.inputs()[1].?.asCfg().?.idepth(),
-                        ) + 1,
+                        .Region => b: {
+                            var ideptha: u16 = 0;
+                            for (cfg.base.inputs()) |i| {
+                                ideptha = @max(ideptha, i.?.asCfg().?.idepth());
+                            }
+                            break :b ideptha + 1;
+                        },
                         else => idepth(cfg.base.cfg0()) + 1,
                     };
                     return extra.idepth;
@@ -1025,10 +1028,10 @@ pub fn Func(comptime Backend: type) type {
                             if (extra.cached_lca) |lca| {
                                 return @ptrCast(lca);
                             } else {
-                                const lca = findLca(
-                                    cfg.base.inputs()[0].?.asCfg().?,
-                                    cfg.base.inputs()[1].?.asCfg().?,
-                                );
+                                var lca = cfg.base.inputs()[0].?.asCfg().?;
+                                for (cfg.base.inputs()[1..]) |i| {
+                                    lca = findLca(lca, i.?.asCfg().?);
+                                }
                                 cfg.base.extra(.Region).cached_lca = lca;
                                 (lca.base.subclass(If) orelse return lca)
                                     .ext.id = cfg.base.id;
@@ -1647,6 +1650,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn cfg0(self: *Node) *CfgNode {
                 if (self.kind == .Start) return forceSubclass(self, Cfg);
+                if (self.inputs()[0] == null) utils.panic("{f}\n", .{self});
                 return forceSubclass((self.inputs()[0].?), Cfg);
             }
 
@@ -1788,7 +1792,7 @@ pub fn Func(comptime Backend: type) type {
                     .GetLane,
                     .Local,
                     => true,
-                    .Phi => inpts[2] != null,
+                    .Phi => std.mem.indexOfScalar(?*Node, inpts[1..], null) == null,
                     else => callCheck("isInterned", kind),
                 };
             }
@@ -2161,10 +2165,20 @@ pub fn Func(comptime Backend: type) type {
             return null;
         }
 
+        pub fn connectOrd(self: *Self, def: *Node, to: *Node) void {
+            self.connect(def, to);
+            to.input_ordered_len += 1;
+        }
+
         pub fn connect(self: *Self, def: *Node, to: *Node) void {
-            std.debug.assert(!Node.isInterned(to.kind, to.inputs()));
+            if (Node.isInterned(to.kind, to.inputs())) {
+                self.uninternNode(to);
+            }
             const idx = self.addDep(to, def);
             self.addUse(def, idx, to);
+            if (Node.isInterned(to.kind, to.inputs())) {
+                _ = self.reinternNode(to);
+            }
         }
 
         pub fn loopDepth(self: *Self, node: *Node) u16 {
@@ -2465,12 +2479,11 @@ pub fn Func(comptime Backend: type) type {
         ) *Node {
             var typ = ty;
             if (kind == .Phi) {
-                if (inputs[1].?.isStore() or inputs[1].?.kind == .Mem) {
-                    typ = .top;
+                for (inputs) |i| {
+                    if (i) |j| {
+                        if (j.kind == .Mem or j.isStore()) typ = .top;
+                    }
                 }
-                if (inputs[2]) |inp| if (inp.isStore() or inp.kind == .Mem) {
-                    typ = .top;
-                };
             }
             var bytes: [Node.size_map[@intFromEnum(kind)] / 8]u64 = @splat(0);
             @as(*ClassFor(kind), @ptrCast(&bytes)).* = extra;
@@ -2525,6 +2538,8 @@ pub fn Func(comptime Backend: type) type {
                 .id = self.node_count,
                 .data_type = ty,
             };
+
+            if (node.id > 10000) unreachable;
 
             self.node_count += 1;
 
@@ -2646,6 +2661,7 @@ pub fn Func(comptime Backend: type) type {
             target: *Node,
             comptime mode: ModMode,
         ) void {
+            //std.debug.print("subsume: {f} -> {f}\n", .{ target, this });
             if (target.isDead()) return;
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             if (mode == .intern) self.uninternNode(target);
@@ -2862,6 +2878,10 @@ pub fn Func(comptime Backend: type) type {
             while (worklist.pop()) |t| {
                 if (t.isDead()) continue;
 
+                if (t.isLocked()) {
+                    utils.panic("locked leftover: {f}", .{t});
+                }
+
                 if (t.outputs().len == 0 and t.isKillable()) {
                     for (t.inputs()) |ii| {
                         if (ii) |ia| worklist.add(ia);
@@ -2981,7 +3001,9 @@ pub fn Func(comptime Backend: type) type {
             const inps = node.inputs();
 
             var is_dead = node.kind == .Region and
-                isDead(inps[0]) and isDead(inps[1]);
+                for (inps) |i| {
+                    if (!isDead(i)) break false;
+                } else true;
             is_dead = is_dead or (node.kind != .Start and
                 node.kind != .Region and
                 node.kind != .TrapRegion and node.isCfg() and isDead(inps[0]));
@@ -3009,17 +3031,7 @@ pub fn Func(comptime Backend: type) type {
                     is_dead = is_dead and isDead(inp.*);
                 }
 
-                var retain: usize = 0;
-                for (node.inputs(), 0..) |a, i| {
-                    if (a != null) {
-                        const idx = a.?.posOfOutput(i, node);
-                        node.inputs()[retain] = a;
-                        a.?.outputs()[idx] = .init(node, retain, a);
-                        retain += 1;
-                    }
-                }
-                node.input_len = @intCast(retain);
-                node.input_ordered_len = @intCast(retain);
+                retainNulls(node);
 
                 if (is_dead) {
                     std.debug.assert(for (node.inputs()) |i| {
@@ -3071,20 +3083,49 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .Region) eliminate_branch: {
-                std.debug.assert(node.inputs().len == 2);
-                const idx = for (node.inputs(), 0..) |in, i| {
-                    if (isDead(in)) break i;
-                } else break :eliminate_branch;
+                var reachable_count: usize = 0;
+                var last_reachable_branch: usize = 0;
+                for (node.ordInps(), 0..) |in, i| {
+                    if (isDead(in)) {
+                        for (node.outputs()) |o| {
+                            if (o.get().kind == .Phi) {
+                                self.setInputNoIntern(o.get(), i + 1, null);
+                            }
+                        }
+                        self.setInputNoIntern(node, i, null);
+                    } else {
+                        reachable_count += 1;
+                        last_reachable_branch = i;
+                    }
+                }
 
-                var iter = std.mem.reverseIterator(node.outputs());
-                while (iter.next()) |ot| if (ot.get().kind == .Phi) {
-                    const o = ot.get();
-                    for (o.outputs()) |oo| work.add(oo.get());
-                    work.add(o.inputs()[idx + 1].?);
-                    self.subsume(o.inputs()[(1 - idx) + 1].?, o, .intern);
-                };
+                if (reachable_count == 0) {
+                    node.data_type = .bot;
+                    for (node.outputs()) |o| {
+                        work.add(o.get());
+                    }
+                    break :eliminate_branch;
+                }
 
-                return node.inputs()[1 - idx].?;
+                if (reachable_count == 1) {
+                    var iter = std.mem.reverseIterator(node.outputs());
+                    while (@as(?Node.Out, iter.next())) |ot| {
+                        if (ot.get().kind == .Phi) {
+                            const o = ot.get();
+                            for (o.outputs()) |oo| work.add(oo.get());
+                            self.subsume(o.inputs()[1 + last_reachable_branch].?, o, .intern);
+                        }
+                    }
+
+                    return node.inputs()[last_reachable_branch].?;
+                }
+
+                retainNulls(node);
+                for (node.outputs()) |o| {
+                    if (o.get().kind == .Phi) {
+                        retainNulls(o.get());
+                    }
+                }
             }
 
             if (node.kind == .Region) eliminate_if: {
@@ -3141,15 +3182,22 @@ pub fn Func(comptime Backend: type) type {
 
             std.debug.assert(node.kind != .Load or node.data_type.size() != 0);
 
-            if (node.kind == .Phi) phi: {
-                const l, const r = .{ inps[1].?, inps[2] orelse break :phi };
+            if (node.kind == .Phi) {
+                if (node.ordInps().len == 2) return inps[1].?;
 
-                if (l == r and !node.cfg0().base.preservesIdentityPhys()) {
-                    return l;
+                const is_same = for (inps[2..]) |i| {
+                    if (i != inps[1]) {
+                        break false;
+                    }
+                } else true;
+
+                if (is_same and !node.cfg0().base.preservesIdentityPhys()) {
+                    return inps[1].?;
                 }
 
-                if (r == node) {
-                    return l;
+                if (node == inps[2]) {
+                    std.debug.assert(inps[0].?.kind == .Loop);
+                    return inps[1].?;
                 }
             }
 
@@ -3189,7 +3237,7 @@ pub fn Func(comptime Backend: type) type {
                     node.extra(.Call).id,
                     true,
                 )) |inline_func| {
-                    if (inline_func.cost < 20 and self.node_count + inline_func.node_count < 2_000) {
+                    if (inline_func.cost < 20 and self.node_count + inline_func.node_count < 5_000) {
                         inline_func.inliner.inlineInto(self, node, work);
                     }
                     return null;
@@ -3406,6 +3454,22 @@ pub fn Func(comptime Backend: type) type {
             return fn (C, *Self, *Node, *WorkList) ?*Node;
         }
 
+        pub fn retainNulls(node: *Node) void {
+            var retain: usize = 0;
+            for (node.inputs(), 0..) |a, i| {
+                if (a != null) {
+                    if (retain != i) {
+                        const idx = a.?.posOfOutput(i, node);
+                        node.inputs()[retain] = a;
+                        a.?.outputs()[idx] = .init(node, retain, a);
+                    }
+                    retain += 1;
+                }
+            }
+            node.input_len = @intCast(retain);
+            node.input_ordered_len = @intCast(retain);
+        }
+
         const weights = b: {
             var values = std.EnumArray(Kind, u8).initFill(0);
 
@@ -3430,9 +3494,10 @@ pub fn Func(comptime Backend: type) type {
 
             self.cost = 0;
             for (worklist.items(), 0..) |n, i| {
-                n.id = @intCast(i);
+                if (!is_debug) n.id = @intCast(i);
                 self.cost += weights.get(n.kind);
             }
+            if (!is_debug) self.node_count = @intCast(worklist.items().len);
         }
 
         pub fn logNid(
