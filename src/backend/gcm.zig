@@ -386,15 +386,8 @@ pub fn Mixin(comptime Backend: type) type {
                 var frontier = std.ArrayList(*Func.CfgNode).empty;
                 try frontier.append(tmp.arena.allocator(), lca);
 
-                const fucked = lca_.idepth() < early.idepth();
+                std.debug.assert(lca_.idepth() >= early.idepth());
 
-                if (fucked) {
-                    std.debug.print("early: {f}\n", .{early});
-                    std.debug.print("lca: {f}\n", .{lca});
-                    for (load.outputs()) |o| {
-                        std.debug.print("{f}\n", .{o});
-                    }
-                }
                 while (frontier.pop()) |cursor| {
                     if (cursor.ext.antidep == load.id) continue;
                     cursor.ext.antidep = load.id;
@@ -402,11 +395,9 @@ pub fn Mixin(comptime Backend: type) type {
                     std.debug.assert(cursor.base.kind != .Start);
                     if (cursor.base.kind == .Region) {
                         for (cursor.base.ordInps()) |i| {
-                            if (fucked) std.debug.print("mup {f}\n", .{i.?});
                             try frontier.append(tmp.arena.allocator(), i.?.cfg0());
                         }
                     } else {
-                        if (fucked) std.debug.print("one up {f}\n", .{cursor});
                         frontier.appendAssumeCapacity(cursor.idom());
                     }
                 }

@@ -1019,6 +1019,7 @@ pub const OptOptions = struct {
                 scc_id: u32 = undefined,
                 // this is cyclic
                 next_member: u32 = undefined,
+                reachable: bool = false,
                 on_stack: bool = false,
                 self_ref: bool = false,
 
@@ -1213,6 +1214,51 @@ pub const OptOptions = struct {
                 }
             }
 
+            var reachable_work = tmp.arena.makeArrayList(u32, bout.syms.items.len);
+            var reachable = try std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), bout.syms.items.len);
+            for (bout.syms.items, 0..) |s, i| {
+                if (s.kind == .invalid) continue;
+                if (s.linkage != .exported) continue;
+                reachable_work.appendAssumeCapacity(@intCast(i));
+                reachable.set(i);
+            }
+
+            while (reachable_work.pop()) |s| {
+                const sym = bout.syms.items[s];
+                switch (sym.kind) {
+                    .func => {
+                        if (sym.linkage == .imported) continue;
+                        const func = &funcs[sym.inline_func];
+                        ctx.extra[sym.inline_func].reachable = true;
+
+                        for (func.getSyms().outputs()) |sm| {
+                            const ss = switch (sm.get().extra2()) {
+                                inline .Call, .FuncAddr => |extra| bout.funcs.items[extra.id],
+                                .GlobalAddr => |extra| bout.globals.items[extra.id],
+                                else => unreachable,
+                            };
+
+                            if (reachable.isSet(@intFromEnum(ss))) {
+                                continue;
+                            }
+                            reachable.set(@intFromEnum(ss));
+                            reachable_work.appendAssumeCapacity(@intFromEnum(ss));
+                        }
+                    },
+                    .data => {
+                        for (bout.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |r| {
+                            if (reachable.isSet(@intFromEnum(r.target))) {
+                                continue;
+                            }
+                            reachable.set(@intFromEnum(r.target));
+                            reachable_work.appendAssumeCapacity(@intFromEnum(r.target));
+                        }
+                    },
+                    .prealloc, .tls_prealloc => {},
+                    .invalid => unreachable,
+                }
+            }
+
             const sym_to_idx = tmp.arena.alloc(u32, bout.syms.items.len);
 
             for (bout.funcs.items, 0..) |sym, i| {
@@ -1234,7 +1280,9 @@ pub const OptOptions = struct {
                 bout.inline_funcs.items.len,
             );
 
-            for (funcs, reg_alloc_results) |*sym, *res| {
+            for (funcs, reg_alloc_results, ctx.extra) |*sym, *res, ext| {
+                if (!ext.reachable) continue;
+
                 var mach = metrics.begin(.mach);
                 idealizeMach(Backend, backend, sym);
                 mach.end();
@@ -1263,6 +1311,7 @@ pub const OptOptions = struct {
                 switch (sym.kind) {
                     .func => {
                         if (sym.linkage == .imported) continue;
+                        if (!ctx.extra[sym.inline_func].reachable) continue;
                         const func = &bout.inline_funcs.items[sym.inline_func];
                         backend.emitFunc(@ptrCast(func), .{
                             .name = bout.lookupName(sym.name),
