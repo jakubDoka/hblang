@@ -1208,6 +1208,9 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
 
     const ret_pos = lex.cursor;
 
+    const peeked = lex.peekNext();
+    if (peeked.kind == .@"return") self.name = @enumFromInt(peeked.pos);
+
     if (!self.branchExpr(&lex)) {
         const rets = ret_cata orelse {
             self.report(ret_pos, "function should never return since" ++
@@ -1430,6 +1433,17 @@ pub fn prepareMatchValue(self: *Codegen, lex: *Lexer) !Value {
     }
 
     return pat;
+}
+
+pub fn addIfAndBeginThen(self: *Codegen, slc: graph.Sloc, cond: *BNode) BBuilder.If {
+    var cursor = self.loops;
+    const in_loop = while (cursor) |c| : (cursor = c.prev) {
+        if (c.state == .runtime) {
+            break true;
+        }
+    } else false;
+
+    return self.bl.addIfAndBeginThen(slc, cond, !in_loop);
 }
 
 pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitError!Value {
@@ -1829,7 +1843,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                         pat_vll,
                         self.bl.addIntImm(self.sloc(lex.cursor), pat_vll.data_type, pred_value),
                     );
-                    branch = self.bl.addIfAndBeginThen(self.sloc(lex.cursor), cond);
+                    branch = self.addIfAndBeginThen(self.sloc(lex.cursor), cond);
                 }
 
                 if (!self.branchExpr(lex)) breaker.addBreak(&self.bl);
@@ -1929,7 +1943,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 error.Report => self.emitUninitValue(tok.pos, .bool),
             };
 
-            var if_bl = self.bl.addIfAndBeginThen(
+            var if_bl = self.addIfAndBeginThen(
                 slc,
                 cond.load(tok.end, self),
             );
@@ -2040,7 +2054,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             const frame = self.vars.len;
 
             const cond = try self.typedExpr(.bool, .{ .in_if_or_while = true }, lex);
-            var bl = self.bl.addIfAndBeginThen(
+            var bl = self.addIfAndBeginThen(
                 slc,
                 cond.load(tok.pos, self),
             );
@@ -2201,7 +2215,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             const counter_vl = Value.variable(counter_slot.ty, ln.idx);
             const cond = self.bl.addBinOp(slc, .ult, .i8, counter_vl.load(tok.pos, self), ln.vl.load(self));
 
-            var cond_bl = self.bl.addIfAndBeginThen(slc, cond);
+            var cond_bl = self.addIfAndBeginThen(slc, cond);
 
             if (!self.branchExpr(lex)) {
                 loop.state.runtime.bl.joinContinues(&self.bl);
@@ -3763,7 +3777,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
             try self.typeCheckLL(.{}, res, .bool);
 
-            var if_bl = self.bl.addIfAndBeginThen(
+            var if_bl = self.addIfAndBeginThen(
                 slc,
                 res.load(self),
             );
@@ -3849,7 +3863,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 break :or_;
             }
 
-            var if_bl = self.bl.addIfAndBeginThen(
+            var if_bl = self.addIfAndBeginThen(
                 slc,
                 if (is_unwrap)
                     self.emitOptionCheck(top.pos, .@"!=", res.value)
@@ -6442,7 +6456,7 @@ pub const HandlerBuilder = struct {
 };
 
 pub fn addHandler(self: *Codegen, pos: u32, handler: Types.FuncId, cond: *BNode, scratch: *utils.Arena) HandlerBuilder {
-    const if_bl = self.bl.addIfAndBeginThen(self.sloc(pos), cond);
+    const if_bl = self.bl.addIfAndBeginThen(self.sloc(pos), cond, true);
 
     var handler_call = self.bl.addCall(
         scratch,
@@ -6778,7 +6792,9 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
     // target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
 
-    const backend = target.toMachine(&scratch, gpa);
+    const exp = Expectations.init(asts[0].source);
+
+    const backend = target.toMachine(exp.should_error, &scratch, gpa);
     defer backend.deinit();
 
     var types = Types.init(asts, &kl.loader, @tagName(target), backend, scratch, gpa);
@@ -6787,13 +6803,11 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     try collectExports(&types);
 
     const opt_mode = Machine.OptOptions{
-        .mode = .release,
+        .mode = .debug,
         .error_collector = .{ .data = &types, .collect_ = Types.collectAnalError },
     };
 
     emitReachable(&types, gpa, opt_mode);
-
-    const exp = Expectations.init(asts[0].source);
 
     var exe: std.ArrayList(u8) =
         if (types.errored == 0) backend.finalizeBytes(gpa, .{

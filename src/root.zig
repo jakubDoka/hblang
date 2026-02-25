@@ -84,6 +84,7 @@ pub const CompileOptions = struct {
     mangle_terminal: bool = false,
     vendored_test: bool = false,
     log_stats: bool = false,
+    check: bool = false,
     type_system_memory: usize = 1024 * 1024 * 256,
     scratch_memory: usize = 1024 * 1024 * 128,
     target: hb.backend.Machine.SupportedTarget = .@"hbvm-ableos",
@@ -104,6 +105,7 @@ pub const CompileOptions = struct {
         .mangle_terminal = "dump the executable even if colors are supported",
         .vendored_test = "run the file in a vendored test setting",
         .log_stats = "log stats about the compilation",
+        .check = "make the compiler only check including static analisys",
         .type_system_memory = "how much memory can type system use, this is per thread",
         .scratch_memory = "how much memory can each scratch arena use, there are 2 per thread",
         .target = "target triple to compile to",
@@ -383,7 +385,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
         return;
     }
 
-    const bckend = opts.target.toMachine(&type_system_memory, opts.gpa);
+    const bckend = opts.target.toMachine(opts.check, &type_system_memory, opts.gpa);
 
     var types = hb.frontend.Types.init(
         asts,

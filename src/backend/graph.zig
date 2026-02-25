@@ -724,6 +724,7 @@ pub const Store = extern struct {
 pub const If = extern struct {
     base: Cfg = .{},
     id: u32,
+    allow_invariance: bool = false,
 };
 pub const Region = extern struct {
     base: Cfg = .{},

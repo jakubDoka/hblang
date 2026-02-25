@@ -954,10 +954,22 @@ pub const Scope = extern struct {
         return self.name_pos.get(self.file, types);
     }
 
+    const search_lane_count = std.simd.suggestVectorLength(AnyScopeRef).?;
+    const SearchVec = @Vector(search_lane_count, u32);
+
+    threadlocal var scope_fmt_stack: [32]AnyScopeRef align(@alignOf(SearchVec)) =
+        @splat(@enumFromInt(std.math.maxInt(u32)));
+    threadlocal var scope_fmt_stack_len: usize = 0;
+
     pub fn format_(self: *Scope, id: anytype, types: *Types, writer: *std.Io.Writer) !void {
+        if (@TypeOf(id) != GlobalId and std.mem.indexOfScalar(AnyScopeRef, scope_fmt_stack[0..scope_fmt_stack_len], .nany(id)) != null) {
+            return;
+        }
+
         const nme = self.name(types);
         if (self.parent.data().downcast(AnyScope)) |as| {
             try as.format_(types, writer);
+            if (std.mem.eql(u8, nme, "return")) return;
             try writer.writeByte('.');
         }
 
@@ -1597,6 +1609,20 @@ pub const Func = struct {
 
         try self.scope.format_(types.funcs.ptrToIndex(self), types, writer);
 
+        const prev_frame = Scope.scope_fmt_stack_len;
+        defer {
+            std.debug.assert(Scope.scope_fmt_stack_len >= prev_frame);
+            Scope.scope_fmt_stack_len = prev_frame;
+        }
+
+        var cursor = self.scope.parent;
+        while (cursor.data().downcast(AnyScope)) |s| : (cursor = s.scope(types).parent) {
+            if (std.mem.indexOfScalar(AnyScopeRef, Scope.scope_fmt_stack[0..Scope.scope_fmt_stack_len], s.pack()) == null) {
+                Scope.scope_fmt_stack[Scope.scope_fmt_stack_len] = s.pack();
+                Scope.scope_fmt_stack_len += 1;
+            }
+        }
+
         try writer.writeByte('[');
 
         var param_idx: usize = 0;
@@ -1605,24 +1631,33 @@ pub const Func = struct {
         var iter = lex.list(.@",", .@")");
 
         while (iter.next()) : (arg_idx += 1) {
-            if (arg_idx != 0) try writer.writeAll(", ");
-
             _, const cmptime = lex.eatIdent().?;
             _ = lex.slit(.@":");
+            const is_any = lex.peekNext().kind != .@"@Any";
             lex.skipExpr() catch unreachable;
+            if (is_any and !cmptime) continue;
+
+            if (arg_idx != 0) try writer.writeAll(", ");
 
             const ty = self.args[arg_idx];
-            try ty.format_(types, writer);
 
             if (cmptime) {
                 try writer.writeByte('=');
                 try types.formatValue(ty, &self.params[param_idx].value, writer);
                 param_idx += 1;
+            } else {
+                try ty.format_(types, writer);
             }
         }
 
-        try writer.writeAll("]:");
-        try self.ret.format_(types, writer);
+        _ = lex.slit(.@":");
+
+        try writer.writeByte(']');
+
+        if (lex.peekNext().kind == .@"@Any") {
+            try writer.writeByte(':');
+            try self.ret.format_(types, writer);
+        }
     }
 
     pub const fmt = Fmt(*Func).fmt;

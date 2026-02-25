@@ -532,10 +532,9 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     stacked = try .initEmpty(tmp.arena.allocator(), count);
 
-    if (opts.optimizations.opts.mode == .release) {
-        opts.optimizations.opts.optimizeRelease(WasmGen, self, func);
-    } else {
-        opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
+    switch (opts.optimizations.opts.mode) {
+        .release => Mach.optimizeRelease(WasmGen, self, func),
+        .debug => Mach.optimizeDebug(WasmGen, self, func),
     }
 
     //func.fmtScheduledLog();

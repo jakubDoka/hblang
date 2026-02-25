@@ -573,7 +573,7 @@ pub const If = struct {
     }
 };
 
-pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If {
+pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode, allow_invariance: bool) If {
     const else_ = self.cloneScope();
 
     const builder_scope = self.scope orelse {
@@ -583,7 +583,10 @@ pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If 
         };
     };
 
-    const if_node = self.func.addNode(.If, sloc, .top, &.{ self.control(), cond }, .{ .id = 0 });
+    const if_node = self.func.addNode(.If, sloc, .top, &.{ self.control(), cond }, .{
+        .id = 0,
+        .allow_invariance = allow_invariance,
+    });
     self.func.setInputNoIntern(builder_scope, 0, self.func.addNode(.Then, .none, .top, &.{if_node}, .{}));
     return .{
         .if_node = if_node,

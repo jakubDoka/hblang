@@ -114,7 +114,7 @@ pub fn Anal(comptime Backend: type) type {
             for (func.gcm.postorder) |bb| {
                 const node = bb.base.outputs()[bb.base.outputs().len - 1].get();
 
-                if (node.isSub(graph.If) and node.sloc != graph.Sloc.none) b: {
+                if (node.isSub(graph.If)) b: {
                     const ld = func.loopDepth(node);
                     for (node.outputs()) |o| {
                         if (func.loopDepth(o.get()) < ld) break;
@@ -157,7 +157,7 @@ pub fn Anal(comptime Backend: type) type {
             const mem_op, const offset = op.knownMemOp() orelse return;
             if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) return;
             if (mem_op.isStore() and mem_op.value() == addr) return;
-            if (mem_op.isLoad() and mem_op.base() != addr and mem_op.base() != local) return;
+            if (mem_op.isLoad() and mem_op.base().knownOffset()[0] != addr) return;
             const end_offset = offset + @as(i64, @intCast(mem_op.loadDatatype().size()));
             if (offset < 0 or end_offset > local.extra(.LocalAlloc).size) {
                 self.addError(.{ .StackOob = .{

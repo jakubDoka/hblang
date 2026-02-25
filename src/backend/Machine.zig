@@ -3,6 +3,7 @@ const Set = std.DynamicBitSetUnmanaged;
 
 const utils = graph.utils;
 const Builder = @import("Builder.zig");
+const Regalloc = @import("Regalloc.zig");
 const graph = @import("graph.zig");
 const static_anal = @import("static_anal.zig");
 const root = @import("hb");
@@ -47,28 +48,43 @@ const VTable = struct {
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
 
-pub const Null = struct {
-    mach: Machine = .init(Null),
+pub const Check = struct {
+    mach: Machine = .init(Check),
+    gpa: std.mem.Allocator,
 
-    const Func = graph.Func(Null);
+    const Func = graph.Func(Check);
+
+    pub const Set = Regalloc.RegMask(enum(u0) {
+        mm,
+        pub fn overlapps(_: @This(), _: @This()) usize {
+            return 0;
+        }
+    }, 128);
 
     pub const classes = enum {};
 
     pub const i_know_the_api = {};
 
-    comptime {
-        const s = Null{};
-        _ = s;
+    pub fn emitFunc(self: *@This(), func: *Func, opts: EmitOptions) void {
+        optimizeRelease(@This(), self, func);
+        func.static_anal.run(opts.optimizations.opts.error_collector);
     }
-
-    pub fn emitFunc(_: *@This(), _: *Func, _: EmitOptions) void {}
-    pub fn emitData(_: *@This(), _: DataOptions) void {}
+    pub fn emitData(self: *@This(), opts: DataOptions) void {
+        errdefer unreachable;
+        try self.mach.out.defineGlobal(self.gpa, false, .local, 0, opts);
+    }
     pub fn finalize(_: *@This(), _: FinalizeOptions) void {}
     pub fn disasm(_: *@This(), _: DisasmOpts) void {}
     pub fn run(_: *@This(), _: RunEnv) RunError!usize {
         return 0;
     }
-    pub fn deinit(_: *@This()) void {}
+    pub fn deinit(self: *@This()) void {
+        self.mach.out.deinit(self.gpa);
+    }
+
+    pub fn regMask(_: *Func.Node, _: *Func, _: usize, _: *utils.Arena) Check.Set {
+        return undefined;
+    }
 };
 
 const InlineFunc = graph.Func(Builder);
@@ -934,73 +950,10 @@ pub const OptOptions = struct {
                 return true;
             },
             .debug => {
-                self.optimizeDebug(Backend, backend, func);
+                optimizeDebug(Backend, backend, func);
                 return false;
             },
         }
-    }
-
-    pub fn idealizeDead(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
-        const Func = graph.Func(Backend);
-
-        func.start.assertAlive();
-        func.iterPeeps(ctx, Func.idealizeDead);
-        func.start.assertAlive();
-    }
-
-    pub fn idealizeGeneric(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend), minimal_only: bool) void {
-        const Func = graph.Func(Backend);
-
-        func.start.assertAlive();
-
-        if (false and minimal_only) {
-            func.iterPeeps(ctx, Backend.idealize);
-        } else {
-            func.iterPeeps(ctx, Func.idealize);
-        }
-    }
-
-    pub fn idealizeMach(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
-        if (@hasDecl(Backend, "idealizeMach")) {
-            func.iterPeeps(ctx, Backend.idealizeMach);
-        }
-    }
-
-    pub fn doGcm(comptime Backend: type, func: *graph.Func(Backend)) void {
-        func.gcm.buildCfg();
-    }
-
-    pub fn doStaticAnal(
-        self: OptOptions,
-        comptime Backend: type,
-        func: *graph.Func(Backend),
-    ) void {
-        func.static_anal.run(self.error_collector);
-    }
-
-    pub fn doMem2Reg(comptime Backend: type, func: *graph.Func(Backend)) void {
-        func.mem2reg.run();
-    }
-
-    pub fn doAliasAnal(comptime Backend: type, func: *graph.Func(Backend)) void {
-        if (0 == 1) func.alias_anal.run();
-    }
-
-    pub fn optimizeRelease(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
-        idealizeDead(Backend, ctx, func);
-        doMem2Reg(Backend, func);
-        idealizeGeneric(Backend, ctx, func, false);
-        idealizeMach(Backend, ctx, func);
-        doGcm(Backend, func);
-        self.doStaticAnal(Backend, func);
-    }
-
-    pub fn optimizeDebug(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
-        idealizeDead(Backend, ctx, func);
-        idealizeGeneric(Backend, ctx, func, true);
-        idealizeMach(Backend, ctx, func);
-        doGcm(Backend, func);
-        self.doStaticAnal(Backend, func);
     }
 
     pub fn finalize(
@@ -1294,9 +1247,6 @@ pub const OptOptions = struct {
                 gcm.end();
 
                 gcm_waste += sym.waste;
-                var static_anal_met = metrics.begin(.static_anal);
-                optimizations.doStaticAnal(Backend, sym);
-                static_anal_met.end();
 
                 var regalloc_met = metrics.begin(.regalloc);
                 res.* = regalloc.ralloc(Backend, @ptrCast(sym));
@@ -1451,7 +1401,6 @@ pub const SupportedTarget = enum {
     @"x86_64-windows",
     @"x86_64-linux",
     @"wasm-freestanding",
-    null,
 
     pub fn fromStr(str: []const u8) ?SupportedTarget {
         inline for (std.meta.fields(SupportedTarget)) |f| {
@@ -1463,7 +1412,13 @@ pub const SupportedTarget = enum {
         return null;
     }
 
-    pub fn toMachine(triple: SupportedTarget, scratch: *utils.Arena, gpa: std.mem.Allocator) *Machine {
+    pub fn toMachine(triple: SupportedTarget, check: bool, scratch: *utils.Arena, gpa: std.mem.Allocator) *Machine {
+        if (check) {
+            const slot = scratch.create(Check);
+            slot.* = Check{ .gpa = gpa };
+            return &slot.mach;
+        }
+
         switch (triple) {
             .@"hbvm-ableos" => {
                 const slot = scratch.create(root.hbvm.HbvmGen);
@@ -1485,11 +1440,6 @@ pub const SupportedTarget = enum {
                 slot.* = root.wasm.WasmGen{ .gpa = gpa };
                 return &slot.mach;
             },
-            .null => {
-                const slot = scratch.create(Null);
-                slot.* = Null{};
-                return &slot.mach;
-            },
         }
     }
 
@@ -1499,7 +1449,6 @@ pub const SupportedTarget = enum {
             .@"x86_64-windows" => unreachable, // TODO
             .@"x86_64-linux" => .systemv,
             .@"wasm-freestanding" => .wasmcall,
-            .null => .systemv,
         };
     }
 };
@@ -1863,4 +1812,61 @@ pub fn mergeOut(
 /// frees the internal resources
 pub fn deinit(self: *Machine) void {
     self.vtable.deinit(self);
+}
+
+pub fn idealizeDead(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
+    const Func = graph.Func(Backend);
+
+    func.start.assertAlive();
+    func.iterPeeps(ctx, Func.idealizeDead);
+    func.start.assertAlive();
+}
+
+pub fn idealizeGeneric(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend), minimal_only: bool) void {
+    const Func = graph.Func(Backend);
+
+    func.start.assertAlive();
+
+    if (false and minimal_only) {
+        func.iterPeeps(ctx, Backend.idealize);
+    } else {
+        func.iterPeeps(ctx, Func.idealize);
+    }
+}
+
+pub fn idealizeMach(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
+    if (@hasDecl(Backend, "idealizeMach")) {
+        func.iterPeeps(ctx, Backend.idealizeMach);
+    }
+}
+
+pub fn doGcm(comptime Backend: type, func: *graph.Func(Backend)) void {
+    func.gcm.buildCfg();
+}
+
+pub fn doStaticAnal(
+    self: OptOptions,
+    comptime Backend: type,
+    func: *graph.Func(Backend),
+) void {
+    func.static_anal.run(self.error_collector);
+}
+
+pub fn doMem2Reg(comptime Backend: type, func: *graph.Func(Backend)) void {
+    func.mem2reg.run();
+}
+
+pub fn optimizeRelease(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
+    idealizeDead(Backend, ctx, func);
+    doMem2Reg(Backend, func);
+    idealizeGeneric(Backend, ctx, func, false);
+    idealizeMach(Backend, ctx, func);
+    doGcm(Backend, func);
+}
+
+pub fn optimizeDebug(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
+    idealizeDead(Backend, ctx, func);
+    idealizeGeneric(Backend, ctx, func, true);
+    idealizeMach(Backend, ctx, func);
+    doGcm(Backend, func);
 }
