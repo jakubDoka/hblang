@@ -1531,8 +1531,9 @@ main := fn(): uint {
 
 #### out of bounds matching 1
 ```hb
+sum := 0
 main := fn(): uint {
-    byte_iter("hello, world").for_each(fn(x: u8): void {})
+    byte_iter("hello, world").for_each(fn(x: u8): void sum += x)
     return 0
 }
 

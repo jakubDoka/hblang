@@ -1189,6 +1189,11 @@ pub fn Func(comptime Backend: type) type {
                 return scheds[use.id].?;
             }
 
+            pub fn isGoodMemOp(self: *Node, local: *Node) bool {
+                return (self.isStore() and !self.isSub(MemCpy) and
+                    self.value() != local) or self.isLoad();
+            }
+
             const DepOffsetElem = u8;
             const sub_elem_width = 2;
             const per_dep_elem = @bitSizeOf(DepOffsetElem) / sub_elem_width;
@@ -3324,7 +3329,7 @@ pub fn Func(comptime Backend: type) type {
             //
             if (node.kind == .Load) {
                 var earlier = node.mem();
-                const base, _ = node.base().knownOffset();
+                const base, const base_offset = node.base().knownOffset();
 
                 if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
@@ -3340,30 +3345,94 @@ pub fn Func(comptime Backend: type) type {
                     return st;
                 }
 
-                while ((earlier.kind == .Store and
-                    (earlier.tryCfg0() == node.tryCfg0() or
-                        node.tryCfg0() == null) and
-                    earlier.noAlias(node)))
-                {
-                    earlier = earlier.mem();
+                var op_count: usize = 0;
+                var all_good = base.kind == .Local;
+                for (base.outputs()) |b| {
+                    if (b.get().kind == .BinOp) {
+                        for (b.get().outputs()) |o| {
+                            all_good = all_good and o.get().isGoodMemOp(base);
+                            op_count += 1;
+                        }
+                    } else {
+                        all_good = all_good and b.get().isGoodMemOp(base);
+                        op_count += 1;
+                    }
                 }
 
-                if (earlier.kind == .Store and
-                    earlier.base() == node.base() and earlier.value() != null)
-                {
-                    if (earlier.data_type == node.data_type) {
-                        return earlier.value().?;
+                const fuel: usize = 4;
+                var components: [fuel]*Node = undefined;
+                var collected: usize = 0;
+                std.debug.assert(node.data_type.size() <= 8);
+                for (0..fuel) |i| {
+                    var climb_fuel: usize = if (i == 0) 2 else 1;
+                    while (climb_fuel > 0 and (earlier.kind == .Store and
+                        (earlier.tryCfg0() == node.tryCfg0() or
+                            node.tryCfg0() == null) and
+                        earlier.noAlias(node))) : (climb_fuel -= 1)
+                    {
+                        earlier = earlier.mem();
                     }
 
-                    if (earlier.data_type.meet(node.data_type) ==
-                        earlier.data_type)
-                    {
-                        return self.addUnOp(
-                            earlier.sloc,
-                            .ired,
-                            node.data_type,
-                            earlier.value().?,
-                        );
+                    if (earlier.kind != .Store) break;
+
+                    var advanced = false;
+
+                    const earlier_base, const earlier_offset = earlier.base().knownOffset();
+                    if (base == earlier_base and earlier.value() != null) {
+                        if (base_offset == earlier_offset) {
+                            if (earlier.data_type == node.data_type) {
+                                if (i != 0) break;
+                                return earlier.value().?;
+                            }
+
+                            if (earlier.data_type.meet(node.data_type) ==
+                                earlier.data_type)
+                            {
+                                if (i != 0) break;
+                                return self.addUnOp(
+                                    earlier.sloc,
+                                    .ired,
+                                    node.data_type,
+                                    earlier.value().?,
+                                );
+                            }
+                        }
+
+                        if (base_offset == 0 and all_good and op_count < fuel + 1 and
+                            node.data_type.isInt())
+                        {
+                            if (0 <= earlier_offset and earlier_offset +
+                                earlier.data_type.size() <= node.data_type.size())
+                            {
+                                components[collected] = earlier;
+                                collected += 1;
+                                advanced = true;
+                                earlier = earlier.mem();
+                            }
+                        }
+                    }
+
+                    if (!advanced) break;
+
+                    if (collected == op_count - 1) {
+                        var prepared: [fuel]*Node = undefined;
+                        for (components[0..collected], 0..) |c, j| {
+                            const value = c.value().?;
+                            const exp = self.addUnOp(value.sloc, .uext, node.data_type, value);
+                            work.add(exp);
+                            const shift_imm = self.addIntImm(value.sloc, node.data_type, c.base().knownOffset()[1] * 8);
+                            prepared[j] = self.addBinOp(value.sloc, .ishl, node.data_type, exp, shift_imm);
+                        }
+
+                        for (prepared[1..collected]) |v| {
+                            prepared[0] = self.addBinOp(v.sloc, .bor, node.data_type, prepared[0], v);
+                        }
+
+                        for (components[0..collected]) |v| {
+                            self.subsume(v.mem(), v, .intern);
+                        }
+
+                        return prepared[0];
                     }
                 }
 

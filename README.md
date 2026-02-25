@@ -270,8 +270,11 @@ return_indirect_stack := fn(): struct{.u: uint; .b: uint; .c: ^uint} {
 
 return_indirect_stack_but_not := fn(arg: ^?^uint): void {
     v := #0
-    arg.* = &v
-    arg.* = null
+
+    if arg.* == null {
+        arg.* = &v
+        arg.* = null
+    }
 }
 ```
 

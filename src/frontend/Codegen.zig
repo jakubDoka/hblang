@@ -6803,7 +6803,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     try collectExports(&types);
 
     const opt_mode = Machine.OptOptions{
-        .mode = .debug,
+        .mode = .release,
         .error_collector = .{ .data = &types, .collect_ = Types.collectAnalError },
     };
 

@@ -189,8 +189,6 @@ pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64, debug_
 
 pub fn addLoad(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
     const true_base, _ = addr.knownOffset();
-    //std.debug.assert(true_base.kind != .Local or (offset >= 0 and
-    //    @as(u64, @intCast(offset)) + ty.size() < true_base.inputs()[1].?.extra(.LocalAlloc).size));
     const ctrl = if (true_base.kind == .Local or true_base.kind == .GlobalAddr) null else self.control();
     return self.func.addNode(.Load, sloc, ty, &.{ ctrl, self.memory(), addr }, .{});
 }
@@ -253,7 +251,8 @@ pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType
     if (value.data_type == .bot) return;
     if (value.data_type.size() == 0) utils.panic("{f}", .{value.data_type});
     const mem = self.memory();
-    const ctrl = self.control();
+    const true_base, _ = addr.knownOffset();
+    const ctrl = if (true_base.kind == .Local or true_base.kind == .GlobalAddr) null else self.control();
     const store = self.func.addNode(.Store, sloc, ty, &.{ ctrl, mem, addr, value }, .{});
     self.func.setInputNoIntern(self.scope orelse return, 1, store);
 }
