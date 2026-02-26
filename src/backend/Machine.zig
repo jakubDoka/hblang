@@ -1818,7 +1818,7 @@ pub fn idealizeDead(comptime Backend: type, ctx: *Backend, func: *graph.Func(Bac
     const Func = graph.Func(Backend);
 
     func.start.assertAlive();
-    func.iterPeeps(ctx, Func.idealizeDead);
+    func.peeps.run(ctx, Func.idealizeDead);
     func.start.assertAlive();
 }
 
@@ -1828,15 +1828,15 @@ pub fn idealizeGeneric(comptime Backend: type, ctx: *Backend, func: *graph.Func(
     func.start.assertAlive();
 
     if (false and minimal_only) {
-        func.iterPeeps(ctx, Backend.idealize);
+        func.peeps.run(ctx, Backend.idealize);
     } else {
-        func.iterPeeps(ctx, Func.idealize);
+        func.peeps.run(ctx, Func.idealize);
     }
 }
 
 pub fn idealizeMach(comptime Backend: type, ctx: *Backend, func: *graph.Func(Backend)) void {
     if (@hasDecl(Backend, "idealizeMach")) {
-        func.iterPeeps(ctx, Backend.idealizeMach);
+        func.peeps.run(ctx, Backend.idealizeMach);
     }
 }
 

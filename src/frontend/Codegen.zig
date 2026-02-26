@@ -1240,7 +1240,7 @@ pub fn emitToBackend(
 
     const prev_err_count = self.types.errored;
 
-    self.bl.func.iterPeeps(&self.bl, @TypeOf(self.bl.func).idealizeDead);
+    self.bl.func.peeps.run(&self.bl, @TypeOf(self.bl.func.peeps).idealizeDead);
 
     if (fnid.get(self.types).linkage != .imported) {
         for (self.bl.func.getSyms().outputs()) |sym| {
