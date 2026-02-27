@@ -2184,7 +2184,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
     std.debug.assert(self.object_format == .elf);
     const data = try object.elf.read(opts.bin, tmp.arena.allocator());
 
-    const func_map = b: {
+    const sym_map = b: {
         var map = std.AutoArrayHashMapUnmanaged(usize, []const u8).empty;
         for (data.relocs.items) |r| {
             const target = &data.syms.items[@intFromEnum(r.target)];
@@ -2279,13 +2279,19 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                             ops[0].unnamed_0.imm.value.s + inst.length)).?;
                         opts.print("\t{s} :{}\n", .{ zydis.ZydisMnemonicGetString(inst.mnemonic), label });
                     } else if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_CALL) {
-                        const nm = func_map.get(v.offset + uaddr + 1) orelse {
+                        const nm = sym_map.get(v.offset + uaddr + 1) orelse {
                             opts.print("\t{s}\n", .{printed});
                             continue;
                         };
                         opts.print("\tcall :{s}\n", .{nm});
                     } else {
-                        opts.print("\t{s}\n", .{printed});
+                        opts.print("\t{s}", .{printed});
+                        for (ops[0..inst.operand_count]) |op| {
+                            if (op.unnamed_0.mem.base == zydis.ZYDIS_REGISTER_RIP) {
+                                opts.print(" ; {s}", .{sym_map.get(v.offset + uaddr + 3) orelse "corrupt"});
+                            }
+                        }
+                        opts.print("\n", .{});
                     }
                 }
             },

@@ -917,9 +917,10 @@ pub const Scope = extern struct {
     }
 
     pub const NamePos = enum(u32) {
-        entry = std.math.maxInt(u32) - 5,
+        entry = std.math.maxInt(u32) - 6,
         memcpy,
         tuple,
+        string,
         file,
         empty,
         _,
@@ -930,29 +931,9 @@ pub const Scope = extern struct {
                 else => null,
             };
         }
-
-        pub fn get(self: NamePos, file: File.Id, types: *Types) []const u8 {
-            return switch (self) {
-                .file => file.get(types).path,
-                .empty => "",
-                .tuple => "tuple",
-                .entry => "_start",
-                .memcpy => "memcpy",
-                _ => |v| {
-                    var str = file.get(types).tokenStr(@intFromEnum(v));
-                    if (str[0] == '"') str = str[1 .. str.len - 1];
-                    if (str[0] == '(') str = "";
-                    return str;
-                },
-            };
-        }
     };
 
     pub const Param = extern struct {};
-
-    pub fn name(self: Scope, types: *Types) []const u8 {
-        return self.name_pos.get(self.file, types);
-    }
 
     const search_lane_count = std.simd.suggestVectorLength(AnyScopeRef).?;
     const SearchVec = @Vector(search_lane_count, u32);
@@ -960,6 +941,26 @@ pub const Scope = extern struct {
     threadlocal var scope_fmt_stack: [32]AnyScopeRef align(@alignOf(SearchVec)) =
         @splat(@enumFromInt(std.math.maxInt(u32)));
     threadlocal var scope_fmt_stack_len: usize = 0;
+
+    pub fn name(self: *Scope, types: *Types) []const u8 {
+        return switch (self.name_pos) {
+            .file => self.file.get(types).path,
+            .empty => "",
+            .tuple => "tuple",
+            .entry => "_start",
+            .memcpy => "memcpy",
+            .string => {
+                const global: *Global = @fieldParentPtr("scope", self);
+                return global.data.get(types);
+            },
+            _ => |v| {
+                var str = self.file.get(types).tokenStr(@intFromEnum(v));
+                if (str[0] == '"') str = str[1 .. str.len - 1];
+                if (str[0] == '(') str = "";
+                return str;
+            },
+        };
+    }
 
     pub fn format_(self: *Scope, id: anytype, types: *Types, writer: *std.Io.Writer) !void {
         if (@TypeOf(id) != GlobalId and std.mem.indexOfScalar(AnyScopeRef, scope_fmt_stack[0..scope_fmt_stack_len], .nany(id)) != null) {

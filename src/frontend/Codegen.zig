@@ -2505,27 +2505,34 @@ pub fn initSlice(self: *Codegen, pos: u32, slot: *BNode, ptr: *BNode, len: *BNod
 }
 
 pub fn emitString(self: *Codegen, pos: u32, ctx: Ctx, bytes: []const u8) Value {
-    const global = self.types.globals.push(&self.types.arena, .{
-        .scope = self.gatherScope(),
-        .ty = self.types.arrayOf(.u8, @intCast(bytes.len)),
-        .readonly = true,
-    });
-    global.get(self.types).scope.name_pos = .empty;
+    var addr: *BNode = undefined;
+    if (bytes.len != 0) {
+        const global = self.types.globals.push(&self.types.arena, .{
+            .scope = self.gatherScope(),
+            .ty = self.types.arrayOf(.u8, @intCast(bytes.len)),
+            .readonly = true,
+        });
+        global.get(self.types).scope.name_pos = .string;
 
-    self.types.ct_backend.emitData(.{
-        .id = @intFromEnum(global),
-        .readonly = true,
-        .value = .{ .init = bytes },
-        .thread_local = false,
-        .uuid = @splat(0),
-    });
+        self.types.ct_backend.emitData(.{
+            .id = @intFromEnum(global),
+            .readonly = true,
+            .value = .{ .init = bytes },
+            .thread_local = false,
+            .uuid = @splat(0),
+        });
+
+        addr = self.bl.addGlobalAddr(self.sloc(pos), @intFromEnum(global));
+    } else {
+        addr = self.bl.addIntImm(self.sloc(pos), .i64, 1);
+    }
 
     const ty = self.types.sliceOf(.u8);
     const slot = self.emitLoc(pos, ty, ctx);
     self.initSlice(
         pos,
         slot,
-        self.bl.addGlobalAddr(self.sloc(pos), @intFromEnum(global)),
+        addr,
         self.bl.addIntImm(self.sloc(pos), .i64, @intCast(bytes.len)),
     );
 
