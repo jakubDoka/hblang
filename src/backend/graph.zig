@@ -910,7 +910,7 @@ pub fn Func(comptime Backend: type) type {
                         .Start => return 0,
                         .Region => b: {
                             var ideptha: u16 = 0;
-                            for (cfg.base.inputs()) |i| {
+                            for (cfg.base.ordInps()) |i| {
                                 ideptha = @max(ideptha, i.?.asCfg().?.idepth());
                             }
                             break :b ideptha + 1;
@@ -948,7 +948,7 @@ pub fn Func(comptime Backend: type) type {
                                 return @ptrCast(lca);
                             } else {
                                 var lca = cfg.base.inputs()[0].?.asCfg().?;
-                                for (cfg.base.inputs()[1..]) |i| {
+                                for (cfg.base.ordInps()[1..]) |i| {
                                     lca = findLca(lca, i.?.asCfg().?);
                                 }
                                 cfg.base.extra(.Region).cached_lca = lca;

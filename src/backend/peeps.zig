@@ -350,6 +350,62 @@ pub fn Mixin(comptime Backend: type) type {
                 }
             }
 
+            if (node.kind == .Region) join_regions: {
+                const ordInps = node.ordInps();
+
+                var tmp = utils.Arena.scrath(work.allocator.ptr);
+                defer tmp.deinit();
+
+                const lhs, const rhs = .{ ordInps[0].?, ordInps[ordInps.len - 1].? };
+                if (lhs.kind == .Region) {
+                    var phi_count: usize = 0;
+                    for (node.outputs()) |o| {
+                        if (o.get().kind == .Phi) {
+                            const other_phi = o.get().inputs()[1].?;
+                            if (other_phi.kind != .Phi) break :join_regions;
+                            if (other_phi.inputs()[0].? != lhs) break :join_regions;
+                            if (other_phi.outputs().len != 1) break :join_regions;
+                            phi_count += 1;
+                        }
+                    }
+
+                    if (phi_count + 1 != lhs.outputs().len) break :join_regions;
+
+                    for (tmp.arena.dupe(Node.Out, node.outputs())) |o| {
+                        if (o.get().kind == .Phi) {
+                            leftJoin(self, o.get(), 1);
+                        }
+                    }
+
+                    leftJoin(self, node, 0);
+                } else if (rhs.kind == .Region) {
+                    var phi_count: usize = 0;
+                    for (node.outputs()) |o| {
+                        if (o.get().kind == .Phi) {
+                            const other_phi = o.get().ordInps()[o.get().ordInps().len - 1].?;
+                            if (other_phi.kind != .Phi) break :join_regions;
+                            if (other_phi.inputs()[0].? != rhs) break :join_regions;
+                            if (other_phi.outputs().len != 1) break :join_regions;
+                            phi_count += 1;
+                        }
+                    }
+
+                    if (phi_count + 1 != rhs.outputs().len) break :join_regions;
+
+                    for (tmp.arena.dupe(Node.Out, node.outputs())) |o| {
+                        if (o.get().kind == .Phi) {
+                            rightJoin(self, o.get(), 1);
+                        }
+                    }
+
+                    rightJoin(self, node, 0);
+
+                    if (!rhs.isDead()) {
+                        utils.panic("{f} {f}\n", .{ node, rhs });
+                    }
+                }
+            }
+
             if (node.kind == .Loop) remove: {
                 if (!isDead(node.inputs()[1])) break :remove;
 
@@ -455,6 +511,36 @@ pub fn Mixin(comptime Backend: type) type {
             }
 
             return null;
+        }
+
+        pub fn assertNoUnordered(node: *Node) void {
+            std.debug.assert(std.mem.allEqual(
+                ?*Node,
+                node.input_base[node.input_ordered_len..node.input_len],
+                null,
+            ));
+        }
+
+        pub fn rightJoin(self: *Func, node: *Node, from: usize) void {
+            assertNoUnordered(node);
+            const idx = node.ordInps().len - 1;
+            const other = node.ordInps()[idx].?;
+            assertNoUnordered(other);
+            for (other.ordInps()[from + 1 ..]) |i| {
+                self.connectOrd(i.?, node);
+            }
+            _ = self.setInput(node, idx, .intern, other.ordInps()[from].?);
+            std.debug.assert(other.isDead());
+        }
+
+        pub fn leftJoin(self: *Func, node: *Node, from: usize) void {
+            assertNoUnordered(node);
+            const other = node.inputs()[from].?;
+            assertNoUnordered(other);
+            for (node.inputs()[from + 1 ..]) |i| {
+                self.connectOrd(i.?, other);
+            }
+            self.subsume(other, node, .intern);
         }
 
         pub fn idealize(
