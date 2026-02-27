@@ -372,6 +372,7 @@ pub const classes = enum {
         dis: i32,
         scale: u8,
     };
+    pub const Cmov = extern struct {};
 };
 
 pub const biased_regs = b: {
@@ -473,20 +474,6 @@ pub fn idealizeMach(self: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *
     if (Func.idealizeDead(self, func, node, worklist)) |n| return n;
 
     if (matcher.idealize(self, func, node, worklist)) |n| return n;
-
-    if (false and node.kind == .StructArg) elim_local: {
-        for (node.outputs()) |us| {
-            const use = us.get();
-            if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
-                break :elim_local;
-            }
-        }
-
-        switch (node.extra2()) {
-            .StructArg => |n| n.no_address = true,
-            else => unreachable,
-        }
-    }
 
     return null;
 }
@@ -808,7 +795,7 @@ pub fn regMask(
 
 pub fn binOpInPlaceSlot(op: graph.BinOp) ?usize {
     return switch (op) {
-        .iadd, .isub, .imul, .bor, .band, .bxor, .ushr => 0,
+        .iadd, .isub, .imul, .bor, .disjoint_or, .band, .bxor, .ushr => 0,
         .ishl, .sshr, .fadd, .fsub, .fmul, .fdiv => 0,
         .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt => null,
         .slt, .udiv, .sdiv, .umod, .smod, .fgt, .flt, .fge, .fle => null,
@@ -1339,7 +1326,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dis = if (t == .OpLoad) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 switch (op) {
-                    .iadd, .isub, .bor, .band, .bxor => {
+                    .iadd, .isub, .bor, .disjoint_or, .band, .bxor => {
                         std.debug.assert(lhs == dst);
 
                         if (op_dt == .i16) self.emitByte(0x66);
@@ -1347,7 +1334,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         const opcode: u8 = switch (op) {
                             .iadd => 0x03,
                             .band => 0x23,
-                            .bor => 0x0b,
+                            .bor, .disjoint_or => 0x0b,
                             .bxor => 0x33,
                             .isub => 0x2b,
                             else => unreachable,
@@ -1365,13 +1352,13 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dis = if (t == .OpStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 switch (op) {
-                    .iadd, .isub, .bor, .band, .bxor => {
+                    .iadd, .isub, .bor, .disjoint_or, .band, .bxor => {
                         if (instr.data_type == .i16) self.emitByte(0x66);
                         self.emitRexBinop(rhs, base, .rax, instr.data_type.size());
                         const opcode: u8 = switch (op) {
                             .iadd => 0x01,
                             .band => 0x21,
-                            .bor => 0x09,
+                            .bor, .disjoint_or => 0x09,
                             .bxor => 0x31,
                             .isub => 0x29,
                             else => unreachable,
@@ -1390,13 +1377,13 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dis = if (t == .ConstOpStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
                 switch (op) {
-                    .iadd, .isub, .bor, .band, .bxor => {
+                    .iadd, .isub, .bor, .disjoint_or, .band, .bxor => {
                         if (instr.data_type == .i16) self.emitByte(0x66);
                         self.emitRexNoReg(base, .rax, instr.data_type.size());
                         const sub_opcode: u8 = switch (op) {
                             .iadd => 0b000,
                             .band => 0b100,
-                            .bor => 0b001,
+                            .bor, .disjoint_or => 0b001,
                             .bxor => 0b110,
                             .isub => 0b101,
                             else => unreachable,
@@ -1455,7 +1442,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(sub_opcode, dst) });
                         self.emitImm(i8, @intCast(rhs));
                     },
-                    .iadd, .isub, .bor, .band, .bxor => {
+                    .iadd, .isub, .bor, .disjoint_or, .band, .bxor => {
                         std.debug.assert(dst == lhs);
 
                         if (instr.data_type == .i16) self.emitByte(0x66);
@@ -1483,7 +1470,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                             const sub_opcode: u3 = switch (op) {
                                 .iadd => 0b000,
-                                .bor => 0b001,
+                                .bor, .disjoint_or => 0b001,
                                 .band => 0b100,
                                 .isub => 0b101,
                                 .bxor => 0b110,
@@ -1597,14 +1584,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitRexBinop(dst, rhs, .rax, @max(size, 4));
                         self.emitBytes(&.{ 0x0F, 0xAF, Reg.Mod.direct.rm(dst, rhs) });
                     },
-                    .iadd, .isub, .bor, .band, .bxor => {
+                    .iadd, .isub, .bor, .disjoint_or, .band, .bxor => {
                         std.debug.assert(lhs == dst);
 
                         self.emitRexBinop(rhs, dst, .rax, @max(size, 4));
                         var opcode: u8 = switch (op) {
                             .iadd => 0x00,
                             .isub => 0x28,
-                            .bor => 0x08,
+                            .bor, .disjoint_or => 0x08,
                             .band => 0x20,
                             .bxor => 0x30,
                             else => unreachable,

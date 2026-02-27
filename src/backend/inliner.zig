@@ -3,23 +3,65 @@ const graph = @import("graph.zig");
 const Machine = @This();
 const utils = graph.utils;
 const Set = std.DynamicBitSetUnmanaged;
+const is_debug = graph.is_debug;
 
 pub fn Mixin(comptime Backend: type) type {
     return struct {
+        const Func = graph.Func(Backend);
+        const Node = Func.Node;
+        const Kind = Func.Kind;
+        const Self = @This();
+        const WorkList = Func.WorkList;
+
+        pub fn getGraph(self: *Self) *Func {
+            return @alignCast(@fieldParentPtr("inliner", self));
+        }
+
+        const weights = b: {
+            var values = std.EnumArray(Kind, u8).initFill(0);
+
+            values.set(.Loop, 5);
+            values.set(.Load, 1);
+            values.set(.Store, 1);
+            values.set(.BinOp, 1);
+            values.set(.UnOp, 1);
+            values.set(.Call, 2);
+
+            break :b values;
+        };
+
+        pub fn computeCost(mix: *Self) void {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const self = mix.getGraph();
+
+            var worklist = WorkList.init(
+                tmp.arena.allocator(),
+                self.node_count,
+            ) catch unreachable;
+            worklist.collectAll(self);
+
+            self.cost = 0;
+            for (worklist.items(), 0..) |n, i| {
+                if (!is_debug) n.id = @intCast(i);
+                self.cost += weights.get(n.kind);
+            }
+            if (!is_debug) self.node_count = @intCast(worklist.items().len);
+        }
+
         pub fn cloneNodes(
-            start: *graph.FuncNode(Backend),
-            end: *graph.FuncNode(Backend),
+            start: *Node,
+            end: *Node,
             node_count: usize,
             arena: *std.heap.ArenaAllocator,
             already_present: usize,
             scrath: *utils.Arena,
         ) struct {
-            new_node_table: []*graph.FuncNode(Backend),
-            new_nodes: []*graph.FuncNode(Backend),
+            new_node_table: []*Node,
+            new_nodes: []*Node,
         } {
             errdefer unreachable;
-
-            const Func = graph.Func(Backend);
 
             var tmp = utils.Arena.scrath(scrath);
             defer tmp.deinit();
@@ -102,15 +144,13 @@ pub fn Mixin(comptime Backend: type) type {
         }
 
         pub fn internBatch(
-            start: *graph.FuncNode(Backend),
-            end: *graph.FuncNode(Backend),
+            start: *Node,
+            end: *Node,
             already_present: usize,
             into: *graph.Func(Backend),
-            new_nodes: []*graph.FuncNode(Backend),
+            new_nodes: []*Node,
         ) void {
             errdefer unreachable;
-
-            const Func = graph.Func(Backend);
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -194,19 +234,16 @@ pub fn Mixin(comptime Backend: type) type {
         }
 
         pub fn inlineInto(
-            inln: *const @This(),
+            mix: *@This(),
             func: *graph.Func(Backend),
             dest: *graph.Func(Backend).Node,
             func_work: *graph.Func(Backend).WorkList,
         ) void {
             errdefer unreachable;
 
-            const self: *const graph.Func(Backend) =
-                @alignCast(@fieldParentPtr("inliner", inln));
+            const self = mix.getGraph();
 
             func.gcm.loop_tree_built.assertUnlocked();
-
-            const Func = graph.Func(Backend);
 
             const arena = &func.arena;
             const self_start: *Func.Node = self.start;

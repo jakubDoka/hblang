@@ -62,6 +62,7 @@ pub const BinOp = enum(u8) {
     ushr,
     band,
     bor,
+    disjoint_or,
     bxor,
 
     ne,
@@ -160,7 +161,7 @@ pub const BinOp = enum(u8) {
             .ushr => @bitCast(tu(lhs) >> @truncate(tu(rhs))),
             .sshr => lhs >> @truncate(tu(rhs)),
             .band => lhs & rhs,
-            .bor => lhs | rhs,
+            .bor, .disjoint_or => lhs | rhs,
             .bxor => lhs ^ rhs,
 
             .ne => @intFromBool(lhs != rhs),
@@ -197,21 +198,21 @@ pub const BinOp = enum(u8) {
 
     pub fn propagatesPoison(self: BinOp) enum { yes, into_other_value } {
         return switch (self) {
-            .bor => .into_other_value,
+            .bor, .disjoint_or => .into_other_value,
             else => .yes,
         };
     }
 
     pub fn isComutative(self: BinOp) bool {
         return switch (self) {
-            .iadd, .imul, .band, .bor, .bxor, .fadd, .fmul, .ne, .eq => true,
+            .iadd, .imul, .band, .bor, .disjoint_or, .bxor, .fadd, .fmul, .ne, .eq => true,
             else => false,
         };
     }
 
     pub fn isAsociative(self: BinOp) bool {
         return switch (self) {
-            .iadd, .imul, .band, .bor, .bxor, .ne, .eq => true,
+            .iadd, .imul, .band, .bor, .disjoint_or, .bxor, .ne, .eq => true,
             else => false,
         };
     }
@@ -239,7 +240,7 @@ pub const BinOp = enum(u8) {
 
     pub fn neutralElememnt(self: BinOp, ty: DataType) ?i64 {
         return switch (self) {
-            .iadd, .isub, .fsub, .fadd, .bxor, .bor, .ishl, .sshr, .ushr => 0,
+            .iadd, .isub, .fsub, .fadd, .bxor, .bor, .disjoint_or, .ishl, .sshr, .ushr => 0,
             .band => @as(i64, -1) & ty.mask(),
             .imul, .sdiv, .udiv => 1,
             .fmul, .fdiv => if (ty == .f64)
@@ -895,6 +896,12 @@ pub fn Func(comptime Backend: type) type {
                 base: Node,
                 ext: Class,
 
+                pub fn dominates(cfg: *CfgNode, child: *CfgNode) bool {
+                    var cursor = child;
+                    while (cursor.idepth() > cfg.idepth()) : (cursor = cursor.idom()) {}
+                    return cursor == cfg;
+                }
+
                 pub fn idepth(cfg: *CfgNode) u16 {
                     const extra: *Cfg = &cfg.ext;
 
@@ -1056,6 +1063,54 @@ pub fn Func(comptime Backend: type) type {
                     }
                     unreachable;
                 }
+            }
+
+            pub fn normalizedDisjointValues(self: *Node, func: *Self) [2]*Node {
+                std.debug.assert(self.extra(.BinOp).op == .disjoint_or);
+
+                var outs: [2]struct { *Node, u8 } = undefined;
+                for (&outs, self.inputs()[1..]) |*o, v| {
+                    o.* = switch (v.?.extra2()) {
+                        .BinOp => |ext| switch (ext.op) {
+                            .ishl => .{
+                                v.?.inputs()[1].?.inputs()[1].?,
+                                switch (v.?.inputs()[2].?.extra2()) {
+                                    .CInt => |e| @intCast(e.value),
+                                    else => unreachable,
+                                },
+                            },
+                            else => unreachable,
+                        },
+                        .UnOp => |ext| switch (ext.op) {
+                            .uext => .{ v.?.inputs()[1].?, 0 },
+                            else => unreachable,
+                        },
+                        .CInt => |ext| .{ v.?, std.mem.alignBackward(u7, @ctz(ext.value), 8) },
+                        else => unreachable,
+                    };
+                }
+
+                for (0..2) |x| {
+                    const y = 1 - x;
+                    if (outs[x][0].kind == .CInt) {
+                        std.debug.assert(outs[y][0].kind != .CInt);
+                        if (outs[x][1] > outs[y][1]) {
+                            const prev = outs[x][1];
+                            outs[x][1] = outs[y][1] + outs[y][0].data_type.size() * 8;
+                            std.debug.assert(outs[x][1] <= prev);
+                        } else {
+                            outs[x][1] = 0;
+                        }
+
+                        outs[x][0] = func.addIntImm(
+                            self.sloc,
+                            outs[y][0].data_type,
+                            outs[x][0].extra(.CInt).value >> @intCast(outs[x][1]),
+                        );
+                    }
+                }
+
+                return .{ outs[0][0], outs[1][0] };
             }
 
             pub fn loadDatatype(self: *Node) DataType {
@@ -2574,7 +2629,7 @@ pub fn Func(comptime Backend: type) type {
             target: *Node,
             comptime mode: ModMode,
         ) void {
-            //std.debug.print("subsume: {f} -> {f}\n", .{ target, this });
+            // std.debug.print("subsume: {f} -> {f}\n", .{ target, this });
             if (target.isDead()) return;
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             if (mode == .intern) self.uninternNode(target);
@@ -2759,19 +2814,6 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        fn killNodes(self: *Self) void {
-            self.iterPeeps({}, struct {
-                fn strategy(
-                    _: void,
-                    _: *Func(Backend),
-                    _: *Node,
-                    _: *WorkList,
-                ) ?*Node {
-                    return null;
-                }
-            }.strategy);
-        }
-
         pub fn collectPostorder(
             self: *Self,
             arena: std.mem.Allocator,
@@ -2857,36 +2899,6 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn IdealSig(C: type) type {
             return fn (C, *Self, *Node, *WorkList) ?*Node;
-        }
-
-        const weights = b: {
-            var values = std.EnumArray(Kind, u8).initFill(0);
-
-            values.set(.Loop, 5);
-            values.set(.Load, 1);
-            values.set(.Store, 1);
-            values.set(.BinOp, 1);
-            values.set(.Call, 2);
-
-            break :b values;
-        };
-
-        pub fn computeCost(self: *Self) void {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
-            var worklist = WorkList.init(
-                tmp.arena.allocator(),
-                self.node_count,
-            ) catch unreachable;
-            worklist.collectAll(self);
-
-            self.cost = 0;
-            for (worklist.items(), 0..) |n, i| {
-                if (!is_debug) n.id = @intCast(i);
-                self.cost += weights.get(n.kind);
-            }
-            if (!is_debug) self.node_count = @intCast(worklist.items().len);
         }
 
         pub fn logNid(

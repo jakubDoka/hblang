@@ -22,7 +22,7 @@
     .iadd => hb.hbvm.isa.Op.addi8,
     .imul => .muli8,
     .isub => .addi8,
-    .bor => .ori,
+    .bor, .disjoint_or => .ori,
     .bxor => .xori,
     .band => .andi,
     else => break :rule,

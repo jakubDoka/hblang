@@ -264,6 +264,7 @@ pub fn Mixin(comptime Backend: type) type {
                             var best = lca;
                             var cursor = best.base.cfg0();
                             while (cursor != early.idom()) : (cursor = cursor.idom()) {
+                                std.debug.assert(cursor.base.kind != .Start);
                                 if (cursor.better(best, t, self)) best = cursor;
                             }
 

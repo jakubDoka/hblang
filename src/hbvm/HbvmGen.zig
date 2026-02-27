@@ -484,7 +484,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .ishl => .slu8,
                     .ushr => .sru8,
                     .sshr => .srs8,
-                    .bor => .@"or",
+                    .bor, .disjoint_or => .@"or",
                     .band => .@"and",
                     .bxor => .xor,
                     .fge, .flt => .fcmplt32,
@@ -494,7 +494,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 };
 
                 switch (extra.op) {
-                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .band, .bxor => {},
+                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .disjoint_or, .band, .bxor => {},
                     .fadd, .fsub, .fmul, .fdiv, .fge, .fle, .fgt, .flt => op = @enumFromInt(@intFromEnum(op) +
                         (@intFromEnum(inps[0].data_type) - @intFromEnum(graph.DataType.f32))),
                     else => op = @enumFromInt(@intFromEnum(op) +

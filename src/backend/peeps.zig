@@ -157,6 +157,133 @@ pub fn Mixin(comptime Backend: type) type {
                 for (node.outputs()) |o| work.add(o.get());
             }
 
+            if (node.kind == .If) merge_ifs: {
+                const cond = node.inputs()[1].?;
+                var phi = cond;
+                if (cond.kind != .Phi) {
+                    break :merge_ifs;
+                }
+
+                if (phi.inputs().len != 3) break :merge_ifs;
+
+                const other_region = phi.inputs()[0].?;
+                if (other_region.kind != .Region) break :merge_ifs;
+
+                if (other_region != node.inputs()[0].?) break :merge_ifs;
+
+                const lhs = phi.inputs()[1].?;
+                if (lhs.kind != .CInt) break :merge_ifs;
+                var reverse = false;
+                if (lhs.extra(.CInt).value == 0) {
+                    reverse = true;
+                }
+
+                const rhs = phi.inputs()[2].?;
+                if (rhs.kind != .CInt) break :merge_ifs;
+                if (!reverse and rhs.extra(.CInt).value != 0) break :merge_ifs;
+                if (reverse and rhs.extra(.CInt).value == 0) break :merge_ifs;
+
+                var tmp = utils.Arena.scrath(work.allocator.ptr);
+                defer tmp.deinit();
+
+                errdefer unreachable;
+
+                var search_worklist = try WorkList.init(tmp.arena.allocator(), self.node_count);
+
+                for (other_region.outputs()) |ro| {
+                    if (ro.get().kind == .Phi) {
+                        for (ro.get().outputs()) |o| {
+                            search_worklist.add(o.get());
+                        }
+                    }
+                }
+
+                var schedule_then = try WorkList.init(tmp.arena.allocator(), self.node_count);
+                var schedule_else = try WorkList.init(tmp.arena.allocator(), self.node_count);
+
+                var i: usize = 0;
+                while (i < search_worklist.items().len) : (i += 1) {
+                    const n = search_worklist.items()[i];
+                    if (n == node or n == cond) continue;
+                    if (n.tryCfg0()) |cfg| {
+                        if (node.outputs()[0].get().asCfg().?.dominates(cfg)) {
+                            schedule_then.add(n);
+                        } else if (node.outputs()[1].get().asCfg().?.dominates(cfg)) {
+                            schedule_else.add(n);
+                        } else if (n.kind == .Phi and &n.cfg0().idom().base == node) {
+                            if (n.inputs().len != 3) break :merge_ifs;
+                            schedule_then.add(n.inputs()[1].?);
+                            schedule_else.add(n.inputs()[2].?);
+                        } else {
+                            break :merge_ifs;
+                        }
+                    } else {
+                        for (n.outputs()) |o| {
+                            if (o.get().kind == .Phi and o.get().cfg0().base.kind == .Loop) {
+                                const block = o.get().cfg0().base.inputs()[o.pos() - 1].?.asCfg().?;
+                                if (node.outputs()[0].get().asCfg().?.dominates(block)) {
+                                    schedule_then.add(n);
+                                } else if (node.outputs()[1].get().asCfg().?.dominates(block)) {
+                                    schedule_else.add(n);
+                                }
+                                continue;
+                            }
+
+                            search_worklist.add(o.get());
+                        }
+                    }
+                }
+
+                const worklists = [2]*WorkList{ &schedule_then, &schedule_else };
+
+                for (worklists) |schedule| {
+                    i = 0;
+                    while (i < schedule.items().len) : (i += 1) {
+                        const n = schedule.items()[i];
+                        for (n.inputs()[1..]) |j| {
+                            if (j) |jj| {
+                                if (search_worklist.in_list.isSet(jj.id)) {
+                                    schedule.add(jj);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for (
+                    worklists,
+                    [2]*WorkList{ &schedule_else, &schedule_then },
+                ) |a, b| {
+                    for (a.items()) |ai| if (b.in_list.isSet(ai.id)) break :merge_ifs;
+                }
+
+                const swap = reverse;
+                const left: usize = @intFromBool(swap);
+                const right: usize = @intFromBool(!swap);
+
+                for (tmp.arena.dupe(Node.Out, other_region.outputs())) |o| {
+                    if (o.get().kind == .Phi) {
+                        for (tmp.arena.dupe(Node.Out, o.get().outputs())) |oo| {
+                            const side = if (oo.get().kind == .Phi and &oo.get().cfg0().idom().base == node)
+                                o.get().inputs()[if (swap) 3 - oo.pos() else oo.pos() - 1].?
+                            else if (schedule_then.in_list.isSet(oo.get().id))
+                                o.get().inputs()[1 + left].?
+                            else if (schedule_else.in_list.isSet(oo.get().id))
+                                o.get().inputs()[1 + right].?
+                            else {
+                                std.debug.assert(oo.get() == node);
+                                continue;
+                            };
+
+                            _ = self.setInput(oo.get(), oo.pos(), .intern, side);
+                        }
+                    }
+                }
+
+                self.subsume(other_region.inputs()[left].?, node.outputs()[0].get(), .intern);
+                self.subsume(other_region.inputs()[right].?, node.outputs()[0].get(), .intern);
+            }
+
             if (is_dead and node.data_type != .bot) {
                 node.data_type = .bot;
                 for (node.outputs()) |o| {
@@ -502,7 +629,7 @@ pub fn Mixin(comptime Backend: type) type {
                         }
 
                         for (prepared[1..collected]) |v| {
-                            prepared[0] = self.addBinOp(v.sloc, .bor, node.data_type, prepared[0], v);
+                            prepared[0] = self.addBinOp(v.sloc, .disjoint_or, node.data_type, prepared[0], v);
                         }
 
                         for (components[0..collected]) |v| {
@@ -665,6 +792,20 @@ pub fn Mixin(comptime Backend: type) type {
                     self.subsume(nt, t, .intern);
 
                     continue;
+                }
+            }
+
+            if (graph.is_debug) {
+                var visited = std.DynamicBitSetUnmanaged
+                    .initEmpty(tmp.arena.allocator(), self.node_count) catch unreachable;
+                const f = self.collectPostorder(tmp.arena.allocator(), &visited);
+
+                for (f) |v| {
+                    for (v.base.outputs()) |o| {
+                        if (o.get().isCfg()) break;
+                    } else {
+                        utils.panic("{f}", .{v});
+                    }
                 }
             }
         }

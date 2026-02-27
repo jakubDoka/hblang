@@ -10,6 +10,8 @@
 (BinOp _ (:op op && {op.propagatesPoison() == .into_other_value}) (Poison) vl) : vl
 (BinOp _ (:op op && {op.propagatesPoison() == .into_other_value}) vl (Poison)) : vl
 
+(BinOp _ (:op .ne) (_:vl (:data_type .i8)) (CInt (:value 0))) : vl
+
 (BinOp ?c :op :data_type
   (CInt _ (:value lhs))
   (CInt _ (:value rhs))
@@ -60,6 +62,21 @@
   (BinOp _ (:op &op) lhs (CInt _ (:value rl)))
   (CInt _ (:value rv))
 ) : (BinOp c :op lhs (CInt c (:value {op.eval(lhs.data_type, rl, rv)})))
+
+;(Phi (Region:r) (CInt:i (:value 0))
+;     (BinOp:do ?c (:op .disjoint_or) _ @ a b = {do.normalizedDisjointValues(func)})) :
+;  (BinOp (:op .disjoint_or) c 
+;         (Phi (:data_type {a.data_type}) r i a)
+;         (Phi (:data_type {a.data_type}) r i b))
+;
+;(Phi (Region:r)
+;     (BinOp:do ?c (:op .disjoint_or) _ @ a b = {do.normalizedDisjointValues(func)})
+;     (CInt:i (:value 0))) :
+;  (BinOp (:op .disjoint_or) c
+;         (Phi (:data_type {a.data_type}) r a i)
+;         (Phi (:data_type {a.data_type}) r b i))
+
+;(BinOp (:op .ushr) _ (BinOp (:op .disjoint_or) _ v) (CInt (:value 8))) : v
 
 (Store _ mem _ (Poison)) : mem
 

@@ -5117,7 +5117,7 @@ pub fn emitArbitraryLoad(
         if (value) |v| {
             const shift = self.bl.addIntImm(slc, dt, @intCast(offset * 8));
             const shifted = self.bl.addBinOp(slc, .ishl, dt, extended, shift);
-            value = self.bl.addBinOp(slc, .bor, dt, v, shifted);
+            value = self.bl.addBinOp(slc, .disjoint_or, dt, v, shifted);
         } else {
             std.debug.assert(offset == 0);
             value = extended;

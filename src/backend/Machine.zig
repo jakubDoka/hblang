@@ -1151,7 +1151,7 @@ pub const OptOptions = struct {
                             // basically inline always if we are called only once
                             func.cost = 0;
                         } else {
-                            func.computeCost();
+                            func.inliner.computeCost();
                         }
                     }
 

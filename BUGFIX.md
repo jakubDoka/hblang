@@ -2,6 +2,29 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### if merging opt
+```hb
+op := false
+
+main := fn(): uint {
+    vl := false
+    bl := 1
+    if op {
+        vl = true
+        bl = 0
+    } else {
+        vl = false
+        bl = 1
+    }
+
+    if vl {
+        return 6
+    } else {
+        return bl - 1
+    }
+}
+```
+
 #### capture various types 1
 ```hb
 main := fn(): uint {
@@ -1531,18 +1554,22 @@ main := fn(): uint {
 
 #### out of bounds matching 1
 ```hb
+expectations := .{
+    return_value: 3,
+}
+
 sum := 0
 main := fn(): uint {
-    byte_iter("hello, world").for_each(fn(x: u8): void sum += x)
-    return 0
+    byte_iter("\{000102}").for_each(fn(x: uint): void sum += x)
+    return sum
 }
 
 $byte_iter := fn(slice: []u8): Iterator(struct {
     .slice: []u8;
 
-    $next := fn(self: ^@CurrentScope()): ?u8 {
+    $next := fn(self: ^@CurrentScope()): ?uint {
         if self.slice.len == 0 return null
-        tmp := self.slice[0]
+        tmp: uint = self.slice[0]
         self.slice = self.slice[1..]
         return tmp
     }

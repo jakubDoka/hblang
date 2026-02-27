@@ -1164,7 +1164,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .sdiv => utl.selectOp(op_ty, .i, .div_s),
                 .umod => utl.selectOp(op_ty, .i, .rem_u),
                 .smod => utl.selectOp(op_ty, .i, .rem_s),
-                .bor => utl.selectOp(op_ty, .i, .@"or"),
+                .bor, .disjoint_or => utl.selectOp(op_ty, .i, .@"or"),
                 .band => utl.selectOp(op_ty, .i, .@"and"),
                 .bxor => utl.selectOp(op_ty, .i, .xor),
                 .ishl => utl.selectOp(op_ty, .i, .shl),
