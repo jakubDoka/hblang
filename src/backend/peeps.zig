@@ -357,19 +357,19 @@ pub fn Mixin(comptime Backend: type) type {
                 defer tmp.deinit();
 
                 const lhs, const rhs = .{ ordInps[0].?, ordInps[ordInps.len - 1].? };
-                if (lhs.kind == .Region) {
+                if (lhs.kind == .Region) left_join: {
                     var phi_count: usize = 0;
                     for (node.outputs()) |o| {
                         if (o.get().kind == .Phi) {
                             const other_phi = o.get().inputs()[1].?;
-                            if (other_phi.kind != .Phi) break :join_regions;
-                            if (other_phi.inputs()[0].? != lhs) break :join_regions;
-                            if (other_phi.outputs().len != 1) break :join_regions;
+                            if (other_phi.kind != .Phi) break :left_join;
+                            if (other_phi.inputs()[0].? != lhs) break :left_join;
+                            if (other_phi.outputs().len != 1) break :left_join;
                             phi_count += 1;
                         }
                     }
 
-                    if (phi_count + 1 != lhs.outputs().len) break :join_regions;
+                    if (phi_count + 1 != lhs.outputs().len) break :left_join;
 
                     for (tmp.arena.dupe(Node.Out, node.outputs())) |o| {
                         if (o.get().kind == .Phi) {
@@ -378,19 +378,22 @@ pub fn Mixin(comptime Backend: type) type {
                     }
 
                     leftJoin(self, node, 0);
-                } else if (rhs.kind == .Region) {
+                    break :join_regions;
+                }
+
+                if (rhs.kind == .Region) right_join: {
                     var phi_count: usize = 0;
                     for (node.outputs()) |o| {
                         if (o.get().kind == .Phi) {
                             const other_phi = o.get().ordInps()[o.get().ordInps().len - 1].?;
-                            if (other_phi.kind != .Phi) break :join_regions;
-                            if (other_phi.inputs()[0].? != rhs) break :join_regions;
-                            if (other_phi.outputs().len != 1) break :join_regions;
+                            if (other_phi.kind != .Phi) break :right_join;
+                            if (other_phi.inputs()[0].? != rhs) break :right_join;
+                            if (other_phi.outputs().len != 1) break :right_join;
                             phi_count += 1;
                         }
                     }
 
-                    if (phi_count + 1 != rhs.outputs().len) break :join_regions;
+                    if (phi_count + 1 != rhs.outputs().len) break :right_join;
 
                     for (tmp.arena.dupe(Node.Out, node.outputs())) |o| {
                         if (o.get().kind == .Phi) {
@@ -403,6 +406,8 @@ pub fn Mixin(comptime Backend: type) type {
                     if (!rhs.isDead()) {
                         utils.panic("{f} {f}\n", .{ node, rhs });
                     }
+
+                    break :join_regions;
                 }
             }
 
