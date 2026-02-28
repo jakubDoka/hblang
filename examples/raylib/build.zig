@@ -58,14 +58,16 @@ pub fn build(b: *std.Build) !void {
         exe.addObjectFile(main_obj);
         exe.linkLibrary(raylib);
 
-        const cmd = b.addSystemCommand(&.{"gdb"});
-        try cmd.getEnvMap().put("DEBUGINFOD_ENABLED", "0");
-        cmd.addFileArg(exe.getEmittedBin());
-        cmd.addArg("-ex");
-        cmd.addArg("run");
-
         const run = b.step(file, "run the example");
-        //run.dependOn(&b.addRunArtifact(exe).step);
-        run.dependOn(&cmd.step);
+        if (false) {
+            const cmd = b.addSystemCommand(&.{"gdb"});
+            try cmd.getEnvMap().put("DEBUGINFOD_ENABLED", "0");
+            cmd.addFileArg(exe.getEmittedBin());
+            cmd.addArg("-ex");
+            cmd.addArg("run");
+            run.dependOn(&cmd.step);
+        } else {
+            run.dependOn(&b.addRunArtifact(exe).step);
+        }
     }
 }

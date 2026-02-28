@@ -143,6 +143,7 @@ player_stats := Stats.{
 					ent.vel.y *= -1
 				}
 			}
+			//utils.fmt.printf("% %\n", .(ent.rect(), player.rect()))
 		}
 	},
 }

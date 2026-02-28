@@ -1121,8 +1121,10 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
                 if (winner.def == instr) {
                     winner.def = looser.def;
+                    winner.mask.tag = looser.mask.tag;
                 } else {
                     looser.def = winner.def;
+                    looser.mask.tag = winner.mask.tag;
                 }
 
                 for (ifg[looser.index(lrgs)]) |adj| {
@@ -1291,19 +1293,31 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 utils.panic("{f}", .{instr});
             }
             const instr_lrg = lrg_table[instr.id].get(lrgs);
+            const tag = instr_lrg.def.regMask(func, 0, tmp.arena).tag;
+            if (tag != instr_lrg.mask.tag) {
+                utils.panic("{f} {} {}\n", .{ instr_lrg, instr_lrg.mask.tag, tag });
+            }
             alloc[instr.id] = .{ .index = @intCast(instr_lrg.reg), .tag = instr_lrg.mask.tag };
         }
     }
 
-    if (graph.is_debug and false) {
+    if (graph.is_debug) {
         const util = struct {
-            pub fn logCollision(fnc: *Func, block: *CfgNode, def: *Node, clobber: *Node, use: *Node, allc: []u16) void {
+            pub fn logCollision(
+                fnc: *Func,
+                block: *CfgNode,
+                def: *Node,
+                clobber: *Node,
+                use: *Node,
+                lrgt: []LiveRange.FinalTableEntry,
+                allc: []Reg,
+            ) void {
                 if (utils.freestanding) return;
                 for (fnc.gcm.postorder) |bb| {
                     print("{f}\n", .{bb});
                     for (bb.base.outputs()) |in| {
                         const instr = in.get();
-                        if (!LiveRange.isNoDef(instr, lrg_table)) {
+                        if (!LiveRange.isNoDef(instr, lrgt)) {
                             print("  {} {f}\n", .{ allc[instr.id], instr });
                         } else {
                             print("    {f}\n", .{instr});
@@ -1357,7 +1371,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                             const other = o.get();
                             if (LiveRange.isNoDef(other, lrg_table)) continue;
                             if (alc == alloc[other.id]) {
-                                util.logCollision(func, block, instr, other, use, alloc);
+                                util.logCollision(func, block, instr, other, use, lrg_table, alloc);
                             }
                         }
                         continue;
@@ -1366,7 +1380,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                             const other = o.get();
                             if (LiveRange.isNoDef(other, lrg_table)) continue;
                             if (alc == alloc[other.id]) {
-                                util.logCollision(func, block, instr, other, use, alloc);
+                                util.logCollision(func, block, instr, other, use, lrg_table, alloc);
                             }
                         }
                         block = block.idom().idom();
@@ -1382,7 +1396,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                             if (other == use) continue;
                             if (LiveRange.isNoDef(other, lrg_table)) continue;
                             if (alc == alloc[other.id]) {
-                                util.logCollision(func, block, instr, other, use, alloc);
+                                util.logCollision(func, block, instr, other, use, lrg_table, alloc);
                             }
                         }
 

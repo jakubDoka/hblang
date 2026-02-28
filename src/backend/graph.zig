@@ -1490,16 +1490,22 @@ pub fn Func(comptime Backend: type) type {
                     },
                 }
 
-                for (self.input_base[0..self.input_len][@min(
+                const start = @min(
                     @intFromBool(scheduled and
                         (!self.isCfg() or !self.isBasicBlockStart())),
                     self.input_base[0..self.input_len].len,
-                )..]) |oo| if (oo) |o| {
+                );
+
+                for (self.input_base[0..self.input_len][start..], start..) |oo, i| if (oo) |o| {
                     if (!add_colon_space) {
                         writer.writeAll(": ") catch unreachable;
                         add_colon_space = true;
                     } else {
-                        writer.writeAll(", ") catch unreachable;
+                        if (i == self.input_ordered_len) {
+                            writer.writeAll("; ") catch unreachable;
+                        } else {
+                            writer.writeAll(", ") catch unreachable;
+                        }
                     }
                     logNid(writer, o.id, colors);
                 };

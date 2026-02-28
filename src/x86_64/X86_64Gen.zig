@@ -514,9 +514,10 @@ pub fn idealize(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.Wo
 
 // ================== REGALLOC ==================
 pub const RegTag = enum(u3) {
+    // ordered this way on purpose to minimize padding
     int,
-    f32,
     f64,
+    f32,
 
     pub fn size(self: RegTag) u16 {
         return switch (self) {
@@ -570,7 +571,7 @@ pub fn splitFloatMask32(_: *utils.Arena) Set {
 }
 
 pub fn splitFloatMask64(_: *utils.Arena) Set {
-    return .initFull(.f32);
+    return .initFull(.f64);
 }
 
 pub fn splitIntMask(_: *utils.Arena) Set {
@@ -846,7 +847,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         return;
     };
 
-    //func.fmtScheduledLog();
+    func.fmtScheduledLog();
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
