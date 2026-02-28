@@ -566,7 +566,14 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 blrg = blrg orelse lrg_table_build[instr.id].get(blrgs.items);
                 if (instr.inPlaceSlot()) |idx| {
                     const next_lrg = lrg_table_build[instr.dataDeps()[idx].id].get(blrgs.items).?.unionFind();
-                    if (blrg) |l| _ = l.unify(next_lrg, blrgs.items);
+                    if (blrg) |l| {
+                        std.debug.assert(l.mask.tag == next_lrg.mask.tag);
+                        _ = l.unify(next_lrg, blrgs.items);
+                    } else {
+                        if (instr.regMask(func, 0, tmp.arena).tag.overlapps(next_lrg.mask.tag) == 0) {
+                            utils.panic("{f} {f}\n", .{ instr, instr.dataDeps()[idx] });
+                        }
+                    }
                     blrg = blrg orelse next_lrg;
                 }
 
@@ -623,8 +630,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 const instr = in.get();
                 if (instr.isDef()) {
                     print("  [{}] {x:08} {f}\n", .{
-                        lrg_table[instr.id].index(lrgs),
-                        lrg_table[instr.id].mask.mask,
+                        lrg_table[instr.id].id(),
+                        lrg_table[instr.id].get(lrgs).mask.mask,
                         instr,
                     });
                 } else {
@@ -667,7 +674,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             if (should_log) for (members.entries.items(.key)) |o| {
                 const depth = func.loopDepth(o);
                 print("|- [{}] {x:08} {f}\n", .{ depth, if (!LiveRange.isNoDef(o, lrg_table))
-                    lrg_table[o.id].mask.mask
+                    lrg_table[o.id].get(lrgs).mask.mask
                 else
                     0, o });
             };
@@ -708,7 +715,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         print("* {} {f} {f} {any}\n", .{
                             lrg.hasDef(member, lrg_table, lrgs),
                             member,
-                            lrg_table[member.id],
+                            lrg_table[member.id].get(lrgs),
                             member.outputs(),
                         });
                     }

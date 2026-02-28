@@ -1804,7 +1804,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dst = self.getReg(instr);
                 const src = self.getReg(inps[0]);
 
-                self.emitRex(.rax, dst, src, instr.data_type.size());
+                std.debug.assert(src == dst);
+
+                self.emitRex(dst, .rax, src, instr.data_type.size());
                 self.emitBytes(opcode);
                 self.emitByte(Reg.Mod.direct.rm(dst, src));
                 self.emitByte(extra.idx | extra.idx << 2 |
@@ -2286,9 +2288,14 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                         opts.print("\tcall :{s}\n", .{nm});
                     } else {
                         opts.print("\t{s}", .{printed});
+                        const dis: usize = switch (inst.mnemonic) {
+                            zydis.ZYDIS_MNEMONIC_LEA, zydis.ZYDIS_MNEMONIC_MOV => 3,
+                            zydis.ZYDIS_MNEMONIC_MOVSS => 4,
+                            else => 0,
+                        };
                         for (ops[0..inst.operand_count]) |op| {
                             if (op.unnamed_0.mem.base == zydis.ZYDIS_REGISTER_RIP) {
-                                opts.print(" ; {s}", .{sym_map.get(v.offset + uaddr + 3) orelse "corrupt"});
+                                opts.print(" ; {s}", .{sym_map.get(v.offset + uaddr + dis) orelse "corrupt"});
                             }
                         }
                         opts.print("\n", .{});

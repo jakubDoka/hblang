@@ -106,6 +106,7 @@ pub fn Mixin(comptime Backend: type) type {
                     .dupe(Func.Node.Out, new_node.outputs())).ptr;
                 new_node_table[new_node.id] = new_node;
                 new_node.id = @intCast(already_present + i);
+
                 new_node.output_cap = new_node.output_len;
                 new_nodes.appendAssumeCapacity(new_node);
             }

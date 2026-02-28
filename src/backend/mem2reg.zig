@@ -434,7 +434,20 @@ pub fn Mixin(comptime Backend: type) type {
                 // if so, bail
                 //
                 offsets.items.len = 0;
-                for (store_load_nodes.items, 0..) |use, i| {
+                var bail = true;
+                defer if (bail) {
+                    for (store_load_nodes.items) |us| slot_ids[us.id] = escaped_schedue;
+                };
+                var dt: enum { unknown, float, int } = .unknown;
+                for (store_load_nodes.items) |use| {
+                    const next_dt: @TypeOf(dt) = if (use.data_type.isInt()) .int else .float;
+                    switch (dt) {
+                        .unknown => dt = next_dt,
+                        else => if (dt != next_dt) {
+                            continue :outer;
+                        },
+                    }
+
                     _, const offs = use.base().knownOffset();
                     // don't touch this and leave the static analysis report the soob
                     //
@@ -443,7 +456,6 @@ pub fn Mixin(comptime Backend: type) type {
                         // vectors eventually
                         o.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
                     {
-                        for (store_load_nodes.items[0..i]) |us| slot_ids[us.id] = escaped_schedue;
                         continue :outer;
                     }
 
@@ -453,7 +465,6 @@ pub fn Mixin(comptime Backend: type) type {
                         }
 
                         if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
-                            for (store_load_nodes.items[0..i]) |us| slot_ids[us.id] = escaped_schedue;
                             continue :outer;
                         }
 
@@ -470,6 +481,7 @@ pub fn Mixin(comptime Backend: type) type {
                 }
 
                 alloc_offset_count += offsets.items.len;
+                bail = false;
             }
 
             //if (alloc_offset_count == 0) return;

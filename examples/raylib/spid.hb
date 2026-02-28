@@ -79,7 +79,6 @@ main := fn(): uint {
 
 		rl.clear_background(background)
 
-
 		rl.draw_rectangle_v(player_pos - .xy(player_size * 0.5), .xy(player_size), square)
 
 		{
@@ -119,7 +118,25 @@ main := fn(): uint {
 		$intersects := fn(a_center: rl.V2, a_size: f32, b_center: rl.V2, b_size: f32): bool {
 			a_size *= 0.5
 			b_size *= 0.5
-			return a_center.x - a_size < b_center.x + b_size & a_center.x + a_size > b_center.x - b_size & a_center.y - a_size < b_center.y + b_size & a_center.y + a_size > b_center.y - b_size
+			return (a_center.x - a_size < b_center.x + b_size)
+				& (a_center.x + a_size > b_center.x - b_size)
+				& (a_center.y - a_size < b_center.y + b_size)
+				& (a_center.y + a_size > b_center.y - b_size)
+		}
+
+		$intersects_log := fn(a_center: rl.V2, a_size: f32, b_center: rl.V2, b_size: f32): void {
+			a_size *= 0.5
+			b_size *= 0.5
+
+			bsc.fmt.printf(
+				"% % % %\n",
+				.(
+					(a_center.x - a_size < b_center.x + b_size),
+					(a_center.x + a_size > b_center.x - b_size),
+					(a_center.y - a_size < b_center.y + b_size),
+					(a_center.y + a_size > b_center.y - b_size),
+				),
+			)
 		}
 
 		player_pos = wrap_vec(player_pos, screen_size)
@@ -145,6 +162,7 @@ main := fn(): uint {
 
 			for j := 0.., enemy := enemyes[..enemy_count] {
 				if intersects(bullet.pos, player_size * 0.5, enemy.pos, enemy_size) {
+					intersects_log(bullet.pos, player_size * 0.5, enemy.pos, enemy_size)
 					delete_bullet(i)
 					delete_enemy(j)
 				}

@@ -2511,6 +2511,10 @@ pub fn Func(comptime Backend: type) type {
                 .data_type = ty,
             };
 
+            if (node.id == 1194 and node.kind == .Load and node.data_type == .i64) {
+                //utils.panic("{f}", .{node});
+            }
+
             if (node.id > 10000) unreachable;
 
             self.node_count += 1;
@@ -2629,7 +2633,7 @@ pub fn Func(comptime Backend: type) type {
             target: *Node,
             comptime mode: ModMode,
         ) void {
-            // std.debug.print("subsume: {f} -> {f}\n", .{ target, this });
+            // std.debug. print("subsume: {f} -> {f}\n", .{ target, this });
             if (target.isDead()) return;
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             if (mode == .intern) self.uninternNode(target);

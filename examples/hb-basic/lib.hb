@@ -207,7 +207,13 @@ fmt := enum {
 
 		$match info {
 			.builtin => {
-				$if arg_type == uint $|| arg_type == u8 {
+				$if arg_type == bool {
+					if value {
+						_ = sys.write(1, "true")
+					} else {
+						_ = sys.write(1, "false")
+					}
+				} else $if arg_type == uint $|| arg_type == u8 {
 					buf: [10]u8 = idk
 					_ = sys.write(1, display_int(value, buf[..]))
 				} else $if arg_type == f32 {

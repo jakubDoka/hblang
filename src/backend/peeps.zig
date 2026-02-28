@@ -694,7 +694,7 @@ pub fn Mixin(comptime Backend: type) type {
                         }
 
                         if (base_offset == 0 and all_good and op_count < fuel + 1 and
-                            node.data_type.isInt())
+                            node.data_type.isInt() and earlier.data_type.isInt())
                         {
                             if (0 <= earlier_offset and earlier_offset +
                                 earlier.data_type.size() <= node.data_type.size())
