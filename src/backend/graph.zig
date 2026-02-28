@@ -240,7 +240,7 @@ pub const BinOp = enum(u8) {
 
     pub fn neutralElememnt(self: BinOp, ty: DataType) ?i64 {
         return switch (self) {
-            .iadd, .isub, .fsub, .fadd, .bxor, .bor, .disjoint_or, .ishl, .sshr, .ushr => 0,
+            .iadd, .isub, .fsub, .fadd, .bxor, .bor, .ishl, .sshr, .ushr => 0,
             .band => @as(i64, -1) & ty.mask(),
             .imul, .sdiv, .udiv => 1,
             .fmul, .fdiv => if (ty == .f64)
@@ -993,7 +993,7 @@ pub fn Func(comptime Backend: type) type {
             kind: Kind,
             data_type: mod.DataType = .top,
             // additional ref count for frontends
-            tmp_rc: u8 = 0,
+            tmp_rc: u16 = 0,
             id: u32,
 
             input_ordered_len: u16,
@@ -2173,10 +2173,10 @@ pub fn Func(comptime Backend: type) type {
             base: *Node,
             offset: i64,
         ) *Node {
-            return if (offset != 0) if (base.kind == .BinOp and
-                base.inputs()[2].?.kind == .CInt)
-            b: {
-                break :b self.addBinOp(
+            return if (offset == 0)
+                base
+            else if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt)
+                self.addBinOp(
                     sloc,
                     .iadd,
                     .i64,
@@ -2186,14 +2186,15 @@ pub fn Func(comptime Backend: type) type {
                         .i64,
                         base.inputs()[2].?.extra(.CInt).value + offset,
                     ),
+                )
+            else
+                self.addBinOp(
+                    sloc,
+                    .iadd,
+                    .i64,
+                    base,
+                    self.addIntImm(sloc, .i64, offset),
                 );
-            } else self.addBinOp(
-                sloc,
-                .iadd,
-                .i64,
-                base,
-                self.addIntImm(sloc, .i64, offset),
-            ) else base;
         }
 
         pub fn addGlobalAddr(
@@ -2511,10 +2512,6 @@ pub fn Func(comptime Backend: type) type {
                 .data_type = ty,
             };
 
-            if (node.id == 1194 and node.kind == .Load and node.data_type == .i64) {
-                //utils.panic("{f}", .{node});
-            }
-
             if (node.id > 10000) unreachable;
 
             self.node_count += 1;
@@ -2633,7 +2630,7 @@ pub fn Func(comptime Backend: type) type {
             target: *Node,
             comptime mode: ModMode,
         ) void {
-            // std.debug. print("subsume: {f} -> {f}\n", .{ target, this });
+            //std.debug. print("subsume: {f} -> {f}\n", .{ target, this });
             if (target.isDead()) return;
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             if (mode == .intern) self.uninternNode(target);

@@ -478,27 +478,111 @@ pub fn Mixin(comptime Backend: type) type {
                 const dst = node.inputs()[2].?;
                 const src = node.inputs()[3].?;
                 const len = node.inputs()[4].?;
-                if (len.kind == .CInt and len.extra(.CInt).value <= 16) {
+                if (len.kind == .CInt) {
                     const size = len.extra(.CInt).value;
-                    var cursor: u64 = 0;
-                    var copy_elem = DataType.i64;
 
-                    while (cursor != size) {
-                        while (cursor + copy_elem.size() > size) : (copy_elem =
-                            @enumFromInt(@intFromEnum(copy_elem) - 1))
-                        {}
+                    if (len.extra(.CInt).value <= 32) mimic_structure: {
+                        const src_base, const src_offset = src.knownOffset();
 
-                        const dst_off = self.addFieldOffset(node.sloc, dst, @intCast(cursor));
-                        const src_off = self.addFieldOffset(node.sloc, src, @intCast(cursor));
-                        const ld = self.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
-                        work.add(ld);
-                        mem = self.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
-                        work.add(mem);
+                        if (src_base.kind != .Local or
+                            src_base.inputs()[1].?.extra(.LocalAlloc).meta.kind == .parameter)
+                        {
+                            break :mimic_structure;
+                        }
 
-                        cursor += copy_elem.size();
+                        var tmp = utils.Arena.scrath(work.allocator.ptr);
+                        defer tmp.deinit();
+
+                        errdefer unreachable;
+
+                        var mem_ops = std.ArrayList(*Node).empty;
+                        for (src_base.outputs()) |o| {
+                            if (o.get().kind == .BinOp) {
+                                for (o.get().outputs()) |oo| {
+                                    if (oo.get() == node) continue;
+                                    if (!oo.get().isGoodMemOp(o.get())) {
+                                        break :mimic_structure;
+                                    }
+                                    try mem_ops.append(tmp.arena.allocator(), oo.get());
+                                }
+                            } else {
+                                if (o.get() == node) continue;
+                                if (!o.get().isGoodMemOp(src_base)) {
+                                    break :mimic_structure;
+                                }
+                                try mem_ops.append(tmp.arena.allocator(), o.get());
+                            }
+                        }
+
+                        const Slot = struct { offset: i64, dt: graph.DataType };
+                        var slots = std.ArrayList(Slot).empty;
+                        for (mem_ops.items) |use| {
+                            _, const offs = use.base().knownOffset();
+
+                            if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
+                                src_base.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
+                            {
+                                break :mimic_structure;
+                            }
+
+                            for (slots.items) |off| {
+                                if (off.offset >= offs + use.data_type.size() or offs >= off.offset + off.dt.size()) {
+                                    continue;
+                                }
+
+                                if (off.offset != offs or off.dt != use.data_type) {
+                                    break :mimic_structure;
+                                }
+
+                                break;
+                            } else {
+                                try slots.append(tmp.arena.allocator(), .{
+                                    .offset = @intCast(offs),
+                                    .dt = use.data_type,
+                                });
+                            }
+                        }
+
+                        var reached = false;
+                        for (slots.items) |s| {
+                            // TODO: we should do this upfront, but eh for now
+                            if (s.offset < src_offset) continue;
+                            if (s.offset - src_offset + s.dt.size() > size) continue;
+
+                            reached = true;
+
+                            const dst_off = self.addFieldOffset(node.sloc, dst, s.offset - src_offset);
+                            const src_off = self.addFieldOffset(node.sloc, src, s.offset - src_offset);
+                            const ld = self.addNode(.Load, node.sloc, s.dt, &.{ ctrl, mem, src_off }, .{});
+                            work.add(ld);
+                            mem = self.addNode(.Store, node.sloc, s.dt, &.{ ctrl, mem, dst_off, ld }, .{});
+                            work.add(mem);
+                        }
+
+                        return mem;
                     }
 
-                    return mem;
+                    if (len.extra(.CInt).value <= 16) {
+                        var cursor: u64 = 0;
+                        var copy_elem = DataType.i64;
+
+                        while (cursor != size) {
+                            while (cursor + copy_elem.size() > size) : (copy_elem =
+                                @enumFromInt(@intFromEnum(copy_elem) - 1))
+                            {}
+
+                            const dst_off = self.addFieldOffset(node.sloc, dst, @intCast(cursor));
+                            const src_off = self.addFieldOffset(node.sloc, src, @intCast(cursor));
+                            const ld = self.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
+                            work.add(ld);
+                            mem = self.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
+                            work.add(mem);
+
+                            cursor += copy_elem.size();
+                        }
+
+                        return mem;
+                    }
                 }
             }
 

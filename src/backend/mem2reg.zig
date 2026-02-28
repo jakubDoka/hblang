@@ -76,11 +76,6 @@ pub fn Mixin(comptime Backend: type) type {
             }
         };
 
-        pub fn isGoodMemOp(self: *Node, local: *Node) bool {
-            return (self.isStore() and !self.isSub(graph.MemCpy) and
-                self.value() != local) or self.isLoad();
-        }
-
         const Set = std.DynamicBitSetUnmanaged;
         const Arry = std.ArrayList;
 
@@ -417,13 +412,13 @@ pub fn Mixin(comptime Backend: type) type {
                     const use = us.get();
                     if (use.kind == .BinOp and use.inputs()[2].?.kind == .CInt) {
                         for (use.outputs()) |use_use| {
-                            if (isGoodMemOp(use_use.get(), o)) {
+                            if (use_use.get().isGoodMemOp(use)) {
                                 try store_load_nodes.append(tmp.arena.allocator(), use_use.get());
                             } else {
                                 continue :outer;
                             }
                         }
-                    } else if (isGoodMemOp(use, o)) {
+                    } else if (use.isGoodMemOp(o)) {
                         try store_load_nodes.append(tmp.arena.allocator(), use);
                     } else {
                         continue :outer;
@@ -460,7 +455,7 @@ pub fn Mixin(comptime Backend: type) type {
                     }
 
                     const idx = alloc_offset_count + for (offsets.items, 0..) |off, j| {
-                        if (off.offset > offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
+                        if (off.offset >= offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
                             continue;
                         }
 

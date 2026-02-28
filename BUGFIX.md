@@ -2,6 +2,15 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### better memcpy opts
+```hb
+main := fn(): int {
+    v := f32.[0, 1]
+    ov := ([2]f32).[v, .[2, 3]]
+    return @float_to_int(ov[0][0] + ov[0][1] + ov[1][0] - ov[1][1])
+}
+```
+
 #### if merging opt
 ```hb
 op := false

@@ -1140,7 +1140,7 @@ pub const OptOptions = struct {
 
                     const func = &funcs[cursor];
                     emit_waste += func.waste;
-                    idealizeDead(Backend, backend, func);
+                    idealizeGeneric(Backend, backend, func, false);
                     dead_waste += func.waste;
                     doMem2Reg(Backend, func);
                     mem2reg_waste += func.waste;
