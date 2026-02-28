@@ -23,7 +23,7 @@ pub const Ctx = struct {
     ret_count: usize,
     schedules: []u16,
     block_offsets: []i32,
-    allocs: []const u16,
+    allocs: []const Set.Reg,
     spill_base: usize,
     stack_layout: graph.StackLayout,
 };
@@ -290,7 +290,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    const allocs = opts.optimizations.apply(HbvmGen, func, self, opts.id) orelse {
+    const allocs: []const Set.Reg = opts.optimizations.apply(HbvmGen, func, self, opts.id) orelse {
         //func.fmtUnscheduledLog();
         return;
     };
@@ -309,9 +309,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const max_reg = if (allocs.len == 0) 0 else b: {
         var max: u16 = 0;
         for (allocs) |r| {
-            if (r == 254) continue;
-            if (r == Regalloc.no_reg_sentinel) continue;
-            max = @max(r, max);
+            if (r.index == 254) continue;
+            if (r.isNone()) continue;
+            max = @max(r.index, max);
         }
         break :b max;
     };
@@ -669,7 +669,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
 const max_regs = @intFromEnum(isa.Reg.max);
 
 fn getReg(self: *HbvmGen, n: ?*Func.Node) isa.Reg {
-    return @enumFromInt(self.ctx.allocs[n.?.id]);
+    return @enumFromInt(self.ctx.allocs[n.?.id].index);
 }
 
 fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) void {

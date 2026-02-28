@@ -31,6 +31,17 @@ pub fn RegMask(comptime Tag: type, comptime cap: usize) type {
         mask: Mask,
         tag: Tag,
 
+        pub const Reg = packed struct(u16) {
+            tag: Tag,
+            index: std.meta.Int(.unsigned, @bitSizeOf(u16) - @bitSizeOf(Tag)),
+
+            pub const none: Reg = @bitCast(@as(u16, std.math.maxInt(u16)));
+
+            pub fn isNone(self: Reg) bool {
+                return self == none;
+            }
+        };
+
         pub const bit_length = @bitSizeOf(Mask);
         pub const tag_ = Tag;
         pub const cap_ = cap;
@@ -98,12 +109,12 @@ pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
 }
 
-pub fn rallocIgnoreStats(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+pub fn rallocIgnoreStats(comptime Backend: type, func: *graph.Func(Backend)) []Backend.Set.Reg {
     var slf = Regalloc{};
     return slf.ralloc(Backend, func);
 }
 
-pub fn ralloc(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+pub fn ralloc(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)) []Backend.Set.Reg {
     func.gcm.cfg_built.assertLocked();
 
     //func.keep = true;
@@ -114,11 +125,12 @@ pub fn ralloc(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)
     } else unreachable;
 }
 
-pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)) Error![]u16 {
+pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)) Error![]Backend.Set.Reg {
     const Func = graph.Func(Backend);
     const Node = Func.Node;
     const CfgNode = Func.CfgNode;
     const Set = ReinferRegMask(Backend.Set);
+    const Reg = Set.Reg;
 
     const unresolved_reg = std.math.maxInt(u16);
     const no_def_sentinel = std.math.maxInt(u32);
@@ -510,8 +522,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     slf.max_instructions = @max(slf.max_instructions, instr_count);
 
     if (instr_count == 0) {
-        const allcs = func.arena.allocator().alloc(u16, func.node_count) catch unreachable;
-        @memset(allcs, no_reg_sentinel);
+        const allcs = func.arena.allocator().alloc(Reg, func.node_count) catch unreachable;
+        @memset(allcs, .none);
         return allcs;
     }
 
@@ -1266,8 +1278,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     }
 
     // first allocate into tmp since its near in memory
-    var alloc = func.arena.allocator().alloc(u16, func.node_count) catch unreachable;
-    @memset(alloc, no_reg_sentinel);
+    var alloc = func.arena.allocator().alloc(Reg, func.node_count) catch unreachable;
+    @memset(alloc, .none);
 
     for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |in| {
@@ -1279,7 +1291,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 utils.panic("{f}", .{instr});
             }
             const instr_lrg = lrg_table[instr.id].get(lrgs);
-            alloc[instr.id] = instr_lrg.reg;
+            alloc[instr.id] = .{ .index = @intCast(instr_lrg.reg), .tag = instr_lrg.mask.tag };
         }
     }
 
@@ -1320,7 +1332,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             for (bb.base.outputs()) |in| {
                 const instr = in.get();
                 if (LiveRange.isNoDef(instr, lrg_table)) continue;
-                const alc = alloc.items[instr.id];
+                const alc = alloc[instr.id];
                 const root_block = instr.cfg0();
                 std.debug.assert(root_block.base.kind != .Start);
                 const root_idx = root_block.base.posOfOutput(0, instr);
@@ -1344,8 +1356,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         for (block.base.outputs()[root_idx + 1 .. idx]) |o| {
                             const other = o.get();
                             if (LiveRange.isNoDef(other, lrg_table)) continue;
-                            if (alc == alloc.items[other.id]) {
-                                util.logCollision(func, block, instr, other, use, alloc.items);
+                            if (alc == alloc[other.id]) {
+                                util.logCollision(func, block, instr, other, use, alloc);
                             }
                         }
                         continue;
@@ -1353,8 +1365,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         for (block.base.outputs()[0..idx]) |o| {
                             const other = o.get();
                             if (LiveRange.isNoDef(other, lrg_table)) continue;
-                            if (alc == alloc.items[other.id]) {
-                                util.logCollision(func, block, instr, other, use, alloc.items);
+                            if (alc == alloc[other.id]) {
+                                util.logCollision(func, block, instr, other, use, alloc);
                             }
                         }
                         block = block.idom().idom();
@@ -1369,8 +1381,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                             const other = o.get();
                             if (other == use) continue;
                             if (LiveRange.isNoDef(other, lrg_table)) continue;
-                            if (alc == alloc.items[other.id]) {
-                                util.logCollision(func, block, instr, other, use, alloc.items);
+                            if (alc == alloc[other.id]) {
+                                util.logCollision(func, block, instr, other, use, alloc);
                             }
                         }
 

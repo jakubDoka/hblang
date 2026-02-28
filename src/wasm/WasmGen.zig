@@ -106,7 +106,7 @@ pub const ScopeRange = struct {
 pub const Ctx = struct {
     start_pos: usize,
     buf: std.Io.Writer.Allocating,
-    allocs: []u16 = undefined,
+    allocs: []Set.Reg = undefined,
     schedules: []u32,
     scope_stack: std.ArrayList(ScopeRange) = undefined,
     stack_layout: graph.StackLayout = undefined,
@@ -641,28 +641,15 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     var counters: LocalCounts = .initFill(0);
+    for (self.ctx.allocs) |a| {
+        if (a.isNone()) continue;
 
-    for (func.gcm.postorder) |block| {
-        for (block.base.outputs()) |out| {
-            const instr = out.get();
+        if (seen.getPtr(a.tag).isSet(a.index)) continue;
+        seen.getPtr(a.tag).set(a.index);
 
-            if (!instr.isDef()) {
-                continue;
-            }
-
-            const alloc = self.ctx.allocs[instr.id];
-
-            if (instr.kind == .Arg) continue;
-
-            const reg_tag = RegTag.fromDt(instr.data_type);
-
-            if (seen.getPtr(reg_tag).isSet(alloc)) continue;
-            seen.getPtr(reg_tag).set(alloc);
-
-            const cnt = counters.getPtr(reg_tag);
-            new_allocs.get(reg_tag)[alloc] = @intCast(cnt.*);
-            cnt.* += 1;
-        }
+        const cnt = counters.getPtr(a.tag);
+        new_allocs.get(a.tag)[a.index] = @intCast(cnt.*);
+        cnt.* += 1;
     }
 
     var local_group_count: usize = 0;
@@ -686,26 +673,15 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         cursor += vl;
     }
 
-    for (func.gcm.postorder) |block| {
-        for (block.base.outputs()) |out| {
-            const instr = out.get();
+    for (self.ctx.allocs) |*a| {
+        if (a.isNone()) continue;
 
-            if (!instr.isDef()) continue;
+        const base = counters.get(a.tag);
+        const param_count = param_counts.get(a.tag);
 
-            if (stacked.isSet(instr.id)) {
-                continue;
-            }
+        const prefix = if (a.index < param_count) 0 else params_len + base;
 
-            const dt = RegTag.fromDt(instr.data_type);
-
-            const base = counters.get(dt);
-            const param_count = param_counts.get(dt);
-            const alloc = self.ctx.allocs[instr.id];
-
-            const prefix = if (alloc < param_count) 0 else params_len + base;
-
-            self.ctx.allocs[instr.id] = @intCast(prefix + new_allocs.get(dt)[self.ctx.allocs[instr.id]]);
-        }
+        a.index = @intCast(prefix + new_allocs.get(a.tag)[a.index]);
     }
 
     const frame_alignment = 8;
@@ -1417,7 +1393,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 }
 
 pub fn regOf(self: *WasmGen, node: ?*Func.Node) u16 {
-    return self.ctx.allocs[node.?.id];
+    return self.ctx.allocs[node.?.id].index;
 }
 
 pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {

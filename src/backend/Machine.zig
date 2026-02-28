@@ -1229,7 +1229,7 @@ pub const OptOptions = struct {
             var total_waste: usize = 0;
             var regalloc = root.backend.Regalloc{};
             const reg_alloc_results = tmp.arena.alloc(
-                []u16,
+                []Backend.Set.Reg,
                 bout.inline_funcs.items.len,
             );
 
@@ -1268,7 +1268,7 @@ pub const OptOptions = struct {
                             .id = @intCast(i),
                             .linkage = sym.linkage,
                             .is_inline = false,
-                            .optimizations = .{ .allocs = reg_alloc_results[sym.inline_func] },
+                            .optimizations = .{ .allocs = @ptrCast(reg_alloc_results[sym.inline_func]) },
                             .builtins = opts.builtins,
                             .files = opts.files,
                             .uuid = sym.uuid,
@@ -1357,13 +1357,13 @@ pub const EmitOptions = struct {
             func: *graph.Func(Backend),
             backend: *Backend,
             id: u32,
-        ) ?[]const u16 {
+        ) ?[]const Backend.Set.Reg {
             switch (self) {
                 .opts => |pts| {
                     if (pts.shouldDefer(id, Backend, func, backend)) return null;
                     return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
                 },
-                .allocs => |pts| return pts,
+                .allocs => |pts| return @ptrCast(pts),
             }
         }
     };

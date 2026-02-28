@@ -28,7 +28,7 @@ lpe: dwarf.LineProgramEncoder = .{},
 ctx: *Ctx = undefined,
 
 pub const Ctx = struct {
-    allocs: []const u16,
+    allocs: []const Set.Reg,
     ret_count: usize,
     local_relocs: std.ArrayList(Reloc),
     schedules: []u16,
@@ -838,7 +838,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     std.debug.assert(func.signature.call_conv == .systemv); // TODO: allow others
 
-    const allocs = opts.optimizations.apply(X86_64Gen, func, self, opts.id) orelse {
+    const allocs: []const Set.Reg = opts.optimizations.apply(X86_64Gen, func, self, opts.id) orelse {
         //if (std.mem.indexOf(u8, name, "main") != null) {
         //    func.fmtScheduledLog();
         //}
@@ -870,8 +870,8 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     var used_regs = std.EnumSet(Reg){};
     for (allocs) |a| {
-        if (a == Regalloc.no_reg_sentinel) continue;
-        if (std.meta.intToEnum(Reg, a)) |enm| {
+        if (a.isNone()) continue;
+        if (std.meta.intToEnum(Reg, a.index)) |enm| {
             used_regs.insert(enm);
         } else |_| {
             unreachable;
@@ -879,16 +879,11 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     const local_size: i64 = func.computeStackLayout(0);
-
     var spill_slot_counts = std.EnumArray(RegTag, u32).initFill(0);
-    for (func.gcm.postorder) |c| {
-        for (c.base.outputs()) |inst| {
-            if (allocs[inst.get().id] != Regalloc.no_reg_sentinel) {
-                const tag = RegTag.fromDt(inst.get().data_type);
-                const slt = spill_slot_counts.getPtr(tag);
-                slt.* = @max(slt.*, allocs[inst.get().id] -| (16 - 1));
-            }
-        }
+    for (allocs) |a| {
+        if (a.isNone()) continue;
+        const slt = spill_slot_counts.getPtr(a.tag);
+        slt.* = @max(slt.*, a.index -| (16 - 1));
     }
 
     var spill_slot_size: u32 = 0;
@@ -2095,7 +2090,7 @@ pub fn setOff(op: graph.BinOp) u8 {
 }
 
 pub fn getReg(self: X86_64Gen, node: *FuncNode) Reg {
-    return @enumFromInt(self.ctx.allocs[node.id]);
+    return @enumFromInt(self.ctx.allocs[node.id].index);
 }
 
 // TODO: alignment
