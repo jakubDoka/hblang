@@ -272,7 +272,7 @@ pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set 
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    const entry = opts.linkage == .exported;
+    const entry = opts.linkage == .exported and opts.special != .memcpy;
 
     _ = try self.mach.out.startDefineFunc(self.gpa, opts.name, opts);
     defer {

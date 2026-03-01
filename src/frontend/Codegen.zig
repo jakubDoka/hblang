@@ -6457,6 +6457,9 @@ pub fn collectExports(types: *Types) !void {
     }
 
     if (types.handlers.get(.memcpy).asOpt()) |h| {
+        // NOTE: this is not ideal but we cant really detect its never reached
+        // as of right now and the backend just kills it otherwise
+        h.get(types).linkage = .exported;
         h.get(types).queue(.runtime, types);
     }
 

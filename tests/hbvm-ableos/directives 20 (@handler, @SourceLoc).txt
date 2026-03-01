@@ -1,2 +1,11 @@
 entry:
-      un
+         un
+memcpy:
+        jeq $3, $0, :0
+         ld $4, $2, 0, 1
+         st $4, $1, 0, 1
+     addi64 $3, $3, -1
+     addi64 $2, $2, 1
+     addi64 $1, $1, 1
+        jmp :memcpy
+0:       tx

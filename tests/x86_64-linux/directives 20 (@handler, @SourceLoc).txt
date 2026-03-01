@@ -1,2 +1,12 @@
 _start:
 	ud2
+memcpy:
+1:	cmp rdx, 0x00
+	jz :0
+	mov al, [rsi]
+	mov [rdi], al
+	dec rdx
+	inc rsi
+	inc rdi
+	jmp :1
+0:	ret

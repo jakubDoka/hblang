@@ -27,6 +27,8 @@ f64index: std.ArrayHashMapUnmanaged(f64, void, CtxF64, false) = .{},
 lpe: dwarf.LineProgramEncoder = .{},
 ctx: *Ctx = undefined,
 
+pub const i_know_the_api = {};
+
 pub const Ctx = struct {
     allocs: []const Set.Reg,
     ret_count: usize,
@@ -474,40 +476,6 @@ pub fn idealizeMach(self: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *
     if (Func.idealizeDead(self, func, node, worklist)) |n| return n;
 
     if (matcher.idealize(self, func, node, worklist)) |n| return n;
-
-    return null;
-}
-
-pub fn idealize(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-    if (node.kind == .MemCpy) {
-        const ctrl = node.inputs()[0].?;
-        var mem = node.inputs()[1].?;
-        const dst = node.inputs()[2].?;
-        const src = node.inputs()[3].?;
-        const len = node.inputs()[4].?;
-        if (len.kind == .CInt and len.extra(.CInt).value <= 16) {
-            const size = len.extra(.CInt).value;
-            var cursor: u64 = 0;
-            var copy_elem = graph.DataType.i64;
-
-            while (cursor != size) {
-                while (cursor + copy_elem.size() > size) : (copy_elem =
-                    @enumFromInt(@intFromEnum(copy_elem) - 1))
-                {}
-
-                const dst_off = func.addFieldOffset(node.sloc, dst, @intCast(cursor));
-                const src_off = func.addFieldOffset(node.sloc, src, @intCast(cursor));
-                const ld = func.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
-                worklist.add(ld);
-                mem = func.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
-                worklist.add(mem);
-
-                cursor += copy_elem.size();
-            }
-
-            return mem;
-        }
-    }
 
     return null;
 }
