@@ -1,87 +1,66 @@
 main:
          st $31, $254, -32, 32
-     addi64 $254, $254, -104
-       li64 $2, 3
-     addi64 $34, $254, 32
+     addi64 $254, $254, -80
+       li64 $3, 3
+     addi64 $2, $254, 0
+     addi64 $34, $254, 24
        li64 $1, 1
-         st $1, $254, 32, 8
+         st $1, $254, 24, 8
        li64 $1, 2
-         st $1, $254, 40, 8
-         st $2, $254, 48, 8
-     addi64 $1, $254, 0
-        bmc $34, $1, 24
+         st $1, $254, 32, 8
+         st $3, $254, 40, 8
+        bmc $34, $2, 24
          cp $2, $0
-        jal $31, $0, :generic structs 4.Array((((uint), uint), uint), uint).get
-         st $1, $254, 64, 8
+        jal $31, $0, :generic structs 4.Array[=uint, =3].structs[10].get
+         cp $32, $1
      addi64 $1, $254, 0
         bmc $34, $1, 24
        li64 $2, 1
-        jal $31, $0, :generic structs 4.Array((((uint), uint), uint), uint).get
-         st $1, $254, 24, 8
-         ld $33, $254, 64, 8
-         ld $32, $254, 24, 8
+        jal $31, $0, :generic structs 4.Array[=uint, =3].structs[10].get
+         cp $33, $1
      addi64 $1, $254, 0
         bmc $34, $1, 24
        li64 $2, 2
-        jal $31, $0, :generic structs 4.Array((((uint), uint), uint), uint).get
-         st $1, $254, 56, 8
-      add64 $2, $33, $32
-         ld $1, $254, 56, 8
+        jal $31, $0, :generic structs 4.Array[=uint, =3].structs[10].get
+      add64 $2, $32, $33
       add64 $1, $2, $1
-     addi64 $254, $254, 104
+     addi64 $254, $254, 80
          ld $31, $254, -32, 32
          tx
-generic structs 4.Array((((uint), uint), uint), uint).get:
+generic structs 4.Array[=uint, =3].structs[10].get:
          st $31, $254, -8, 8
-     addi64 $254, $254, -24
-     addi64 $4, $254, 24
-         st $2, $254, 0, 8
-         ld $3, $254, 0, 8
-        jne $3, $0, :1
-         ld $1, $4, 0, 8
+     addi64 $254, $254, -8
+        jne $2, $0, :1
+         ld $1, $254, 8, 8
         jmp :2
-1:       ld $1, $4, 8, 8
-         ld $2, $4, 16, 8
-     addi64 $3, $3, -1
-        jal $31, $0, :generic structs 4.Array(((uint), uint), uint).get
-         st $1, $254, 8, 8
-         ld $1, $254, 8, 8
-2:   addi64 $254, $254, 24
+1:   addi64 $3, $2, -1
+         ld $2, $254, 24, 8
+         ld $1, $254, 16, 8
+        jal $31, $0, :generic structs 4.Array[=uint, =2].structs[12].get
+2:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-generic structs 4.Array(((uint), uint), uint).get:
+generic structs 4.Array[=uint, =2].structs[12].get:
          st $31, $254, -8, 8
-     addi64 $254, $254, -40
-         st $1, $254, 0, 8
-         st $2, $254, 8, 8
-         st $3, $254, 16, 8
-         ld $1, $254, 16, 8
-        jne $1, $0, :4
-         ld $1, $254, 0, 8
+     addi64 $254, $254, -8
+         cp $4, $2
+        jne $3, $0, :4
         jmp :5
-4:   addi64 $2, $1, -1
-         ld $1, $254, 8, 8
-        jal $31, $0, :generic structs 4.Array((uint), uint).get
-         st $1, $254, 24, 8
-         ld $1, $254, 24, 8
-5:   addi64 $254, $254, 40
+4:   addi64 $2, $3, -1
+         cp $1, $4
+        jal $31, $0, :generic structs 4.Array[=uint, =1].structs[14].get
+5:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-generic structs 4.Array((uint), uint).get:
+generic structs 4.Array[=uint, =1].structs[14].get:
          st $31, $254, -8, 8
-     addi64 $254, $254, -32
-         st $1, $254, 0, 8
-         st $2, $254, 8, 8
-         ld $1, $254, 8, 8
-        jne $1, $0, :7
-         ld $1, $254, 0, 8
+     addi64 $254, $254, -8
+        jne $2, $0, :7
         jmp :8
-7:   addi64 $1, $1, -1
-        jal $31, $0, :generic structs 4.Array(uint).get
-         st $1, $254, 16, 8
-         ld $1, $254, 16, 8
-8:   addi64 $254, $254, 32
+7:   addi64 $1, $2, -1
+        jal $31, $0, :generic structs 4.Array[=uint, =0].structs[15].get
+8:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-generic structs 4.Array(uint).get:
+generic structs 4.Array[=uint, =0].structs[15].get:
          un

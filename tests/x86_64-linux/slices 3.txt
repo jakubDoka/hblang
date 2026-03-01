@@ -1,36 +1,28 @@
 slices 3.reverse:
-	sub rsp, 0x10
-	mov [rsp], rsi
-	mov [rsp+0x08], rdx
 	cmp rdx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnz :0
 	mov [rdi], rsi
+	mov [rdi+0x08], rdx
 	jmp :1
-0:	xor r8, r8
-	dec rdx
-3:	mov rax, [rsp]
-	cmp r8, rdx
+0:	xor r11, r11
+	mov rax, rdx
+	dec rax
+3:	cmp r11, rax
 	jnb :2
-	mov rcx, rax
-	add rcx, rdx
-	mov sil, [rcx]
-	add rax, r8
-	mov cl, [rax]
-	mov [rax], sil
-	mov rax, [rsp]
-	add rax, rdx
-	mov [rax], cl
-	dec rdx
-	inc r8
+	mov r10, rsi
+	add r10, r11
+	mov r9, rsi
+	add r9, rax
+	mov r8b, [r10]
+	mov cl, [r9]
+	mov [r10], cl
+	mov [r9], r8b
+	dec rax
+	inc r11
 	jmp :3
-2:	mov [rdi], rax
-	mov rdx, [rsp+0x08]
-1:	mov [rdi+0x08], rdx
-	add rsp, 0x10
-	ret
+2:	mov [rdi], rsi
+	mov [rdi+0x08], rdx
+1:	ret
 main:
 	sub rsp, 0x28
 	mov byte ptr [rsp+0x20], 0x01
@@ -38,7 +30,7 @@ main:
 	mov byte ptr [rsp+0x22], 0x03
 	xor rdx, rdx
 	lea rdi, [rsp]
-	mov rsi, 0x01
+	lea rsi, [rsp]
 	call :slices 3.reverse
 	lea rsi, [rsp+0x20]
 	lea rdi, [rsp+0x10]

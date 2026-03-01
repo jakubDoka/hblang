@@ -1,17 +1,12 @@
-arithmetic 9 (force imm ops).box(uint):
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	add rsp, 0x10
+arithmetic 9 (force imm ops).box[uint]:
+	mov rax, rdi
 	ret
 main:
 	sub rsp, 0x08
 	mov rdi, 0xFFFFFFFFFFFFFFFF
-	call :arithmetic 9 (force imm ops).box(uint)
-	mov [rsp], rax
-	mov rax, [rsp]
+	call :arithmetic 9 (force imm ops).box[uint]
 	xor rax, 0xFFFFFFFFFFFFFFFF
-	test rax, rax
+	cmp rax, 0x00
 	jz :0
 	mov rax, 0x01
 	jmp :1

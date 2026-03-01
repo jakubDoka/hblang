@@ -1,26 +1,15 @@
 exhausitve inlining 1.no_op:
 	ret
 exhausitve inlining 1.some_mem_ops:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	add rax, 0x08
-	mov [rsp], rax
-	add rsp, 0x10
+	mov rax, [rdi]
+	inc rax
+	mov [rdi], rax
 	ret
 exhausitve inlining 1.loop_fn:
-	sub rsp, 0x10
-	mov [rsp], rdi
-1:	mov rcx, [rsp]
-	cmp rcx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
-	add rsp, 0x10
+1:	cmp rdi, 0x00
+	jnz :0
 	ret
-0:	dec rcx
-	mov [rsp], rcx
+0:	dec rdi
 	jmp :1
 exhausitve inlining 1.unreachable:
 	ud2
@@ -32,9 +21,6 @@ main:
 	call :exhausitve inlining 1.some_mem_ops
 	mov rax, [rsp]
 	cmp rax, 0x01
-	setnz al
-	movzx rax, al
-	test al, al
 	jz :0
 	jmp :1
 0:	mov rdi, 0x0A

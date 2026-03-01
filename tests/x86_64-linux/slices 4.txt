@@ -1,53 +1,57 @@
-slices 4.equals:
-	cmp rsi, rcx
-	jz :0
-	xor rax, rax
-	jmp :1
-0:	cmp rdi, rdx
-	jnz :2
-	mov rax, 0x01
-1:	jmp :5
-2:	xor r8, r8
-6:	cmp r8, rsi
-	jnz :4
-	mov rax, 0x01
-	jmp :5
-4:	mov rcx, rdi
-	add rcx, r8
-	mov rax, rdx
-	add rax, r8
-	mov cl, [rcx]
-	mov al, [rax]
-	cmp cl, al
-	jz :5
-	xor rax, rax
-5:	ret
-5:	inc r8
-	jmp :6
 main:
-	sub rsp, 0x08
+	sub rsp, 0x10
 	mov byte ptr [rsp], 0x61
 	mov byte ptr [rsp+0x01], 0x62
 	mov byte ptr [rsp+0x02], 0x63
-	lea rdi, [0x0000000000000007]
-	lea rdx, [0x0000000000000007]
-	mov rsi, 0x03
-	mov rcx, 0x03
-	call :slices 4.equals
-	xor al, 0x01
-	test al, al
-	jz :0
-	jmp :1
-0:	lea rdi, [rsp]
-	lea rdx, [0x0000000000000007]
-	mov rsi, 0x03
-	mov rcx, 0x03
-	call :slices 4.equals
-	xor al, 0x01
-	test al, al
-	jz :2
-1:	mov rax, 0x01
+	lea rdx, [0x0000000000000007] ; main.abc
+	cmp rdx, rdx
+	jnz :0
+	mov rax, 0x01
 	jmp :3
-2:	xor rax, rax
-3:	add rsp, 0x08
+0:	xor rcx, rcx
+c:	cmp rcx, 0x03
+	jnz :2
+	mov rax, 0x01
+	jmp :3
+2:	lea rax, [0x0000000000000007] ; main.abc
+	add rax, rcx
+	mov al, [rax]
+	cmp al, al
+	jz :3
+	xor rax, rax
+3:	xor al, 0x01
+	test al, al
+	jz :4
+	mov rax, 0x01
+	jmp :11
+4:	lea rax, [rsp]
+	cmp rax, rdx
+	jnz :6
+	mov rax, 0x01
+	jmp :9
+6:	xor rax, rax
+b:	cmp rax, 0x03
+	jnz :8
+	mov rax, 0x01
+	jmp :9
+8:	lea rdx, [rsp]
+	add rdx, rax
+	lea rcx, [0x0000000000000007] ; main.abc
+	add rcx, rax
+	mov dl, [rdx]
+	mov cl, [rcx]
+	cmp dl, cl
+	jz :9
+	xor rax, rax
+9:	xor al, 0x01
+	test al, al
+	jz :10
+	mov rax, 0x01
+	jmp :11
+a:	xor rax, rax
+b:	add rsp, 0x10
 	ret
+9:	inc rax
+	jmp :11
+3:	inc rcx
+	jmp :12

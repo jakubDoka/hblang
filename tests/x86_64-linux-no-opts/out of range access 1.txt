@@ -1,78 +1,23 @@
 out of range access 1.bwa:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
 	xor rax, rax
-	add rsp, 0x10
 	ret
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x18
-	mov byte ptr [rsp], 0x00
-	mov byte ptr [rsp+0x02], 0x00
-	mov byte ptr [rsp+0x04], 0x00
-	mov byte ptr [rsp+0x06], 0x00
-	mov byte ptr [rsp+0x08], 0x00
-	mov byte ptr [rsp+0x0A], 0x00
-	mov byte ptr [rsp+0x0C], 0x00
-	mov al, [rsp]
-	movzx rdi, al
-	mov al, [rsp+0x02]
-	movzx r9, al
-	shl r9, 0x10
-	mov al, [rsp+0x05]
-	movzx r8, al
-	shl r8, 0x28
-	mov al, [rsp+0x08]
-	movzx rsi, al
-	mov al, [rsp+0x0A]
-	movzx r10, al
-	shl r10, 0x10
-	mov al, [rsp+0x0D]
-	movzx rdx, al
-	shl rdx, 0x28
-	mov al, [rsp+0x04]
-	movzx rcx, al
-	shl rcx, 0x20
-	mov al, [rsp+0x09]
-	movzx rax, al
-	shl rax, 0x08
+	mov byte ptr [rsp+0x01], 0x00
+	mov byte ptr [rsp+0x03], 0x00
+	mov byte ptr [rsp+0x05], 0x00
+	mov byte ptr [rsp+0x07], 0x00
+	mov byte ptr [rsp+0x09], 0x00
+	mov byte ptr [rsp+0x0B], 0x00
+	mov byte ptr [rsp+0x0D], 0x00
+	mov rdi, [rsp]
+	mov eax, [rsp+0x08]
+	mov esi, eax
+	mov ax, [rsp+0x0C]
+	movzx rax, ax
+	shl rax, 0x20
 	or rsi, rax
-	or rsi, r10
-	mov al, [rsp+0x06]
-	movzx rax, al
-	shl rax, 0x30
-	mov r10b, [rsp+0x0C]
-	movzx rbp, r10b
-	shl rbp, 0x20
-	mov r10b, [rsp+0x07]
-	movzx rbx, r10b
-	shl rbx, 0x38
-	mov r10b, [rsp+0x03]
-	movzx r11, r10b
-	shl r11, 0x18
-	mov r10b, [rsp+0x0B]
-	movzx r10, r10b
-	shl r10, 0x18
-	or rsi, r10
-	or rsi, rbp
-	mov r10b, [rsp+0x01]
-	movzx r10, r10b
-	shl r10, 0x08
-	or rdi, r10
-	or rdi, r9
-	or rdi, r11
-	or rdi, rcx
-	or rdi, r8
-	or rdi, rax
-	or rsi, rdx
-	or rdi, rbx
 	call :out of range access 1.bwa
-	mov [rsp+0x10], eax
-	mov eax, [rsp+0x10]
 	mov eax, eax
 	add rsp, 0x18
-	pop rbp
-	pop rbx
 	ret

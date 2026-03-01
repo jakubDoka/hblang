@@ -1,36 +1,21 @@
 main:
-	sub rsp, 0x20
-	mov qword ptr [rsp], 0x00
-	mov qword ptr [rsp+0x08], 0x00
-3:	mov rax, [rsp+0x08]
-	cmp rax, 0x0A
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+	xor rsi, rsi
+	xor rcx, rcx
+3:	cmp rsi, 0x0A
+	jnz :0
+	mov rax, rcx
 	jmp :1
-0:	mov qword ptr [rsp+0x10], 0x00
-5:	mov rdx, [rsp+0x08]
-	mov rcx, [rsp+0x10]
-	cmp rcx, 0x0A
-	setz al
-	movzx rax, al
-	test al, al
-	jz :2
-	inc rdx
-	mov [rsp+0x08], rdx
+0:	xor rax, rax
+5:	cmp rax, 0x0A
+	jnz :2
+	inc rsi
 	jmp :3
-2:	imul rdx, rcx
+2:	mov rdx, rsi
+	imul rdx, rax
 	cmp rdx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :4
-1:	mov rax, [rsp]
-	add rsp, 0x20
-	ret
-4:	add [rsp], rdx
-	mov rax, [rsp+0x10]
+	jnz :4
+	mov rax, rcx
+1:	ret
+4:	add rcx, rdx
 	inc rax
-	mov [rsp+0x10], rax
 	jmp :5

@@ -399,10 +399,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
 
     const opt_options = backend.Machine.OptOptions{
         .mode = opts.optimizations,
-        .error_collector = .{
-            .data = &types,
-            .collect_ = hb.frontend.Types.collectAnalError,
-        },
+        .error_collector = types.errorCollector(),
     };
 
     var root_tmp = utils.Arena.scrath(null);

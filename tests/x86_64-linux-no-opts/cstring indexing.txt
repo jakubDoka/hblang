@@ -1,73 +1,58 @@
 cstring indexing.slice_ioob:
 	ud2
 cstring indexing.cstr:
-	sub rsp, 0x10
-	mov [rsp], rsi
-	mov qword ptr [rsp+0x08], 0x00
-	xor rdx, rdx
-1:	mov rcx, [rsp]
-	mov rax, rcx
-	add rax, [rsp+0x08]
-	mov al, [rax]
-	cmp al, dl
+	sub rsp, 0x18
+	xor rax, rax
+1:	mov rcx, rsi
+	add rcx, rax
+	mov cl, [rcx]
+	test cl, cl
 	jz :0
-	add qword ptr [rsp+0x08], 0x01
+	inc rax
 	jmp :1
-0:	mov rax, [rsp+0x08]
-	mov [rdi], rcx
-	mov [rdi+0x08], rax
-	add rsp, 0x10
+0:	mov rdx, rax
+	mov rcx, rax
+	cmp rdx, rcx
+	jbe :2
+	mov dword ptr [rsp+0x10], 0x0A
+	mov dword ptr [rsp+0x14], 0x0D
+	mov rdi, rax
+	xor rsi, rsi
+	mov rdx, rax
+	call :cstring indexing.slice_ioob
+2:	mov [rdi+0x08], rax
+	mov [rdi], rsi
+	add rsp, 0x18
 	ret
 main:
 	push rbx
-	sub rsp, 0x80
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x28], rax
-	mov qword ptr [rsp+0x30], 0x03
-	lea rcx, [0x0000000000000007]
-	mov rax, [rsp+0x28]
+	push rbp
+	sub rsp, 0x38
+	lea rax, [0x0000000000000007] ; main.aa
 	mov [rsp+0x18], rax
-	mov [rsp+0x38], rcx
-	mov qword ptr [rsp+0x40], 0x03
-	mov rax, [rsp+0x38]
+	lea rax, [0x0000000000000007] ; main.bb
 	mov [rsp+0x20], rax
-	mov qword ptr [rsp+0x58], 0x00
-	mov rbx, 0x08
-2:	mov rcx, [rsp+0x58]
-	cmp rcx, 0x02
-	setb al
-	movzx rax, al
-	test al, al
-	jz :0
+	lea rbp, [rsp+0x18]
+	xor rbx, rbx
+2:	cmp rbx, 0x02
+	jnb :0
 	mov rax, 0x02
-	cmp rcx, rax
+	cmp rbx, rax
 	jb :1
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x60], rax
-	mov qword ptr [rsp+0x68], 0x10
-	mov rax, 0x1000000010
-	mov [rsp+0x70], rax
-	lea rsi, [rsp+0x60]
-	mov rdx, 0x18
-	lea rdi, [rsp]
-	mov rbx, [rsp+0x58]
-	call :memcpy
+	mov dword ptr [rsp+0x10], 0x12
+	mov dword ptr [rsp+0x14], 0x0F
 	mov rsi, rbx
 	mov rdx, rbx
 	mov rdi, 0x02
 	call :cstring indexing.slice_ioob
-1:	imul rcx, rbx
-	lea rax, [rsp+0x18]
-	add rax, rcx
+1:	lea rax, [rbp+rbx*8]
 	mov rsi, [rax]
-	lea rdi, [rsp+0x48]
+	lea rdi, [rsp+0x28]
 	call :cstring indexing.cstr
-	mov rax, [rsp+0x58]
-	inc rax
-	mov [rsp+0x58], rax
+	inc rbx
 	jmp :2
 0:	xor rax, rax
-	add rsp, 0x80
+	add rsp, 0x38
+	pop rbp
 	pop rbx
 	ret
-memcpy:

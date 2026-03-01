@@ -1,13 +1,11 @@
-zero sized structs 1.main.X.new:
+main.X.new:
 	ret
-zero sized structs 1.main.X.test:
+main.X.structs[10].test:
 	xor rax, rax
 	ret
 main:
 	sub rsp, 0x08
-	call :zero sized structs 1.main.X.new
-	call :zero sized structs 1.main.X.test
-	mov [rsp], rax
-	mov rax, [rsp]
+	call :main.X.new
+	call :main.X.structs[10].test
 	add rsp, 0x08
 	ret

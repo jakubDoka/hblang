@@ -1,12 +1,9 @@
 main:
-	mov rdx, 0x01
 	xor rax, rax
-1:	cmp rdx, 0x05
-	setb cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
-	add rax, rdx
-	inc rdx
+	mov rcx, 0x01
+1:	cmp rcx, 0x05
+	jnb :0
+	add rax, rcx
+	inc rcx
 	jmp :1
 0:	ret

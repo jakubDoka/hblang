@@ -1,0 +1,11 @@
+main:
+	mov cl, [0x0000000000000006] ; corrupt
+	test cl, cl
+	jz :0
+	jmp :1
+0:	xor rax, rax
+1:	test cl, cl
+	jz :3
+	mov rax, 0x01
+	jmp :3
+3:	ret

@@ -3,18 +3,12 @@ main:
 	mov qword ptr [rsp], 0x00
 3:	mov rax, [rsp]
 	cmp rax, 0x01
-	setb al
-	movzx rax, al
-	test al, al
-	jz :0
-2:	mov rcx, [rsp]
-	cmp rcx, 0x01
-	setb al
-	movzx rax, al
-	test al, al
-	jz :1
-	inc rcx
-	mov [rsp], rcx
+	jnb :0
+2:	mov rax, [rsp]
+	cmp rax, 0x01
+	jnb :1
+	inc rax
+	mov [rsp], rax
 	jmp :2
 1:	jmp :3
 0:	xor rax, rax

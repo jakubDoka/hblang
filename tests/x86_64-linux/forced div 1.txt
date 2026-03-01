@@ -1,17 +1,3 @@
-forced div 1.one:
-	mov rax, 0x01
-	ret
-forced div 1.two:
-	mov rax, 0x02
-	ret
 main:
-	push rbx
-	call :forced div 1.two
-	mov rbx, rax
-	call :forced div 1.one
-	mov rcx, rax
-	mov rax, rbx
-	xor rdx, rdx
-	div rcx
-	pop rbx
+	mov rax, 0x02
 	ret

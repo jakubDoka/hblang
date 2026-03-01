@@ -1,17 +1,13 @@
-functions 6 (comptime @Any).foo(.main):
+functions 6 (comptime @Any).foo[=main.funcs[1]]:
 	sub rsp, 0x08
-	call :functions 6 (comptime @Any).main
-	mov [rsp], rax
-	mov rax, [rsp]
+	call :main.funcs[1]
 	add rsp, 0x08
 	ret
-functions 6 (comptime @Any).main:
+main.funcs[1]:
 	xor rax, rax
 	ret
 main:
 	sub rsp, 0x08
-	call :functions 6 (comptime @Any).foo(.main)
-	mov [rsp], rax
-	mov rax, [rsp]
+	call :functions 6 (comptime @Any).foo[=main.funcs[1]]
 	add rsp, 0x08
 	ret

@@ -1,4 +1,4 @@
 main:
-	mov rax, [0x0000000000000007]
+	mov rax, [0x0000000000000007] ; more comptime eval 3.bbb
 	dec rax
 	ret

@@ -1,41 +1,27 @@
-function pointers 4.DynObj.new(^.Obj):
-	sub rsp, 0x10
-	mov [rsp], rsi
-	lea rcx, [0x0000000000000007]
-	mov rax, [rsp]
-	mov [rdi], rax
-	mov [rdi+0x08], rcx
-	add rsp, 0x10
+function pointers 4.DynObj.new[^.Obj]:
+	mov [rdi], rsi
+	lea rax, [0x0000000000000007] ; function pointers 4.Obj.func
+	mov [rdi+0x08], rax
 	ret
 function pointers 4.DynObj.func:
-	sub rsp, 0x18
-	mov [rsp], rdi
-	mov rax, [rsp]
-	mov rdi, [rax]
-	mov rax, [rax+0x08]
+	sub rsp, 0x08
+	mov rax, [rdi+0x08]
+	mov rdi, [rdi]
 	call rax
-	mov [rsp+0x08], al
-	mov al, [rsp+0x08]
-	add rsp, 0x18
+	add rsp, 0x08
 	ret
 function pointers 4.Obj.func:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	mov al, [rax]
+	mov al, [rdi]
 	inc al
-	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x18
 	mov byte ptr [rsp+0x10], 0xFF
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x10]
-	call :function pointers 4.DynObj.new(^.Obj)
+	call :function pointers 4.DynObj.new[^.Obj]
 	lea rdi, [rsp]
 	call :function pointers 4.DynObj.func
-	mov [rsp+0x11], al
-	mov al, [rsp+0x11]
 	movzx rax, al
 	add rsp, 0x18
 	ret

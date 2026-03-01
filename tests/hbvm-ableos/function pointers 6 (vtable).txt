@@ -1,20 +1,34 @@
+lra $2, $0, :
+       li64 $1, 0
+       li64 $5, 1
+1:       ld $3, $2, 0, 4
+      sxt32 $3, $3
+         ld $4, $2, 4, 4
+      sxt32 $4, $4
+      add64 $3, $3, $2
+      add64 $4, $4, $3
+         st $4, $3, 0, 8
+     addi64 $1, $1, 1
+     addi64 $2, $2, 8
+       jltu $1, $5, :1
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -40
-     addi64 $1, $254, 24
-        lra $3, $0, :function pointers 6 (vtable).Dyn2.b
-       li32 $2, 255
-         st $2, $254, 24, 4
+     addi64 $254, $254, -16
+        lra $3, $0, :function pointers 6 (vtable).vtable[=.Test, =.Dyn2].entries
+       li32 $1, 255
+         st $1, $254, 0, 4
+       li64 $2, 2
+        lra $1, $0, :function pointers 6 (vtable).vtable[=.Test, =.Dyn2].entries
+         st $1, $3, 0, 8
+         st $2, $3, 8, 8
         lra $2, $0, :function pointers 6 (vtable).Dyn2.a
-         st $2, $254, 0, 8
-         st $3, $254, 8, 8
-         st $1, $254, 16, 8
+     addi64 $1, $254, 0
        jala $31, $2, 0
-         ld $2, $254, 8, 8
-         ld $1, $254, 16, 8
+        lra $2, $0, :function pointers 6 (vtable).Dyn2.b
+     addi64 $1, $254, 0
        jala $31, $2, 0
       sxt32 $1, $1
-     addi64 $254, $254, 40
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
 function pointers 6 (vtable).Dyn2.b:

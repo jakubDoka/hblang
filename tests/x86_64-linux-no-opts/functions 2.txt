@@ -1,26 +1,19 @@
 one.add:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	inc rax
-	add rsp, 0x10
+	inc rdi
+	mov rax, rdi
 	ret
 two.add:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	add rax, 0x02
-	add rsp, 0x10
+	add rdi, 0x02
+	mov rax, rdi
 	ret
 main:
-	sub rsp, 0x18
+	push rbx
 	mov rdi, 0x0A
 	call :one.add
-	mov [rsp], rax
+	mov rbx, rax
 	mov rdi, 0x14
 	call :two.add
-	mov [rsp+0x08], rax
-	mov rax, [rsp]
-	add rax, [rsp+0x08]
-	add rsp, 0x18
+	add rbx, rax
+	mov rax, rbx
+	pop rbx
 	ret

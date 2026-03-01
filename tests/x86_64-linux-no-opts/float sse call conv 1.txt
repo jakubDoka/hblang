@@ -1,0 +1,20 @@
+float sse call conv 1.fun:
+	movsd xmm2, xmm0
+	movsd xmm1, xmm0
+	shufps xmm1, xmm1, 0x55
+	movss xmm0, xmm2
+	addss xmm0, xmm1
+	ret
+main:
+	sub rsp, 0x08
+	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	movss [rsp], xmm0
+	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	movss [rsp+0x04], xmm0
+	movsd xmm0, qword ptr [rsp]
+	call :float sse call conv 1.fun
+	movss xmm1, dword ptr [0x0000000000000008] ; f32s
+	subss xmm0, xmm1
+	cvttss2si rax, xmm0
+	add rsp, 0x08
+	ret

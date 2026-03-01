@@ -1,74 +1,65 @@
 deep dedup 4 (mutuali recursive).fib:
-	sub rsp, 0x18
-	mov [rsp], rdi
-	mov rdi, [rsp]
+	sub rsp, 0x08
 	cmp rdi, 0x02
-	setbe al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnbe :0
 	mov rax, 0x01
 	jmp :1
 0:	call :deep dedup 4 (mutuali recursive).fib_body
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x08]
-1:	add rsp, 0x18
+1:	add rsp, 0x08
 	ret
 deep dedup 4 (mutuali recursive).fib2:
-	sub rsp, 0x18
-	mov [rsp], rdi
-	mov rdi, [rsp]
+	sub rsp, 0x08
 	cmp rdi, 0x02
-	setbe al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnbe :0
 	mov rax, 0x01
 	jmp :1
 0:	call :deep dedup 4 (mutuali recursive).fib_body2
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x08]
-1:	add rsp, 0x18
-	ret
-deep dedup 4 (mutuali recursive).fib_body2:
-	sub rsp, 0x18
-	mov [rsp], rdi
-	mov rdi, [rsp]
-	dec rdi
-	call :deep dedup 4 (mutuali recursive).fib2
-	mov [rsp+0x08], rax
-	mov rdi, [rsp]
-	sub rdi, 0x02
-	call :deep dedup 4 (mutuali recursive).fib2
-	mov [rsp+0x10], rax
-	mov rax, [rsp+0x08]
-	add rax, [rsp+0x10]
-	add rsp, 0x18
+1:	add rsp, 0x08
 	ret
 deep dedup 4 (mutuali recursive).fib_body:
-	sub rsp, 0x18
-	mov [rsp], rdi
-	mov rdi, [rsp]
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	mov rbp, rdi
+	mov rdi, rbp
 	dec rdi
 	call :deep dedup 4 (mutuali recursive).fib
-	mov [rsp+0x08], rax
-	mov rdi, [rsp]
+	mov rbx, rax
+	mov rdi, rbp
 	sub rdi, 0x02
 	call :deep dedup 4 (mutuali recursive).fib
-	mov [rsp+0x10], rax
-	mov rax, [rsp+0x08]
-	add rax, [rsp+0x10]
-	add rsp, 0x18
+	add rbx, rax
+	mov rax, rbx
+	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret
+deep dedup 4 (mutuali recursive).fib_body2:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	mov rbp, rdi
+	mov rdi, rbp
+	dec rdi
+	call :deep dedup 4 (mutuali recursive).fib2
+	mov rbx, rax
+	mov rdi, rbp
+	sub rdi, 0x02
+	call :deep dedup 4 (mutuali recursive).fib2
+	add rbx, rax
+	mov rax, rbx
+	add rsp, 0x08
+	pop rbp
+	pop rbx
 	ret
 main:
-	sub rsp, 0x18
+	push rbx
 	mov rdi, 0x03
 	call :deep dedup 4 (mutuali recursive).fib
-	mov [rsp], rax
+	mov rbx, rax
 	mov rdi, 0x03
 	call :deep dedup 4 (mutuali recursive).fib2
-	mov [rsp+0x08], rax
-	mov rax, [rsp]
-	sub rax, [rsp+0x08]
-	add rsp, 0x18
+	sub rbx, rax
+	mov rax, rbx
+	pop rbx
 	ret

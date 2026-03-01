@@ -1,5 +1,5 @@
 main:
-	mov rax, [0x0000000000000007]
+	mov rax, [0x0000000000000007] ; nested globals 10.string_slice
 	mov rax, [rax]
 	mov al, [rax]
 	movzx rax, al

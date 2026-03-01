@@ -1,39 +1,7 @@
 main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -16
-        lra $32, $0, :regalloc crash 3.A
-3:       ld $1, $32, 0, 8
-        jne $1, $1, :1
+        lra $1, $0, :regalloc crash 3.A
+         ld $1, $1, 0, 8
+2:      jne $1, $1, :1
          cp $1, $0
-     addi64 $254, $254, 16
-         ld $31, $254, -16, 16
          tx
-1:       cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-         cp $1, $0
-        jal $31, $0, :regalloc crash 3.broken
-        jmp :3
-regalloc crash 3.broken:
-       jala $0, $31, 0
+1:      jmp :2

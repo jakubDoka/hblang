@@ -1,0 +1,20 @@
+main:
+	mov rsi, 0x100000000
+	lea rcx, [0x0000000000000007] ; main.y
+	mov eax, [0x0000000000000006] ; corrupt
+	mov [0x0000000000000007], rcx ; main.y
+	mov qword ptr [0x000000000000000B], 0x01 ; main.y
+	mov eax, eax
+	or rax, rsi
+	movsxd rax, eax
+	mov ecx, [0x0000000000000006] ; corrupt
+	mov ecx, ecx
+	or rcx, rsi
+	movsxd rdx, ecx
+	mov ecx, [0x0000000000000006] ; corrupt
+	mov ecx, ecx
+	or rcx, rsi
+	movsxd rcx, ecx
+	add rax, rcx
+	add rax, rdx
+	ret

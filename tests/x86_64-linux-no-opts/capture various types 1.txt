@@ -1,0 +1,11 @@
+capture various types 1.bar[=&0]:
+	ret
+capture various types 1.foo[=.yes]:
+	xor rax, rax
+	ret
+main:
+	sub rsp, 0x08
+	call :capture various types 1.bar[=&0]
+	call :capture various types 1.foo[=.yes]
+	add rsp, 0x08
+	ret

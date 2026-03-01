@@ -19,22 +19,14 @@ main:
 exhausitve inlining 1.no_op:
        jala $0, $31, 0
 exhausitve inlining 1.some_mem_ops:
-     addi64 $254, $254, -8
-         st $1, $254, 0, 8
-         ld $1, $254, 0, 8
-     addi64 $1, $1, 8
-         st $1, $254, 0, 8
-     addi64 $254, $254, 8
+         ld $2, $1, 0, 8
+     addi64 $2, $2, 1
+         st $2, $1, 0, 8
        jala $0, $31, 0
 exhausitve inlining 1.loop_fn:
-     addi64 $254, $254, -8
-         st $1, $254, 0, 8
-7:       ld $1, $254, 0, 8
         jne $1, $0, :6
-     addi64 $254, $254, 8
        jala $0, $31, 0
 6:   addi64 $1, $1, -1
-         st $1, $254, 0, 8
-        jmp :7
+        jmp :exhausitve inlining 1.loop_fn
 exhausitve inlining 1.unreachable:
          un

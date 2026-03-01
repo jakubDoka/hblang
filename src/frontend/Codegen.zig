@@ -11,6 +11,7 @@ const Loader = hb.frontend.DeclIndex.Loader;
 const Abi = hb.frontend.Abi;
 const Machine = hb.backend.Machine;
 const Vm = hb.hbvm.Vm;
+const Target = hb.backend.Machine.SupportedTarget;
 
 const print = (std.debug).print;
 const Codegen = @This();
@@ -6786,34 +6787,43 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     utils.Arena.tryInitScratch(1024 * 1024);
 
     var scratch = utils.Arena.init(1024 * 1024 * 64);
+
+    try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .debug, &scratch);
+    try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .release, &scratch);
+    try runTestForTarget(name, code, gpa, .@"x86_64-linux", .debug, &scratch);
+    try runTestForTarget(name, code, gpa, .@"x86_64-linux", .release, &scratch);
+}
+
+pub fn runTestForTarget(
+    name: []const u8,
+    code: []const u8,
+    gpa: std.mem.Allocator,
+    target: Target,
+    opts: Machine.OptOptions.Mode,
+    scratch: *utils.Arena,
+) !void {
     var writer = std.fs.File.stderr().writer(&.{});
     const wint = &writer.interface;
-    //var writer = std.Io.Writer.Discarding.init(&.{});
-    //const wint = &writer.writer;
 
-    errdefer {
-        std.fs.cwd().makePath(scratch.print("failed_tests_hbvm/{s}", .{name})) catch {};
-    }
-
-    const asts, var kl = try parseExample(&scratch, name, code, wint);
-
-    var target = hb.backend.Machine.SupportedTarget.@"hbvm-ableos";
-    target = hb.backend.Machine.SupportedTarget.@"x86_64-linux";
-    // target = hb.backend.Machine.SupportedTarget.@"wasm-freestanding";
-
+    const asts, var kl = try parseExample(scratch, name, code, wint);
     const exp = Expectations.init(asts[0].source);
 
-    const backend = target.toMachine(exp.should_error, &scratch, gpa);
+    var dw = std.Io.Writer.Discarding.init(&.{});
+    const dwint = &dw.writer;
+
+    if (exp.should_error) kl.loader.diagnostics = dwint;
+
+    const backend = target.toMachine(exp.should_error, scratch, gpa);
     defer backend.deinit();
 
-    var types = Types.init(asts, &kl.loader, @tagName(target), backend, scratch, gpa);
+    var types = Types.init(asts, &kl.loader, @tagName(target), backend, scratch.*, gpa);
     defer types.deinit();
 
     try collectExports(&types);
 
     const opt_mode = Machine.OptOptions{
-        .mode = .release,
-        .error_collector = .{ .data = &types, .collect_ = Types.collectAnalError },
+        .mode = opts,
+        .error_collector = types.errorCollector(),
     };
 
     emitReachable(&types, gpa, opt_mode);
@@ -6846,8 +6856,69 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
             //.output = &writer.interface,
         });
 
-    errdefer {
+    const diff_failed = print_test: {
+        var tmp = utils.Arena.scrath(scratch);
+        defer tmp.deinit();
+
+        const print_test_subdir = tmp.arena.print("{s}{s}", .{
+            @tagName(target), switch (opts) {
+                .debug => "-no-opts",
+                .release => "",
+            },
+        });
+
+        const current_path = try std.fs.path.join(
+            tmp.arena.allocator(),
+            &.{ "tests", print_test_subdir, tmp.arena.print("{s}.txt", .{name}) },
+        );
+
+        var allc = std.Io.Writer.Allocating.init(scratch.allocator());
+
         backend.disasm(.{
+            .name = name,
+            .bin = exe.items,
+            .out = &allc.writer,
+        });
+
+        const out = std.mem.trim(u8, allc.written(), "\n\t\r ");
+
+        const accept = std.process.hasEnvVarConstant("PT_UPDATE");
+        if (std.fs.cwd().statFile(current_path)) |_| {
+            const original = try std.fs.cwd()
+                .readFileAlloc(tmp.arena.allocator(), current_path, 1024 * 1024);
+
+            if (!std.mem.eql(u8, original, out) and !accept) {
+                try hb.diff.printDiff(
+                    original,
+                    out,
+                    wint,
+                    kl.loader.colors,
+                );
+                break :print_test true;
+            }
+        } else |e| {
+            std.debug.assert(e == error.FileNotFound);
+            if (!accept) {
+                backend.disasm(.{
+                    .name = name,
+                    .bin = exe.items,
+                    .out = wint,
+                    .colors = kl.loader.colors,
+                });
+                break :print_test true;
+            }
+        }
+
+        try std.fs.cwd().writeFile(.{
+            .data = out,
+            .sub_path = current_path,
+        });
+
+        break :print_test false;
+    };
+
+    errdefer {
+        if (!diff_failed) backend.disasm(.{
             .name = name,
             .bin = exe.items,
             .out = wint,
@@ -6855,6 +6926,7 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     }
 
     try exp.assert(res);
+    try std.testing.expect(!diff_failed);
 }
 
 pub const Expectations = struct {

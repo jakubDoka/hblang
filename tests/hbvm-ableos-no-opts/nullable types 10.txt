@@ -1,13 +1,22 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -16
+     addi64 $254, $254, -8
+         cp $1, $0
         jal $31, $0, :nullable types 10.x
-         st $1, $254, 0, 4
-         ld $1, $254, 0, 4
        andi $1, $1, 4294967295
-     addi64 $254, $254, 16
+     addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
 nullable types 10.x:
-         cp $1, $0
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       andi $1, $1, 255
+        jeq $1, $0, :1
+        jal $31, $0, :nullable types 10.y[void]
+        jmp :3
+1:       cp $1, $0
+3:   addi64 $254, $254, 8
+         ld $31, $254, -8, 8
        jala $0, $31, 0
+nullable types 10.y[void]:
+         un

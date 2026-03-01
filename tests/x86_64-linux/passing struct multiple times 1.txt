@@ -1,55 +1,20 @@
-passing struct multiple times 1.foo:
-	push rbx
-	push rbp
-	sub rsp, 0x28
-	lea rsi, [rsp+0x40]
-	mov [rsp+0x18], edi
-	mov al, [rsp+0x19]
-	movzx ecx, al
-	shl ecx, 0x08
-	mov al, [rsp+0x1A]
-	movzx ebp, al
-	shl ebp, 0x10
-	movzx ebx, dil
-	or ebx, ecx
-	mov rdx, 0x18
-	lea rdi, [rsp]
-	call :memcpy
-	or ebx, ebp
-	mov rdi, rbx
-	call :passing struct multiple times 1.bar
-	add rsp, 0x28
-	pop rbp
-	pop rbx
-	ret
-passing struct multiple times 1.bar:
+main:
 	sub rsp, 0x10
-	lea rax, [rsp+0x18]
-	mov [rsp], edi
-	mov rax, [rsp+0x18]
-	add rax, [rsp+0x20]
-	sub rax, [rsp+0x28]
-	mov cl, [rsp+0x02]
-	movzx rsi, cl
-	mov cl, [rsp+0x01]
-	movzx rdx, cl
-	movzx rcx, dil
+	mov byte ptr [rsp], 0x01
+	mov byte ptr [rsp+0x01], 0x02
+	mov byte ptr [rsp+0x02], 0x03
+	mov rdx, 0x30000
+	mov ax, [rsp]
+	movzx ecx, ax
+	or ecx, edx
+	mov rax, rcx
+	movzx rax, al
+	mov rdx, rcx
+	shr edx, 0x10
+	movzx rdx, dl
+	shr ecx, 0x08
+	movzx rcx, cl
 	add rax, rcx
-	add rax, rdx
-	sub rax, rsi
+	sub rax, rdx
 	add rsp, 0x10
 	ret
-main:
-	sub rsp, 0x38
-	mov qword ptr [rsp+0x18], 0x01
-	mov qword ptr [rsp+0x20], 0x02
-	mov qword ptr [rsp+0x28], 0x03
-	mov rdx, 0x18
-	lea rsi, [rsp+0x18]
-	lea rdi, [rsp]
-	call :memcpy
-	mov rdi, 0x30201
-	call :passing struct multiple times 1.foo
-	add rsp, 0x38
-	ret
-memcpy:

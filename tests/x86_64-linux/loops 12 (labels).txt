@@ -1,30 +1,21 @@
 main:
-	xor rdi, rdi
+	xor rsi, rsi
 	xor rcx, rcx
-3:	cmp rdi, 0x0A
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+3:	cmp rsi, 0x0A
+	jnz :0
 	mov rax, rcx
 	jmp :1
 0:	xor rax, rax
 5:	cmp rax, 0x0A
-	setz dl
-	movzx rdx, dl
-	test dl, dl
-	jz :2
-	inc rdi
+	jnz :2
+	inc rsi
 	jmp :3
-2:	mov rsi, rdi
-	imul rsi, rax
-	cmp rsi, 0x00
-	setz dl
-	movzx rdx, dl
-	test dl, dl
-	jz :4
+2:	mov rdx, rsi
+	imul rdx, rax
+	cmp rdx, 0x00
+	jnz :4
 	mov rax, rcx
 1:	ret
-4:	add rcx, rsi
+4:	add rcx, rdx
 	inc rax
 	jmp :5

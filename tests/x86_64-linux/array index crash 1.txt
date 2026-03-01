@@ -1,26 +1,18 @@
-array index crash 1.awa:
+main:
 	sub rsp, 0x10
-	mov rax, rdi
-	mov r8, 0x02
-	mov rdi, 0x0A
-	xor rsi, rsi
-1:	mov rcx, rax
-	cmp cl, sil
+	mov rdi, 0x02
+	mov rax, 0xFF
+	mov rsi, 0x0A
+	xor rdx, rdx
+1:	cmp al, dl
 	jbe :0
-	lea rdx, [rsp]
-	add rdx, r8
-	mov rcx, rax
-	mov [rdx], cl
+	lea rcx, [rsp]
+	add rcx, rdi
+	mov [rcx], al
+	dec rdi
 	movzx rax, al
-	div dil
-	dec r8
+	div sil
 	jmp :1
 0:	xor rax, rax
 	add rsp, 0x10
-	ret
-main:
-	sub rsp, 0x08
-	mov rdi, 0xFF
-	call :array index crash 1.awa
-	add rsp, 0x08
 	ret

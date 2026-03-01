@@ -1,6 +1,6 @@
 main:
 	mov rcx, 0x0A
-	mov eax, [0x0000000000000006]
+	mov eax, [0x0000000000000006] ; corrupt
 	cdq
 	idiv ecx
 	neg eax

@@ -1,11 +1,6 @@
 Foo.init:
-	sub rsp, 0x10
-	mov [rsp], rsi
-	mov rax, [rsp]
-	mov [rdi], rax
-	mov rax, [rsp]
-	mov [rdi+0x08], rax
-	add rsp, 0x10
+	mov [rdi], rsi
+	mov [rdi+0x08], rsi
 	ret
 main:
 	sub rsp, 0x18

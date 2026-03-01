@@ -1,25 +1,7 @@
 main:
-         st $31, $254, -8, 8
-     addi64 $254, $254, -8
-        lra $1, $0, :enums 4.map
-         cp $2, $0
-        jal $31, $0, :enums 4.NameMap(.Nm)([4]uint, [6]u8).get
+        lra $2, $0, :enums 4.map
+         ld $1, $2, 8, 8
+      add64 $1, $2, $1
          ld $1, $1, 0, 1
        andi $1, $1, 255
-     addi64 $254, $254, 8
-         ld $31, $254, -8, 8
          tx
-enums 4.NameMap(.Nm)([4]uint, [6]u8).get:
-       andi $4, $2, 255
-       li64 $3, 3
-     addi64 $2, $4, 1
-      slu64 $5, $2, $3
-      slu64 $3, $4, $3
-     addi64 $2, $1, 8
-      add64 $4, $2, $3
-      add64 $2, $2, $5
-         ld $3, $2, 0, 8
-         ld $2, $4, 0, 8
-      add64 $1, $1, $2
-      sub64 $2, $3, $2
-       jala $0, $31, 0

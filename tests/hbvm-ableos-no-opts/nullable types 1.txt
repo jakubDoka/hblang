@@ -1,42 +1,30 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -40
-       li64 $1, 10
-        jal $31, $0, :nullable types 1.mkval(uint)
-         st $1, $254, 0, 1
-         st $2, $254, 8, 8
-         ld $1, $254, 0, 1
+     addi64 $1, $254, 0
+       li64 $2, 10
+        jal $31, $0, :nullable types 1.mkval[=uint]
+         ld $1, $254, 8, 1
        andi $1, $1, 255
         jne $1, $0, :1
        li64 $1, 1
         jmp :2
-1:      jal $31, $0, :nullable types 1.mknull(uint)
-         st $1, $254, 16, 1
-         st $2, $254, 24, 8
-         ld $1, $254, 16, 1
+1:   addi64 $1, $254, 16
+        jal $31, $0, :nullable types 1.mknull[=uint]
+         ld $1, $254, 24, 1
        andi $1, $1, 255
         jeq $1, $0, :4
        li64 $1, 2
-2:      jmp :5
-4:       ld $1, $254, 8, 8
-5:   addi64 $254, $254, 40
+        jmp :2
+4:       ld $1, $254, 0, 8
+2:   addi64 $254, $254, 40
          ld $31, $254, -8, 8
          tx
-nullable types 1.mkval(uint):
-     addi64 $254, $254, -24
-         st $1, $254, 16, 8
-        li8 $1, 1
-         st $1, $254, 0, 1
-         ld $1, $254, 16, 8
-         st $1, $254, 8, 8
-         ld $1, $254, 0, 1
-         ld $2, $254, 8, 8
-     addi64 $254, $254, 24
+nullable types 1.mkval[=uint]:
+        li8 $3, 1
+         st $3, $1, 8, 1
+         st $2, $1, 0, 8
        jala $0, $31, 0
-nullable types 1.mknull(uint):
-     addi64 $254, $254, -16
-         st $0, $254, 0, 1
-         ld $1, $254, 0, 1
-         ld $2, $254, 8, 8
-     addi64 $254, $254, 16
+nullable types 1.mknull[=uint]:
+         st $0, $1, 8, 1
        jala $0, $31, 0

@@ -967,7 +967,7 @@ pub const Scope = extern struct {
             return;
         }
 
-        const nme = self.name(types);
+        var nme = self.name(types);
         if (self.parent.data().downcast(AnyScope)) |as| {
             try as.format_(types, writer);
             if (std.mem.eql(u8, nme, "return")) return;
@@ -977,6 +977,7 @@ pub const Scope = extern struct {
         if (nme.len == 0) {
             try writer.print(@TypeOf(id).data.field ++ "[{}]", .{@intFromEnum(id)});
         } else {
+            if (std.mem.endsWith(u8, nme, ".hb")) nme = nme[0 .. nme.len - ".hb".len];
             try writer.writeAll(nme);
         }
     }
@@ -1624,36 +1625,52 @@ pub const Func = struct {
             }
         }
 
-        try writer.writeByte('[');
-
-        var param_idx: usize = 0;
-        var arg_idx: usize = 0;
+        var has_args = false;
         var lex = Lexer.init(self.scope.file.get(types).source, self.pos);
-        var iter = lex.list(.@",", .@")");
+        {
+            var iter = lex.list(.@",", .@")");
 
-        while (iter.next()) : (arg_idx += 1) {
-            _, const cmptime = lex.eatIdent().?;
-            _ = lex.slit(.@":");
-            const is_any = lex.peekNext().kind != .@"@Any";
-            lex.skipExpr() catch unreachable;
-            if (is_any and !cmptime) continue;
-
-            if (arg_idx != 0) try writer.writeAll(", ");
-
-            const ty = self.args[arg_idx];
-
-            if (cmptime) {
-                try writer.writeByte('=');
-                try types.formatValue(ty, &self.params[param_idx].value, writer);
-                param_idx += 1;
-            } else {
-                try ty.format_(types, writer);
+            while (iter.next()) {
+                _, const cmptime = lex.eatIdent().?;
+                _ = lex.slit(.@":");
+                const is_any = lex.peekNext().kind == .@"@Any";
+                lex.skipExpr() catch unreachable;
+                has_args = has_args or is_any or cmptime;
             }
         }
 
-        _ = lex.slit(.@":");
+        if (has_args) {
+            try writer.writeByte('[');
 
-        try writer.writeByte(']');
+            var param_idx: usize = 0;
+            var arg_idx: usize = 0;
+            var olex = Lexer.init(self.scope.file.get(types).source, self.pos);
+            var iter = olex.list(.@",", .@")");
+
+            while (iter.next()) : (arg_idx += 1) {
+                _, const cmptime = olex.eatIdent().?;
+                _ = olex.slit(.@":");
+                const is_any = olex.peekNext().kind == .@"@Any";
+                olex.skipExpr() catch unreachable;
+                if (!is_any and !cmptime) continue;
+
+                if (arg_idx != 0) try writer.writeAll(", ");
+
+                const ty = self.args[arg_idx];
+
+                if (cmptime) {
+                    try writer.writeByte('=');
+                    try types.formatValue(ty, &self.params[param_idx].value, writer);
+                    param_idx += 1;
+                } else {
+                    try ty.format_(types, writer);
+                }
+            }
+
+            try writer.writeByte(']');
+        }
+
+        _ = lex.slit(.@":");
 
         if (lex.peekNext().kind == .@"@Any") {
             try writer.writeByte(':');
@@ -2403,4 +2420,8 @@ pub fn loadVmSlice(self: *Types, comptime T: type, slot: *[16]u8, scratch: *util
     @memcpy(aligned_args, args);
 
     return aligned_args;
+}
+
+pub fn errorCollector(self: *Types) Machine.OptOptions.ErrorCollector {
+    return .{ .data = self, .collect_ = Types.collectAnalError };
 }

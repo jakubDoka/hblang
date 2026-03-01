@@ -1,11 +1,11 @@
-loops 2.square:
+main:
 	xor rsi, rsi
 	xor rax, rax
-2:	cmp rsi, rdi
+2:	cmp rsi, 0x03
 	jnz :0
 	ret
 0:	xor rcx, rcx
-3:	cmp rcx, rdi
+3:	cmp rcx, 0x03
 	jnz :1
 	inc rsi
 	jmp :2
@@ -14,9 +14,3 @@ loops 2.square:
 	add rax, rdx
 	inc rcx
 	jmp :3
-main:
-	sub rsp, 0x08
-	mov rdi, 0x03
-	call :loops 2.square
-	add rsp, 0x08
-	ret

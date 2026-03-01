@@ -1,15 +1,3 @@
-literals 2.hex:
-	mov rax, 0x2D
-	ret
 main:
-	push rbx
-	call :literals 2.hex
-	mov rbx, rax
-	call :literals 2.hex
-	cmp rbx, rax
-	jz :0
-	mov rax, 0x01
-	jmp :1
-0:	xor rax, rax
-1:	pop rbx
+	xor rax, rax
 	ret

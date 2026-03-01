@@ -1,35 +1,19 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -32
-       li64 $1, 1
-        jal $31, $0, :generic structs 1.nvec(uint)
-         st $1, $254, 0, 8
-         st $2, $254, 8, 8
+     addi64 $254, $254, -24
+     addi64 $1, $254, 0
+       li64 $2, 1
+        jal $31, $0, :generic structs 1.nvec[=uint]
          ld $1, $254, 0, 8
          ld $2, $254, 8, 8
-        jal $31, $0, :generic structs 1.Vec(uint).sub
-         st $1, $254, 16, 8
-         ld $1, $254, 16, 8
-     addi64 $254, $254, 32
+        jal $31, $0, :generic structs 1.Vec[=uint].sub
+     addi64 $254, $254, 24
          ld $31, $254, -8, 8
          tx
-generic structs 1.nvec(uint):
-     addi64 $254, $254, -24
-         st $1, $254, 16, 8
-         ld $1, $254, 16, 8
-         st $1, $254, 0, 8
-         ld $1, $254, 16, 8
-         st $1, $254, 8, 8
-         ld $1, $254, 0, 8
-         ld $2, $254, 8, 8
-     addi64 $254, $254, 24
+generic structs 1.nvec[=uint]:
+         st $2, $1, 0, 8
+         st $2, $1, 8, 8
        jala $0, $31, 0
-generic structs 1.Vec(uint).sub:
-     addi64 $254, $254, -16
-         st $1, $254, 0, 8
-         st $2, $254, 8, 8
-         ld $2, $254, 0, 8
-         ld $1, $254, 8, 8
-      sub64 $1, $2, $1
-     addi64 $254, $254, 16
+generic structs 1.Vec[=uint].sub:
+      sub64 $1, $1, $2
        jala $0, $31, 0

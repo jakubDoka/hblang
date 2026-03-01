@@ -1,40 +1,17 @@
-struct capture eca mismatch 1:1:70: can not access the identifier
-cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
-                                                                     ^
-struct capture eca mismatch 1:1:11: the idnet is declared here
-cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
-          ^
-struct capture eca mismatch 1:1:85: can not access the identifier
-cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
-                                                                                    ^
-struct capture eca mismatch 1:1:21: the idnet is declared here
-cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
-                    ^
-struct capture eca mismatch 1.cp(0, 1):
+struct capture eca mismatch 1.cp[=1, =0]:
 	sub rsp, 0x10
-	mov al, [0x0000000000000006]
-	mov [rsp], al
-	mov al, [0x0000000000000006]
-	mov [rsp+0x01], al
-	mov al, [0x0000000000000006]
-	mov [rsp+0x02], al
-	mov al, [rsp]
-	movzx eax, al
-	mov cl, [rsp+0x02]
-	movzx edx, cl
-	shl edx, 0x10
-	mov cl, [rsp+0x01]
-	movzx ecx, cl
-	shl ecx, 0x08
+	mov byte ptr [rsp], 0x00
+	mov byte ptr [rsp+0x01], 0x01
+	mov byte ptr [rsp+0x02], 0x00
+	xor rcx, rcx
+	mov ax, [rsp]
+	movzx eax, ax
 	or eax, ecx
-	or eax, edx
 	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x08
-	call :struct capture eca mismatch 1.cp(0, 1)
-	mov [rsp], eax
-	mov al, [rsp]
+	call :struct capture eca mismatch 1.cp[=1, =0]
 	movzx rax, al
 	add rsp, 0x08
 	ret

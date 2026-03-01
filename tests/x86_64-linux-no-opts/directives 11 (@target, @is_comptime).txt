@@ -1,4 +1,4 @@
 main:
-	mov al, [0x0000000000000006]
+	mov al, [0x0000000000000006] ; corrupt
 	movzx rax, al
 	ret

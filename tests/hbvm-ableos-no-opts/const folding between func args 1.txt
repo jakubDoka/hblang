@@ -1,0 +1,20 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li64 $1, 1
+        jal $31, $0, :const folding between func args 1.bar
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+const folding between func args 1.bar:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+     addi64 $1, $1, 1
+         cp $2, $0
+        jal $31, $0, :const folding between func args 1.foo
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+const folding between func args 1.foo:
+      add64 $1, $1, $2
+       jala $0, $31, 0

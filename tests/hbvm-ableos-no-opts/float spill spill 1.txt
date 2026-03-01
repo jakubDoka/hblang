@@ -1,0 +1,31 @@
+main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+         cp $1, $0
+        jal $31, $0, :float spill spill 1.opaque_float
+         cp $32, $1
+       li32 $1, 1065353216
+        jal $31, $0, :float spill spill 1.opaque_float
+      fti32 $1, $32, 0
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+float spill spill 1.opaque_float:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+         cp $32, $1
+        jal $31, $0, :float spill spill 1.other_ff
+         cp $1, $32
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+       jala $0, $31, 0
+float spill spill 1.other_ff:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li32 $1, 1066192077
+        jal $31, $0, :float spill spill 1.other_f
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+float spill spill 1.other_f:
+       jala $0, $31, 0

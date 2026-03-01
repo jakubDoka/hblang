@@ -1,39 +1,14 @@
-mem2reg crash 1.insert:
-	push rbx
-	push rbp
-	sub rsp, 0x08
-	mov rbp, rdi
-	mov rbx, rsi
-	xor rcx, rcx
-	mov rax, rbp
-	cmp rax, rcx
-	jnz :1
-	call :mem2reg crash 1.bar
-	jmp :1
-1:	xor rcx, rcx
-2:	xor rax, rax
-4:	cmp rax, 0x08
-	setnb dl
-	movzx rdx, dl
-	test dl, dl
-	jz :1
-	inc rcx
-	jmp :2
-1:	cmp rax, rbx
-	jnz :3
-	mov rax, rbp
-	add rsp, 0x08
-	pop rbp
-	pop rbx
-	ret
-3:	inc rax
-	jmp :4
-mem2reg crash 1.bar:
-	ret
 main:
-	sub rsp, 0x08
-	xor rdi, rdi
-	mov rsi, 0x01
-	call :mem2reg crash 1.insert
-	add rsp, 0x08
+	xor rax, rax
+	mov rsi, 0x08
+	mov rdx, rax
+1:	xor rcx, rcx
+3:	cmp rcx, rsi
+	jb :0
+	inc rdx
+	jmp :1
+0:	cmp rcx, 0x01
+	jnz :2
 	ret
+2:	inc rcx
+	jmp :3

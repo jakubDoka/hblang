@@ -1,38 +1,25 @@
-carry over call float op 1.opaque(f32):
-	sub rsp, 0x10
-	movss [rsp], xmm0
-	movss xmm0, dword ptr [rsp]
-	add rsp, 0x10
+carry over call float op 1.opaque[f32]:
 	ret
-carry over call float op 1.opaque(uint):
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	add rsp, 0x10
+carry over call float op 1.opaque[uint]:
+	mov rax, rdi
 	ret
 main:
-	sub rsp, 0x28
-	movss xmm0, dword ptr [0x0000000000000008]
-	call :carry over call float op 1.opaque(f32)
-	movss [rsp+0x0C], xmm0
-	movss xmm0, dword ptr [rsp+0x0C]
-	movss [rsp+0x08], xmm0
-	movss xmm0, dword ptr [0x0000000000000008]
-	call :carry over call float op 1.opaque(f32)
-	movss [rsp+0x14], xmm0
-	movss xmm0, dword ptr [rsp+0x14]
-	movss [rsp+0x10], xmm0
+	sub rsp, 0x08
+	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	call :carry over call float op 1.opaque[f32]
+	movss [rsp+0x04], xmm0
+	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	call :carry over call float op 1.opaque[f32]
+	movss [rsp], xmm0
 	xor rdi, rdi
-	call :carry over call float op 1.opaque(uint)
-	mov [rsp], rax
-	movss xmm1, dword ptr [rsp+0x08]
-	movss xmm0, dword ptr [rsp+0x10]
+	call :carry over call float op 1.opaque[uint]
+	movss xmm1, dword ptr [rsp+0x04]
+	movss xmm0, dword ptr [rsp]
 	addss xmm1, xmm0
-	movss [rsp+0x18], xmm1
-	movss xmm0, dword ptr [rsp+0x18]
-	call :carry over call float op 1.opaque(f32)
-	movss [rsp+0x1C], xmm0
-	movss xmm0, dword ptr [rsp+0x18]
+	movss [rsp], xmm1
+	movss xmm0, dword ptr [rsp]
+	call :carry over call float op 1.opaque[f32]
+	movss xmm0, dword ptr [rsp]
 	cvttss2si rax, xmm0
-	add rsp, 0x28
+	add rsp, 0x08
 	ret

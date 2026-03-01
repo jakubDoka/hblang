@@ -1,51 +1,28 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -32
-        li8 $1, 1
-         st $1, $254, 8, 1
-     addi64 $2, $254, 0
-     addi64 $1, $254, 8
-         st $0, $254, 12, 4
-        bmc $1, $2, 8
-         ld $1, $254, 0, 1
-         ld $2, $254, 4, 4
-        jal $31, $0, :mixing @Any and comptime args 1.bind(.main.a, ?i32)
-         st $1, $254, 16, 1
-         st $2, $254, 20, 4
+     addi64 $254, $254, -8
+       li64 $1, 4294967296
+        jal $31, $0, :mixing @Any and comptime args 1.bind[?i32, =main.a]
          cp $1, $0
-     addi64 $254, $254, 32
+     addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-mixing @Any and comptime args 1.bind(.main.a, ?i32):
+mixing @Any and comptime args 1.bind[?i32, =main.a]:
          st $31, $254, -8, 8
-     addi64 $254, $254, -32
-         st $1, $254, 0, 1
-         st $2, $254, 4, 4
-         ld $1, $254, 0, 1
-       andi $1, $1, 255
-        jeq $1, $0, :1
-         ld $1, $254, 4, 4
-        jal $31, $0, :mixing @Any and comptime args 1.main.a
-         st $1, $254, 8, 1
-         st $2, $254, 12, 4
-         ld $1, $254, 8, 1
-         ld $2, $254, 12, 4
+     addi64 $254, $254, -8
+       li64 $2, 32
+      sru64 $2, $1, $2
+       andi $2, $2, 255
+        jeq $2, $0, :1
+        jal $31, $0, :main.a
         jmp :3
-1:       st $0, $254, 16, 1
-         ld $2, $254, 20, 4
-         ld $1, $254, 16, 1
-3:   addi64 $254, $254, 32
+1:       cp $1, $0
+3:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-mixing @Any and comptime args 1.main.a:
-     addi64 $254, $254, -16
-         st $1, $254, 8, 4
-        li8 $2, 1
-         ld $1, $254, 8, 4
-         st $2, $254, 0, 1
+main.a:
      addi32 $1, $1, 5
-         st $1, $254, 4, 4
-         ld $1, $254, 0, 1
-         ld $2, $254, 4, 4
-     addi64 $254, $254, 16
+       andi $1, $1, 4294967295
+      slu64 $1, $1, $0
+        ori $1, $1, 4294967296
        jala $0, $31, 0

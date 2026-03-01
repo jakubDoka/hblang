@@ -8,10 +8,7 @@ main:
 	movsxd rbp, eax
 	xor rbx, rbx
 1:	cmp rbx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnz :0
 	xor rax, rax
 	add rsp, 0x18
 	pop rbp

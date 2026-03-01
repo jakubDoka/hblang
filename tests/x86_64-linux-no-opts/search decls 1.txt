@@ -1,0 +1,42 @@
+search decls 1.declares[=.A, =null, =i32, =null]:
+	mov eax, [0x0000000000000006] ; corrupt
+	mov eax, eax
+	shl rax, 0x00
+	mov rcx, 0x100000000
+	or rax, rcx
+	ret
+search decls 1.declares[=.A, ="y", =i32, =null]:
+	mov eax, [0x0000000000000006] ; corrupt
+	mov eax, eax
+	shl rax, 0x00
+	mov rcx, 0x100000000
+	or rax, rcx
+	ret
+search decls 1.declares[=.A, =null, =i32, =3]:
+	mov eax, [0x0000000000000006] ; corrupt
+	mov eax, eax
+	shl rax, 0x00
+	mov rcx, 0x100000000
+	or rax, rcx
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	call :search decls 1.declares[=.A, =null, =i32, =null]
+	mov rbp, rax
+	lea rax, [0x0000000000000007] ; main.y
+	mov [0x0000000000000007], rax ; main.y
+	mov qword ptr [0x000000000000000B], 0x01 ; main.y
+	call :search decls 1.declares[=.A, ="y", =i32, =null]
+	mov rbx, rax
+	call :search decls 1.declares[=.A, =null, =i32, =3]
+	movsxd rdx, eax
+	movsxd rax, ebp
+	movsxd rcx, ebx
+	add rax, rcx
+	add rax, rdx
+	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret

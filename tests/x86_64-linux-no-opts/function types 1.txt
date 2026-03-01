@@ -1,22 +1,15 @@
-function types 1.main.take_fun(.fun):
+main.take_fun[=main.fun]:
 	sub rsp, 0x08
 	mov rdi, 0x0A
-	call :function types 1.main.fun
-	mov [rsp], rax
-	mov rax, [rsp]
+	call :main.fun
 	add rsp, 0x08
 	ret
-function types 1.main.fun:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	inc rax
-	add rsp, 0x10
+main.fun:
+	inc rdi
+	mov rax, rdi
 	ret
 main:
 	sub rsp, 0x08
-	call :function types 1.main.take_fun(.fun)
-	mov [rsp], rax
-	mov rax, [rsp]
+	call :main.take_fun[=main.fun]
 	add rsp, 0x08
 	ret

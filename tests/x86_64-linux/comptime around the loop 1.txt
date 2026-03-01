@@ -2,16 +2,10 @@ main:
 	xor rax, rax
 	xor rdx, rdx
 3:	cmp rax, 0x0A
-	setb cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
+	jnb :0
 	xor rcx, rcx
 2:	cmp rcx, 0x0A
-	setb sil
-	movzx rsi, sil
-	test sil, sil
-	jz :1
+	jnb :1
 	mov rsi, rax
 	add rsi, rcx
 	add rdx, rsi

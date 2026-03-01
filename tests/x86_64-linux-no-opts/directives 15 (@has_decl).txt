@@ -1,3 +1,3 @@
 main:
-	mov rax, [0x0000000000000007]
+	mov rax, [0x0000000000000007] ; directives 15 (@has_decl).scp.foo
 	ret

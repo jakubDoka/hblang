@@ -1,13 +1,13 @@
-comptime 5 (integers).main.func(1):
+main.func:
 	mov rax, 0x01
 	ret
 main:
 	sub rsp, 0x08
-	call :comptime 5 (integers).main.func(1)
-	mov [rsp], rax
-	mov rax, [0x0000000000000007]
-	sub rax, [rsp]
-	mov rcx, [0x0000000000000007]
+	call :main.func
+	mov rcx, rax
+	mov rax, [0x0000000000000007] ; main.Ty.global_value
+	sub rax, rcx
+	mov rcx, [0x0000000000000007] ; main.param[=1].structs[10].global_value
 	add rax, rcx
 	add rsp, 0x08
 	ret

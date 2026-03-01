@@ -1,18 +1,18 @@
-false positive in cycle detection.main.Wrap(.Wrapper)((.A)).test:
+main.Wrap[=main.Wrap[=main.A]].test:
 	sub rsp, 0x08
-	call :false positive in cycle detection.main.Wrap(.Wrapper)(.A).test
+	call :main.Wrap[=main.A].test
 	add rsp, 0x08
 	ret
-false positive in cycle detection.main.Wrap(.Wrapper)(.A).test:
+main.Wrap[=main.A].test:
 	sub rsp, 0x08
-	call :false positive in cycle detection.main.A.test
+	call :main.A.test
 	add rsp, 0x08
 	ret
-false positive in cycle detection.main.A.test:
+main.A.test:
 	ret
 main:
 	sub rsp, 0x08
-	call :false positive in cycle detection.main.Wrap(.Wrapper)((.A)).test
+	call :main.Wrap[=main.Wrap[=main.A]].test
 	xor rax, rax
 	add rsp, 0x08
 	ret

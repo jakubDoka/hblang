@@ -1,37 +1,13 @@
-nested options 1.defc:
-	sub rsp, 0x08
-	lea rdi, [rsp]
-	mov rsi, 0x03
-	call :nested options 1.reset
-	call :nested options 1.defb
-	mov [rsp+0x04], eax
-	mov cl, [rsp+0x05]
-	movzx edx, cl
-	shl edx, 0x08
-	mov cl, [rsp+0x06]
-	movzx ecx, cl
-	shl ecx, 0x10
-	movzx eax, al
-	or eax, edx
-	or eax, ecx
-	add rsp, 0x08
-	ret
-nested options 1.defb:
+main:
+	sub rsp, 0x10
 	xor rax, rax
-	ret
-nested options 1.reset:
-	xor rcx, rcx
-1:	cmp rcx, rsi
+	mov rcx, rax
+1:	cmp rcx, 0x03
 	jnb :0
-	mov rax, rdi
-	add rax, rcx
-	mov byte ptr [rax], 0xFF
+	lea rdx, [rsp]
+	add rdx, rcx
+	mov byte ptr [rdx], 0xFF
 	inc rcx
 	jmp :1
-0:	ret
-main:
-	sub rsp, 0x08
-	call :nested options 1.defc
-	movzx rax, al
-	add rsp, 0x08
+0:	add rsp, 0x10
 	ret

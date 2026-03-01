@@ -1,16 +1,9 @@
 main:
-         st $31, $254, -8, 8
-     addi64 $254, $254, -8
-        jal $31, $0, :null check misshap 1.alloc
-        jeq $1, $0, :1
-        li8 $2, 1
-         st $2, $1, 0, 1
+        lra $2, $0, :null check misshap 1.glb
+        jeq $2, $0, :1
+        li8 $1, 1
+         st $1, $2, 0, 1
          cp $1, $0
         jmp :2
 1:     li64 $1, 1
-2:   addi64 $254, $254, 8
-         ld $31, $254, -8, 8
-         tx
-null check misshap 1.alloc:
-        lra $1, $0, :null check misshap 1.glb
-       jala $0, $31, 0
+2:       tx

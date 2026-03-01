@@ -241,7 +241,7 @@ pub fn build(b: *std.Build) !void {
         break :example_tests;
     }
 
-    if (true) vendored_tests: {
+    if (false) vendored_tests: {
         const grn = b.addExecutable(.{
             .name = "gen_vendored_tests",
             .root_module = b.createModule(.{

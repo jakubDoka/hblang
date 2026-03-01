@@ -1,14 +1,9 @@
-null check misshap 1.alloc:
-	lea rax, [0x0000000000000007]
-	ret
 main:
-	sub rsp, 0x08
-	call :null check misshap 1.alloc
-	test rax, rax
+	lea rax, [0x0000000000000007] ; null check misshap 1.glb
+	cmp rax, 0x00
 	jz :0
-	mov byte ptr [rax], 0x01
+	mov byte ptr [0x0000000000000008], 0x01 ; null check misshap 1.glb
 	xor rax, rax
 	jmp :1
 0:	mov rax, 0x01
-1:	add rsp, 0x08
-	ret
+1:	ret

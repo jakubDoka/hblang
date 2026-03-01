@@ -1,17 +1,11 @@
-memset peephole 1.memset:
-	mov rax, rdx
-	mov rcx, rdi
-	mov rdi, rsi
+main:
+	sub rsp, 0x10
+	lea rdi, [rsp]
+	xor rax, rax
+	mov rcx, 0x08
 	cld
 	rep stosb
-	ret
-main:
-	sub rsp, 0x08
-	mov rdi, 0x08
-	lea rsi, [rsp]
-	xor rdx, rdx
-	call :memset peephole 1.memset
 	mov al, [rsp]
 	movzx rax, al
-	add rsp, 0x08
+	add rsp, 0x10
 	ret

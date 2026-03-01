@@ -1,0 +1,15 @@
+main:
+	sub rsp, 0x10
+	mov al, [0x0000000000000006] ; corrupt
+	test al, al
+	jz :0
+	jmp :1
+0:	mov qword ptr [rsp], 0x00
+1:	mov al, [0x0000000000000006] ; corrupt
+	test al, al
+	jz :2
+	mov rax, 0x01
+	jmp :3
+2:	mov rax, [rsp]
+3:	add rsp, 0x10
+	ret

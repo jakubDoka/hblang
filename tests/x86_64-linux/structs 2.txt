@@ -1,39 +1,26 @@
-structs 2.swap:
-	push rbx
-	push rbp
-	sub rsp, 0x20
-	mov rbp, rdi
-	mov rbx, rsi
-	mov rsi, rbp
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	call :memcpy
-	mov rdi, rbp
-	mov rsi, rbx
-	mov rdx, 0x18
-	call :memcpy
-	mov rdi, rbx
-	lea rsi, [rsp]
-	mov rdx, 0x18
-	call :memcpy
-	add rsp, 0x20
-	pop rbp
-	pop rbx
-	ret
 main:
-	sub rsp, 0x38
+	sub rsp, 0x50
 	mov qword ptr [rsp], 0x00
 	mov qword ptr [rsp+0x08], 0x00
 	mov qword ptr [rsp+0x10], 0x00
 	mov qword ptr [rsp+0x18], 0x01
 	mov qword ptr [rsp+0x20], 0x01
 	mov qword ptr [rsp+0x28], 0x01
-	lea rsi, [rsp+0x18]
+	lea rdi, [rsp+0x30]
+	lea rsi, [rsp]
+	mov rdx, 0x18
+	call :memcpy
 	lea rdi, [rsp]
-	call :structs 2.swap
+	lea rsi, [rsp+0x18]
+	mov rdx, 0x18
+	call :memcpy
+	lea rsi, [rsp+0x30]
+	lea rdi, [rsp+0x18]
+	mov rdx, 0x18
+	call :memcpy
 	mov rax, [rsp]
 	add rax, [rsp+0x08]
 	add rax, [rsp+0x10]
-	add rsp, 0x38
+	add rsp, 0x50
 	ret
 memcpy:

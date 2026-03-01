@@ -1,0 +1,13 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :capture various types 1.bar[=&0]
+        jal $31, $0, :capture various types 1.foo[=.yes]
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+capture various types 1.bar[=&0]:
+       jala $0, $31, 0
+capture various types 1.foo[=.yes]:
+         cp $1, $0
+       jala $0, $31, 0

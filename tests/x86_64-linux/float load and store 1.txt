@@ -1,25 +1,18 @@
-float load and store 1.fun:
-	lea rax, [rsp+0x08]
-	movss xmm0, dword ptr [rsp+0x08]
-	movss xmm1, dword ptr [rsp+0x0C]
-	addss xmm0, xmm1
-	movss xmm1, dword ptr [rsp+0x10]
-	subss xmm0, xmm1
-	ret
 main:
-	sub rsp, 0x28
-	movss xmm0, dword ptr [0x0000000000000008]
-	movss [rsp+0x0C], xmm0
-	movss xmm1, dword ptr [0x0000000000000008]
-	movss xmm0, dword ptr [0x0000000000000008]
-	movss [rsp+0x10], xmm0
-	movss [rsp+0x14], xmm1
-	mov rax, [rsp+0x0C]
-	lea rcx, [rsp]
-	mov [rcx], rax
-	mov eax, [rsp+0x14]
-	mov [rcx+0x08], eax
-	call :float load and store 1.fun
-	cvttss2si rax, xmm0
-	add rsp, 0x28
+	sub rsp, 0x20
+	movss xmm2, dword ptr [0x0000000000000008] ; f32s
+	movss xmm1, dword ptr [0x0000000000000008] ; f32s
+	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	movss [rsp], xmm0
+	movss [rsp+0x04], xmm1
+	movss [rsp+0x08], xmm2
+	movsd xmm0, qword ptr [rsp]
+	movsd [rsp+0x0C], xmm0
+	movss [rsp+0x14], xmm2
+	movss xmm1, dword ptr [rsp+0x0C]
+	movss xmm0, dword ptr [rsp+0x10]
+	addss xmm1, xmm0
+	subss xmm1, xmm2
+	cvttss2si rax, xmm1
+	add rsp, 0x20
 	ret

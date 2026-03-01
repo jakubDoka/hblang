@@ -1,95 +1,80 @@
-generic structs 4.Array((((uint), uint), uint), uint).get:
-	sub rsp, 0x18
-	lea rax, [rsp+0x20]
-	mov [rsp], rdi
-	mov rdx, [rsp]
-	cmp rdx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov rax, [rsp+0x20]
-	jmp :1
-0:	mov rdi, [rsp+0x28]
-	mov rsi, [rsp+0x30]
-	dec rdx
-	call :generic structs 4.Array(((uint), uint), uint).get
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x08]
-1:	add rsp, 0x18
-	ret
-generic structs 4.Array(((uint), uint), uint).get:
-	sub rsp, 0x28
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
-	mov [rsp+0x10], rdx
-	mov rsi, [rsp+0x10]
-	cmp rsi, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov rax, [rsp]
-	jmp :1
-0:	dec rsi
-	mov rdi, [rsp+0x08]
-	call :generic structs 4.Array((uint), uint).get
-	mov [rsp+0x18], rax
-	mov rax, [rsp+0x18]
-1:	add rsp, 0x28
-	ret
-generic structs 4.Array((uint), uint).get:
-	sub rsp, 0x18
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
-	mov rdi, [rsp+0x08]
-	cmp rdi, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov rax, [rsp]
-	jmp :1
-0:	dec rdi
-	call :generic structs 4.Array(uint).get
-	mov [rsp+0x10], rax
+generic structs 4.Array[=uint, =3].structs[10].get:
+	sub rsp, 0x08
+	mov rax, rdi
+	mov rcx, rax
+	cmp rcx, 0x00
+	jnz :0
 	mov rax, [rsp+0x10]
-1:	add rsp, 0x18
+	jmp :1
+0:	dec rax
+	mov rsi, [rsp+0x20]
+	mov rdi, [rsp+0x18]
+	mov rdx, rax
+	call :generic structs 4.Array[=uint, =2].structs[12].get
+1:	add rsp, 0x08
 	ret
-generic structs 4.Array(uint).get:
+generic structs 4.Array[=uint, =2].structs[12].get:
+	sub rsp, 0x08
+	mov rcx, rdx
+	mov rax, rdi
+	mov rdx, rcx
+	cmp rdx, 0x00
+	jnz :0
+	jmp :1
+0:	dec rcx
+	mov rdi, rsi
+	mov rsi, rcx
+	call :generic structs 4.Array[=uint, =1].structs[14].get
+1:	add rsp, 0x08
+	ret
+generic structs 4.Array[=uint, =1].structs[14].get:
+	sub rsp, 0x08
+	mov rcx, rsi
+	mov rax, rdi
+	mov rdx, rcx
+	cmp rdx, 0x00
+	jnz :0
+	jmp :1
+0:	dec rcx
+	mov rdi, rcx
+	call :generic structs 4.Array[=uint, =0].structs[15].get
+1:	add rsp, 0x08
+	ret
+generic structs 4.Array[=uint, =0].structs[15].get:
 	ud2
 main:
 	push rbx
-	sub rsp, 0x50
-	mov qword ptr [rsp+0x20], 0x01
-	mov qword ptr [rsp+0x28], 0x02
-	mov qword ptr [rsp+0x30], 0x03
+	push rbp
+	sub rsp, 0x38
+	mov qword ptr [rsp+0x18], 0x01
+	mov qword ptr [rsp+0x20], 0x02
+	mov qword ptr [rsp+0x28], 0x03
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
+	lea rax, [rsp+0x18]
+	mov rsi, rax
 	mov rdx, 0x18
 	call :memcpy
 	xor rdi, rdi
-	call :generic structs 4.Array((((uint), uint), uint), uint).get
-	mov [rsp+0x40], rax
+	call :generic structs 4.Array[=uint, =3].structs[10].get
+	mov rbx, rax
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
+	lea rsi, [rsp+0x18]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x01
-	call :generic structs 4.Array((((uint), uint), uint), uint).get
-	mov [rsp+0x18], rax
-	mov rbx, [rsp+0x40]
-	add rbx, [rsp+0x18]
+	call :generic structs 4.Array[=uint, =3].structs[10].get
+	mov rbp, rax
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
+	lea rsi, [rsp+0x18]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x02
-	call :generic structs 4.Array((((uint), uint), uint), uint).get
-	mov [rsp+0x38], rax
-	add rbx, [rsp+0x38]
+	call :generic structs 4.Array[=uint, =3].structs[10].get
+	add rbx, rbp
+	add rbx, rax
 	mov rax, rbx
-	add rsp, 0x50
+	add rsp, 0x38
+	pop rbp
 	pop rbx
 	ret
 memcpy:

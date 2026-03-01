@@ -1,5 +1,4 @@
 wired string comparison 1.broken:
-	lea rax, [rsp+0x08]
 	mov rax, [rsp+0x10]
 	mov [rdi], rax
 	mov rax, [rsp+0x18]
@@ -10,19 +9,13 @@ wired string comparison 1.broken:
 	mov [rdi+0x18], rax
 	ret
 main:
-	sub rsp, 0x68
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x38], rax
+	sub rsp, 0x48
 	mov qword ptr [rsp+0x40], 0x04
-	mov byte ptr [rsp+0x48], 0x00
-	mov rax, [rsp+0x38]
-	mov [rsp+0x50], rax
-	mov rax, [rsp+0x40]
-	mov [rsp+0x58], rax
-	lea rsi, [rsp+0x48]
-	mov rdx, 0x18
-	lea rdi, [rsp]
-	call :memcpy
+	lea rax, [0x0000000000000007] ; main.test
+	mov [rsp+0x38], rax
+	mov byte ptr [rsp], 0x00
+	mov qword ptr [rsp+0x10], 0x04
+	mov [rsp+0x08], rax
 	lea rdi, [rsp+0x18]
 	call :wired string comparison 1.broken
 	mov rcx, [rsp+0x28]
@@ -31,6 +24,5 @@ main:
 	setnz al
 	movzx rax, al
 	movzx rax, al
-	add rsp, 0x68
+	add rsp, 0x48
 	ret
-memcpy:

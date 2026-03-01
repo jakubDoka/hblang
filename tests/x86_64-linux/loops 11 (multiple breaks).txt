@@ -1,18 +1,11 @@
 main:
-	xor rcx, rcx
-3:	cmp rcx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov rax, rcx
+	xor rax, rax
+3:	cmp rax, 0x00
+	jnz :0
 	jmp :1
-0:	cmp rcx, 0x01
-	setz al
-	movzx rax, al
-	test al, al
-	jz :2
+0:	cmp rax, 0x01
+	jnz :2
 	mov rax, 0x01
 1:	ret
-2:	mov rcx, 0x01
+2:	mov rax, 0x01
 	jmp :3

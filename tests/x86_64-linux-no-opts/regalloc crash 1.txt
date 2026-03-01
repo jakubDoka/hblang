@@ -1,31 +1,23 @@
 regalloc crash 1.broken:
-	sub rsp, 0x10
 	mov rax, rsi
-	lea rsi, [rsp+0x18]
-	mov [rsp], al
+	lea rsi, [rsp+0x08]
 	mov rdx, 0x18
 	xor rcx, rcx
-	mov al, [rsp]
 	cmp al, cl
 	jnz :0
 	call :memcpy
 	jmp :1
 0:	call :memcpy
-1:	add rsp, 0x10
-	ret
+1:	ret
 main:
-	sub rsp, 0x48
-	mov byte ptr [rsp+0x30], 0x00
-	mov qword ptr [rsp+0x38], 0x00
-	mov byte ptr [rsp+0x40], 0x00
-	mov rdx, 0x18
-	lea rsi, [rsp+0x30]
-	lea rdi, [rsp]
-	call :memcpy
+	sub rsp, 0x38
+	mov byte ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x00
+	mov byte ptr [rsp+0x10], 0x00
 	lea rdi, [rsp+0x18]
 	mov rsi, 0x20
 	call :regalloc crash 1.broken
 	xor rax, rax
-	add rsp, 0x48
+	add rsp, 0x38
 	ret
 memcpy:

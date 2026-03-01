@@ -1,64 +1,48 @@
-deep instantiation 2.S((((((((.Z)))))))).get:
+deep instantiation 2.S[=.S[=.S[=.S[=.S[=.S[=.S[=.S[=.Z]]]]]]]].get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S(((((((.Z))))))).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.S[=.S[=.S[=.S[=.S[=.S[=.Z]]]]]]].get
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S(((((((.Z))))))).get:
+deep instantiation 2.S[=.S[=.S[=.S[=.S[=.S[=.S[=.Z]]]]]]].get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S((((((.Z)))))).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.S[=.S[=.S[=.S[=.S[=.Z]]]]]].get
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S((((((.Z)))))).get:
+deep instantiation 2.S[=.S[=.S[=.S[=.S[=.S[=.Z]]]]]].get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S(((((.Z))))).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.S[=.S[=.S[=.S[=.Z]]]]].get
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S(((((.Z))))).get:
+deep instantiation 2.S[=.S[=.S[=.S[=.S[=.Z]]]]].get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S((((.Z)))).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.S[=.S[=.S[=.Z]]]].get
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S((((.Z)))).get:
+deep instantiation 2.S[=.S[=.S[=.S[=.Z]]]].get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S(((.Z))).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.S[=.S[=.Z]]].get
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S(((.Z))).get:
+deep instantiation 2.S[=.S[=.S[=.Z]]].get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S((.Z)).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.S[=.Z]].get
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S((.Z)).get:
+deep instantiation 2.S[=.S[=.Z]].get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S(.Z).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.Z].get
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S(.Z).get:
+deep instantiation 2.S[=.Z].get:
 	sub rsp, 0x08
 	call :deep instantiation 2.Z.get
-	mov [rsp], eax
-	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
@@ -67,9 +51,7 @@ deep instantiation 2.Z.get:
 	ret
 main:
 	sub rsp, 0x08
-	call :deep instantiation 2.S((((((((.Z)))))))).get
-	mov [rsp], eax
-	mov eax, [rsp]
+	call :deep instantiation 2.S[=.S[=.S[=.S[=.S[=.S[=.S[=.S[=.Z]]]]]]]].get
 	cmp eax, 0x08
 	setnz al
 	movzx rax, al

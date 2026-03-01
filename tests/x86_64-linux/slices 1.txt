@@ -7,29 +7,26 @@ main:
 	mov byte ptr [rsp+0x81], 0x02
 	mov byte ptr [rsp+0x82], 0x03
 	mov byte ptr [rsp+0x83], 0x04
-	mov [rsp], rdx
 	mov qword ptr [rsp+0x08], 0x04
-	mov [rsp+0x10], rdx
+	mov [rsp], rdx
 	mov qword ptr [rsp+0x18], 0x02
-	mov [rsp+0x20], rcx
+	mov [rsp+0x10], rdx
 	mov qword ptr [rsp+0x28], 0x02
-	mov [rsp+0x30], rax
+	mov [rsp+0x20], rcx
 	mov qword ptr [rsp+0x38], 0x02
-	mov [rsp+0x40], rdx
+	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x48], 0x04
-	mov [rsp+0x50], rdx
+	mov [rsp+0x40], rdx
 	mov qword ptr [rsp+0x58], 0x02
-	mov [rsp+0x60], rcx
+	mov [rsp+0x50], rdx
 	mov qword ptr [rsp+0x68], 0x02
-	mov [rsp+0x70], rax
+	mov [rsp+0x60], rcx
 	mov qword ptr [rsp+0x78], 0x02
+	mov [rsp+0x70], rax
 	xor rsi, rsi
 	xor rax, rax
 2:	cmp rsi, 0x08
-	setz cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
+	jnz :0
 	add rsp, 0x90
 	ret
 0:	mov rcx, rsi

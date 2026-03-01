@@ -1,5 +1,3 @@
 main:
       cp $1, $0
       tx
-comptime edge cases 6.fun:
-    jala $0, $31, 0

@@ -1,0 +1,17 @@
+main:
+	sub rsp, 0x10
+	movss xmm6, dword ptr [0x0000000000000008] ; f32s
+	movss xmm2, dword ptr [0x0000000000000008] ; f32s
+	movss xmm1, dword ptr [0x0000000000000008] ; f32s
+	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	movss [rsp], xmm0
+	movss [rsp+0x04], xmm6
+	movss [rsp+0x08], xmm2
+	movss [rsp+0x0C], xmm1
+	movss xmm0, dword ptr [rsp]
+	addss xmm0, xmm6
+	addss xmm0, xmm2
+	subss xmm0, xmm1
+	cvttss2si rax, xmm0
+	add rsp, 0x10
+	ret

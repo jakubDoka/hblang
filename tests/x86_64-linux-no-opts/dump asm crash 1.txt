@@ -1,97 +1,65 @@
-dump asm crash 1.cache(, )(.Inner).do:
-	sub rsp, 0x38
-	mov [rsp+0x28], dil
-	mov [rsp], rsi
-	mov al, [rsp+0x28]
-	test al, al
+dump asm crash 1.cache[=, =.add].Inner.do:
+	sub rsp, 0x08
+	test dil, dil
 	jz :0
-	mov byte ptr [rsp+0x29], 0x01
+	mov rax, 0x01
 	jmp :1
 0:	xor rcx, rcx
-	mov al, [0x0000000000000006]
+	mov al, [0x0000000000000006] ; corrupt
 	cmp al, cl
 	setz al
 	movzx rax, al
-	mov [rsp+0x29], al
-1:	mov al, [rsp+0x29]
-	test al, al
+1:	test al, al
 	jz :2
-	mov byte ptr [rsp+0x2A], 0x01
+	mov rdx, 0x01
 	jmp :3
-2:	mov ecx, [rsp+0x04]
-	mov eax, [0x0000000000000006]
-	cmp eax, ecx
+2:	mov rcx, rsi
+	mov rax, rsi
+	shr rax, 0x20
+	mov edx, [0x0000000000000006] ; corrupt
+	cmp edx, ecx
 	setnz dl
 	movzx rdx, dl
-	mov ecx, [0x0000000000000006]
-	mov eax, [rsp]
+	mov ecx, [0x0000000000000006] ; corrupt
 	cmp ecx, eax
 	setnz al
 	movzx rax, al
-	or eax, edx
-	mov [rsp+0x2A], al
-3:	mov al, [rsp+0x2A]
-	test al, al
+	or edx, eax
+3:	test dl, dl
 	jz :5
-	mov byte ptr [0x0000000000000008], 0x00
-	mov byte ptr [rsp+0x18], 0x01
-	mov rax, [rsp]
-	mov [rsp+0x1C], rax
-	mov rax, [rsp+0x18]
-	mov [0x0000000000000007], rax
-	mov eax, [rsp+0x20]
-	mov [0x0000000000000006], eax
+	mov byte ptr [0x0000000000000008], 0x00 ; dump asm crash 1.cache[=, =.add].Inner.cached
+	mov byte ptr [0x0000000000000008], 0x01 ; dump asm crash 1.cache[=, =.add].Inner.args
+	mov rax, rsi
+	mov [0x0000000000000007], rax ; dump asm crash 1.cache[=, =.add].Inner.args
 	jmp :5
-5:	mov al, [0x0000000000000006]
+5:	mov al, [0x0000000000000006] ; corrupt
 	test al, al
 	jz :5
-	mov rax, [0x0000000000000007]
-	mov [rsp+0x08], rax
+	mov eax, [0x0000000000000006] ; corrupt
 	jmp :6
-5:	mov rdi, [rsp]
-	call :dump asm crash 1()
-	mov [rsp+0x24], eax
-	mov eax, [rsp+0x24]
-	mov [rsp+0x0C], eax
-6:	mov byte ptr [rsp+0x10], 0x01
-	mov eax, [rsp+0x0C]
-	mov [rsp+0x14], eax
-	mov rax, [rsp+0x10]
-	mov [0x0000000000000007], rax
-	mov eax, [0x0000000000000006]
-	add rsp, 0x38
+5:	mov rdi, rsi
+	call :dump asm crash 1.add[.add]
+6:	mov [0x0000000000000006], eax ; corrupt
+	add rsp, 0x08
 	ret
-dump asm crash 1():
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov eax, [rsp]
-	add eax, [rsp+0x04]
-	add rsp, 0x10
+dump asm crash 1.add[.add]:
+	mov rcx, rdi
+	mov rax, rcx
+	shr rcx, 0x20
+	add eax, ecx
 	ret
 main:
-	sub rsp, 0x18
-	mov qword ptr [rsp], 0x00
-	mov dword ptr [rsp+0x10], 0x00
-1:	mov rax, [rsp]
-	cmp rax, 0x64
-	setb al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov dword ptr [rsp+0x08], 0x01
-	mov dword ptr [rsp+0x0C], 0x02
-	mov rsi, [rsp+0x08]
+	push rbx
+	xor rax, rax
+	xor rbx, rbx
+1:	cmp rbx, 0x64
+	jnb :0
 	xor rdi, rdi
-	call :dump asm crash 1.cache(, )(.Inner).do
-	mov [rsp+0x14], eax
-	mov eax, [rsp+0x14]
-	mov [rsp+0x10], eax
-	mov rax, [rsp]
-	inc rax
-	mov [rsp], rax
+	mov rsi, 0x200000001
+	call :dump asm crash 1.cache[=, =.add].Inner.do
+	inc rbx
 	jmp :1
-0:	mov eax, [rsp+0x10]
-	movsxd rax, eax
+0:	movsxd rax, eax
 	sub rax, 0x03
-	add rsp, 0x18
+	pop rbx
 	ret

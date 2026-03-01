@@ -1,15 +1,13 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -16
-        jal $31, $0, :zero sized structs 1.main.X.new
-        jal $31, $0, :zero sized structs 1.main.X.test
-         st $1, $254, 0, 8
-         ld $1, $254, 0, 8
-     addi64 $254, $254, 16
+     addi64 $254, $254, -8
+        jal $31, $0, :main.X.new
+        jal $31, $0, :main.X.structs[10].test
+     addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-zero sized structs 1.main.X.new:
+main.X.new:
        jala $0, $31, 0
-zero sized structs 1.main.X.test:
+main.X.structs[10].test:
          cp $1, $0
        jala $0, $31, 0

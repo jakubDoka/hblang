@@ -1,23 +1,21 @@
-function pointers 6 (vtable).Dyn2.a:
-	mov dword ptr [rdi], 0x62
-	ret
 function pointers 6 (vtable).Dyn2.b:
 	mov eax, [rdi]
 	ret
+function pointers 6 (vtable).Dyn2.a:
+	mov dword ptr [rdi], 0x62
+	ret
 main:
-	sub rsp, 0x28
-	mov dword ptr [rsp+0x18], 0xFF
-	lea rdi, [rsp+0x18]
-	lea rcx, [0x0000000000000007]
-	lea rax, [0x0000000000000007]
-	mov [rsp], rax
-	mov [rsp+0x08], rcx
-	mov [rsp+0x10], rdi
-	mov rax, [rsp]
+	sub rsp, 0x08
+	mov dword ptr [rsp], 0xFF
+	lea rax, [0x0000000000000007] ; function pointers 6 (vtable).vtable[=.Test, =.Dyn2].entries
+	mov [0x0000000000000007], rax ; function pointers 6 (vtable).vtable[=.Test, =.Dyn2].entries
+	mov qword ptr [0x000000000000000B], 0x02 ; function pointers 6 (vtable).vtable[=.Test, =.Dyn2].entries
+	lea rax, [0x0000000000000007] ; function pointers 6 (vtable).Dyn2.a
+	lea rdi, [rsp]
 	call rax
-	mov rax, [rsp+0x08]
-	mov rdi, [rsp+0x10]
+	lea rax, [0x0000000000000007] ; function pointers 6 (vtable).Dyn2.b
+	lea rdi, [rsp]
 	call rax
 	movsxd rax, eax
-	add rsp, 0x28
+	add rsp, 0x08
 	ret

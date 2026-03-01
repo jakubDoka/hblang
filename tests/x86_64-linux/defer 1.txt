@@ -1,43 +1,18 @@
-defer 1.main.ret_defer:
-	mov rax, [rdi]
-	inc rax
-	mov [rdi], rax
-	ret
 main:
-	sub rsp, 0x08
-	mov rax, 0x01
-7:	mov rdx, rax
-	inc rdx
-	cmp rax, 0x03
-	setz cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
-	mov rax, rdx
-	jmp :1
-0:	mov rcx, 0x04
-	cmp rax, rcx
-	jnz :2
-	cmp rdx, 0x05
-	setnz al
-	movzx rax, al
-	test al, al
-	jz :3
+	mov rdx, 0x01
 	mov rax, 0x03
+	mov rsi, 0x04
+4:	mov rcx, rdx
+	inc rcx
+	cmp rdx, rax
+	jnz :0
+	jmp :2
+0:	cmp rdx, rsi
+	jnz :2
+	cmp rcx, 0x05
+	jz :2
+	jmp :3
+2:	xor rax, rax
+3:	ret
+2:	mov rdx, rcx
 	jmp :4
-3:	mov qword ptr [rsp], 0x00
-	lea rdi, [rsp]
-	call :defer 1.main.ret_defer
-	mov rax, [rsp]
-	cmp rax, 0x01
-	setnz al
-	movzx rax, al
-	test al, al
-	jz :5
-	mov rax, 0x04
-4:	jmp :6
-5:	xor rax, rax
-6:	add rsp, 0x08
-	ret
-2:	mov rax, rdx
-1:	jmp :7

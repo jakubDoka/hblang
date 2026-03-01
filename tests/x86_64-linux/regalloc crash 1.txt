@@ -1,27 +1,3 @@
-regalloc crash 1.broken:
-	mov rax, rsi
-	lea rsi, [rsp+0x08]
-	mov rdx, 0x18
-	xor rcx, rcx
-	cmp al, cl
-	jnz :0
-	call :memcpy
-	jmp :1
-0:	call :memcpy
-1:	ret
 main:
-	sub rsp, 0x48
-	mov byte ptr [rsp+0x30], 0x00
-	mov qword ptr [rsp+0x38], 0x00
-	mov byte ptr [rsp+0x40], 0x00
-	mov rdx, 0x18
-	lea rsi, [rsp+0x30]
-	lea rdi, [rsp]
-	call :memcpy
-	lea rdi, [rsp+0x18]
-	mov rsi, 0x20
-	call :regalloc crash 1.broken
 	xor rax, rax
-	add rsp, 0x48
 	ret
-memcpy:

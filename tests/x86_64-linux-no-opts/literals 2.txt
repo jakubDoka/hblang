@@ -5,17 +5,14 @@ literals 2.dec:
 	mov rax, 0x2D
 	ret
 main:
-	sub rsp, 0x18
+	push rbx
 	call :literals 2.hex
-	mov [rsp], rax
+	mov rbx, rax
 	call :literals 2.dec
-	mov [rsp+0x08], rax
-	mov rcx, [rsp]
-	mov rax, [rsp+0x08]
-	cmp rcx, rax
+	cmp rbx, rax
 	jz :0
 	mov rax, 0x01
 	jmp :1
 0:	xor rax, rax
-1:	add rsp, 0x18
+1:	pop rbx
 	ret

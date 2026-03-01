@@ -1,0 +1,11 @@
+main:
+        lra $1, $0, :mem2reg crash 7.opaque
+         ld $1, $1, 0, 1
+       andi $2, $1, 255
+        jeq $2, $0, :1
+        jmp :2
+1:       cp $1, $0
+2:      jeq $2, $0, :3
+       li64 $1, 1
+        jmp :3
+3:       tx

@@ -1,15 +1,2 @@
-loops 16 (for different lengths error).for_loop_length_mismatch:
-	ud2
 main:
-	sub rsp, 0x38
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x18], rax
-	mov qword ptr [rsp+0x20], 0x26
-	mov rax, 0x100000007
-	mov [rsp+0x28], rax
-	lea rsi, [rsp+0x18]
-	mov rdx, 0x18
-	lea rdi, [rsp]
-	call :memcpy
-	call :loops 16 (for different lengths error).for_loop_length_mismatch
-memcpy:
+	ud2

@@ -1,0 +1,8 @@
+main:
+	mov al, [0x0000000000000006] ; corrupt
+	test al, al
+	jz :0
+	mov rax, 0x06
+	jmp :1
+0:	xor rax, rax
+1:	ret

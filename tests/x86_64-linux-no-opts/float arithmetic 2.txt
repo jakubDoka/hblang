@@ -1,79 +1,44 @@
 float arithmetic 2.sin:
-	sub rsp, 0x20
-	mov rcx, 0x04
-	movss [rsp+0x10], xmm0
-	movss xmm0, dword ptr [0x0000000000000008]
-	movss [rsp+0x14], xmm0
-	mov dword ptr [rsp+0x18], 0x100
-	movss xmm4, dword ptr [0x0000000000000008]
-	movsd xmm2, qword ptr [0x0000000000000009]
-	movss xmm3, dword ptr [0x0000000000000008]
-	movss xmm0, dword ptr [rsp+0x10]
+	lea rdx, [0x0000000000000007] ; float arithmetic 2.sin_table
+	movsd xmm11, qword ptr [0x0000000000000009] ; corrupt
+	movsd xmm7, qword ptr [0x0000000000000009] ; corrupt
+	movsd xmm6, qword ptr [0x0000000000000009] ; corrupt
+	movss xmm10, dword ptr [0x0000000000000009] ; corrupt
+	movss xmm9, dword ptr [0x0000000000000009] ; corrupt
+	movss xmm8, dword ptr [0x0000000000000009] ; corrupt
+	movss xmm2, dword ptr [0x0000000000000008] ; f32s
 	cvtss2sd xmm1, xmm0
-	mulsd xmm1, xmm2
-	mov eax, [rsp+0x18]
-	movsxd rax, eax
-	cvtsi2sd xmm0, rax
-	mulsd xmm1, xmm0
-	movss xmm0, dword ptr [rsp+0x14]
-	cvtss2sd xmm0, xmm0
-	divsd xmm1, xmm0
+	mulsd xmm1, xmm11
+	mulsd xmm1, xmm7
+	divsd xmm1, xmm6
 	cvttsd2si rax, xmm1
-	mov [rsp], rax
-	movss xmm2, dword ptr [rsp+0x10]
-	mov rax, [rsp]
-	cvtsi2ss xmm1, rax
-	mulss xmm1, xmm4
-	movss xmm0, dword ptr [rsp+0x14]
-	mulss xmm1, xmm0
-	mov eax, [rsp+0x18]
-	movsxd rax, eax
-	cvtsi2ss xmm0, rax
-	divss xmm1, xmm0
-	subss xmm2, xmm1
-	movss [rsp+0x1C], xmm2
-	mov rdi, [rsp]
-	mov eax, [rsp+0x18]
-	movsxd rsi, eax
-	mov rax, rsi
-	cqo
-	idiv rcx
-	add rdi, rax
-	dec rsi
-	and rdi, rsi
-	mov [rsp+0x08], rdi
-	mov rdx, [rsp]
-	mov eax, [rsp+0x18]
-	movsxd rax, eax
-	dec rax
-	and rdx, rax
-	mov [rsp], rdx
-	mov rax, [rsp]
-	imul rax, rcx
-	lea rsi, [0x0000000000000007]
-	add rsi, rax
-	mov rdx, [rsp+0x08]
-	imul rdx, rcx
-	lea rax, [0x0000000000000007]
-	add rax, rdx
-	movss xmm2, dword ptr [rax]
-	movss xmm0, dword ptr [rsi]
-	mulss xmm3, xmm0
-	movss xmm1, dword ptr [rsp+0x1C]
-	mulss xmm3, xmm1
-	subss xmm2, xmm3
-	vfmadd231ss xmm0, xmm2, xmm1
-	add rsp, 0x20
+	mov rcx, rax
+	add rcx, 0x40
+	and rcx, 0xFF
+	lea rcx, [rdx+rcx*4]
+	movss xmm7, dword ptr [rcx]
+	cvtsi2ss xmm6, rax
+	mulss xmm6, xmm9
+	mulss xmm6, xmm8
+	divss xmm6, xmm2
+	and rax, 0xFF
+	lea rax, [rdx+rax*4]
+	movss xmm1, dword ptr [rax]
+	movss xmm2, xmm1
+	mulss xmm10, xmm2
+	subss xmm0, xmm6
+	mulss xmm10, xmm0
+	subss xmm7, xmm10
+	vfmadd231ss xmm1, xmm7, xmm0
+	movss xmm0, xmm1
 	ret
 main:
 	sub rsp, 0x08
-	movss xmm0, dword ptr [0x0000000000000008]
+	movss xmm0, dword ptr [0x0000000000000008] ; f32s
 	call :float arithmetic 2.sin
-	movss [rsp], xmm0
-	movss xmm1, dword ptr [rsp]
-	movss xmm0, dword ptr [0x0000000000000008]
-	mulss xmm1, xmm0
-	cvttss2si rax, xmm1
+	movss xmm1, dword ptr [0x0000000000000008] ; f32s
+	mulss xmm0, xmm1
+	cvttss2si rax, xmm0
 	sub rax, 0x33A
 	add rsp, 0x08
 	ret

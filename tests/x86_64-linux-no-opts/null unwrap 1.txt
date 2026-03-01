@@ -1,41 +1,28 @@
 null unwrap 1.use_opt:
-	sub rsp, 0x48
-	mov [rsp+0x18], rdi
-	mov [rsp+0x20], rsi
-	xor rcx, rcx
-	mov al, [rsp+0x18]
-	cmp al, cl
+	sub rsp, 0x18
+	mov rcx, rdi
+	xor rax, rax
+	cmp sil, al
 	jnz :0
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x28], rax
-	mov qword ptr [rsp+0x30], 0x0D
-	mov rax, 0x2700000007
-	mov [rsp+0x38], rax
-	lea rsi, [rsp+0x28]
-	mov rdx, 0x18
-	lea rdi, [rsp]
-	call :memcpy
+	mov dword ptr [rsp+0x10], 0x09
+	mov dword ptr [rsp+0x14], 0x2A
 	call :null unwrap 1.null_unwrap
-0:	mov rax, [rsp+0x20]
-	add rax, [rsp+0x20]
-	add rsp, 0x48
+0:	mov rax, rcx
+	add rax, rcx
+	add rsp, 0x18
 	ret
 null unwrap 1.null_unwrap:
 	ud2
 main:
-	sub rsp, 0x38
-	mov byte ptr [rsp], 0x01
-	mov qword ptr [rsp+0x08], 0x01
-	mov rdi, [rsp]
+	sub rsp, 0x28
+	mov byte ptr [rsp+0x08], 0x01
+	mov qword ptr [rsp], 0x01
+	mov rdi, 0x01
 	mov rsi, [rsp+0x08]
 	call :null unwrap 1.use_opt
-	mov [rsp+0x20], rax
-	mov byte ptr [rsp+0x10], 0x00
+	mov byte ptr [rsp+0x18], 0x00
 	mov rdi, [rsp+0x10]
 	mov rsi, [rsp+0x18]
 	call :null unwrap 1.use_opt
-	mov [rsp+0x28], rax
-	mov rax, [rsp+0x28]
-	add rsp, 0x38
+	add rsp, 0x28
 	ret
-memcpy:

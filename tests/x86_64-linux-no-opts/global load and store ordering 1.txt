@@ -1,17 +1,13 @@
 main:
-	sub rsp, 0x10
-	mov al, [0x0000000000000006]
-	mov [rsp], al
-	mov al, [0x0000000000000006]
+	mov cl, [0x0000000000000006] ; corrupt
+	mov al, [0x0000000000000006] ; corrupt
 	test al, al
 	jz :1
-	mov byte ptr [0x0000000000000008], 0x00
+	mov byte ptr [0x0000000000000008], 0x00 ; global load and store ordering 1.x
 	jmp :1
-1:	mov cl, [0x0000000000000006]
-	mov al, [rsp]
-	cmp cl, al
+1:	mov al, [0x0000000000000006] ; corrupt
+	cmp al, cl
 	setz al
 	movzx rax, al
 	movzx rax, al
-	add rsp, 0x10
 	ret

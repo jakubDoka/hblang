@@ -1,10 +1,7 @@
 main:
 	xor rax, rax
 1:	cmp rax, 0x04
-	setz cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
+	jnz :0
 	ret
 0:	inc rax
 	jmp :1

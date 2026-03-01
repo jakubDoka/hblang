@@ -1,0 +1,16 @@
+main:
+	sub rsp, 0x10
+	mov qword ptr [rsp], 0x00
+3:	mov rax, [rsp]
+	cmp rax, 0x01
+	jnb :0
+2:	mov rax, [rsp]
+	cmp rax, 0x01
+	jnb :1
+	inc rax
+	mov [rsp], rax
+	jmp :2
+1:	jmp :3
+0:	xor rax, rax
+	add rsp, 0x10
+	ret

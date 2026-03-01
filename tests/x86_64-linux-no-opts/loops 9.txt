@@ -1,37 +1,8 @@
 main:
-	sub rsp, 0x20
-	lea rax, [0x0000000000000007]
-	mov [rsp], rax
-	mov qword ptr [rsp+0x08], 0x03
-	mov qword ptr [rsp+0x10], 0x00
-	xor rsi, rsi
 	xor rax, rax
-4:	mov rcx, [rsp+0x10]
-	cmp rcx, 0x01
-	setnb cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
-	add rsp, 0x20
+	mov rcx, rax
+1:	cmp rcx, 0x01
+	jb :0
 	ret
-0:	mov rcx, [rsp]
-	mov cl, [rcx]
-	cmp cl, sil
-	setnz dl
-	movzx rdx, dl
-	xor rcx, rcx
-	and ecx, edx
-	test cl, cl
-	jz :3
-	mov qword ptr [rsp+0x18], 0x00
-3:	mov rcx, [rsp+0x18]
-	cmp rcx, rax
-	jnz :2
-	jmp :3
-2:	imul rcx, rax
-	mov [rsp+0x18], rcx
-	jmp :3
-3:	mov rcx, [rsp+0x10]
-	inc rcx
-	mov [rsp+0x10], rcx
-	jmp :4
+0:	inc rcx
+	jmp :1

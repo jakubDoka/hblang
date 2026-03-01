@@ -1,17 +1,5 @@
 main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -16
-       li64 $1, 1
-        lra $32, $0, :global variables 1.counter
-         st $1, $32, 0, 8
-        jal $31, $0, :global variables 1.dec
-         ld $1, $32, 0, 8
-     addi64 $254, $254, 16
-         ld $31, $254, -16, 16
+        lra $1, $0, :global variables 1.counter
+         st $0, $1, 0, 8
+         cp $1, $0
          tx
-global variables 1.dec:
-        lra $2, $0, :global variables 1.counter
-         ld $1, $2, 0, 8
-     addi64 $1, $1, -1
-         st $1, $2, 0, 8
-       jala $0, $31, 0

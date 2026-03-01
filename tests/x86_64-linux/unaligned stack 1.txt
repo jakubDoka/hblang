@@ -2,10 +2,7 @@ main:
 	mov rax, rsp
 	and rax, 0x0F
 	cmp rax, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnz :0
 	ud2
 0:	xor rax, rax
 	ret

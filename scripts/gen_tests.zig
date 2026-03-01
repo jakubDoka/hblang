@@ -35,7 +35,7 @@ pub fn main() !void {
         body = try std.mem.replaceOwned(u8, arena, body, "\"", "\\\"");
 
         try writer.interface.print(
-            \\test "{s} " {{
+            \\test "{s}." {{
             \\    try utils.runTest(
             \\        "{s}",
             \\        "{s}",

@@ -1,24 +1,16 @@
 pointers 3.do_stuff:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	mov rax, [rax]
+	mov rax, [rdi]
 	cmp rax, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnz :0
 	xor rax, rax
 	jmp :1
 0:	mov rax, 0x01
-1:	add rsp, 0x10
-	ret
+1:	ret
 main:
-	sub rsp, 0x18
+	sub rsp, 0x08
 	mov qword ptr [rsp], 0x01
 	lea rdi, [rsp]
 	call :pointers 3.do_stuff
-	mov [rsp+0x08], rax
 	mov rax, [rsp]
-	add rsp, 0x18
+	add rsp, 0x08
 	ret

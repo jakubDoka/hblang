@@ -1,0 +1,13 @@
+float sse call conv 2.fun:
+	addsd xmm0, xmm1
+	ret
+main:
+	sub rsp, 0x08
+	movsd xmm0, qword ptr [0x0000000000000009] ; corrupt
+	movsd xmm1, qword ptr [0x0000000000000009] ; corrupt
+	call :float sse call conv 2.fun
+	movsd xmm1, qword ptr [0x0000000000000009] ; corrupt
+	subsd xmm0, xmm1
+	cvttsd2si rax, xmm0
+	add rsp, 0x08
+	ret

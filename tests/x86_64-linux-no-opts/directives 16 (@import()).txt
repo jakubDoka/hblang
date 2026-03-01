@@ -1,19 +1,14 @@
 main:
-	push rbx
-	sub rsp, 0x10
+	sub rsp, 0x08
 	mov rdi, 0x08
 	call :malloc
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x08]
-	mov [rsp], rax
-	mov rax, [rsp]
+	mov rcx, rax
+	mov rax, rcx
 	mov qword ptr [rax], 0x0A
-	mov rdi, [rsp]
-	mov rbx, [rdi]
+	mov rdi, rcx
 	call :free
-	mov rax, rbx
-	add rsp, 0x10
-	pop rbx
+	mov rax, 0x0A
+	add rsp, 0x08
 	ret
 malloc:
 free:

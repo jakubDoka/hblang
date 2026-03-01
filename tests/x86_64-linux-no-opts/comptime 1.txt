@@ -1,27 +1,25 @@
-comptime 1.main.some_fn(uint)(uint):
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rax, [rsp]
-	inc rax
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x08]
-	imul rax, rax
-	add rsp, 0x10
+main.some_fn[=uint]:
+	inc rdi
+	mov rcx, rdi
+	mov rax, rcx
+	imul rax, rcx
 	ret
 main:
-	sub rsp, 0x18
+	push rbx
+	push rbp
+	sub rsp, 0x08
 	mov rdi, 0x09
-	call :comptime 1.main.some_fn(uint)(uint)
-	mov [rsp+0x10], rax
+	call :main.some_fn[=uint]
+	mov rbx, rax
 	mov rdi, 0x05
-	call :comptime 1.main.some_fn(uint)(uint)
-	mov [rsp], rax
+	call :main.some_fn[=uint]
+	mov rbp, rax
 	mov rdi, 0x07
-	call :comptime 1.main.some_fn(uint)(uint)
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x10]
-	mov rcx, [rsp]
-	add rcx, [rsp+0x08]
-	sub rax, rcx
-	add rsp, 0x18
+	call :main.some_fn[=uint]
+	add rbp, rax
+	sub rbx, rbp
+	mov rax, rbx
+	add rsp, 0x08
+	pop rbp
+	pop rbx
 	ret

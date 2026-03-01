@@ -1,34 +1,28 @@
 regalloc crash 4.blackbox:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	add rsp, 0x10
 	ret
 main:
 	push rbx
-	sub rsp, 0x30
-	mov qword ptr [rsp+0x20], 0x01
-	xor rbx, rbx
-4:	mov rcx, [0x0000000000000007]
-	mov al, [0x0000000000000006]
-	mov [rsp], rcx
+	push rbp
+	sub rsp, 0x08
+	mov rbx, 0x01
+	xor rbp, rbp
+4:	mov al, [0x0000000000000006] ; corrupt
 	test al, al
 	jz :0
-	mov al, [0x0000000000000006]
-	cmp al, bl
+	cmp al, bpl
 	jnz :1
 	jmp :3
-1:	mov rdi, [rsp+0x20]
+1:	mov rdi, rbx
 	call :regalloc crash 4.blackbox
-3:	mov rcx, [0x0000000000000007]
-	mov al, [0x0000000000000006]
-	mov [rsp+0x10], rcx
+3:	mov al, [0x0000000000000006] ; corrupt
 	test al, al
 	jz :3
-	mov rdi, [rsp+0x20]
+	mov rdi, rbx
 	call :regalloc crash 4.blackbox
 	jmp :3
 3:	jmp :4
 0:	xor rax, rax
-	add rsp, 0x30
+	add rsp, 0x08
+	pop rbp
 	pop rbx
 	ret

@@ -5,7 +5,7 @@ function pointers 4.Obj.func:
 main:
 	sub rsp, 0x08
 	mov byte ptr [rsp], 0xFF
-	lea rax, [0x0000000000000007]
+	lea rax, [0x0000000000000007] ; function pointers 4.Obj.func
 	lea rdi, [rsp]
 	call rax
 	movzx rax, al

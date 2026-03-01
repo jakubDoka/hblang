@@ -1,23 +1,7 @@
-enums 4.NameMap(.Nm)([4]uint, [6]u8).get:
-	movzx rax, dl
-	lea rcx, [rsi+rax*8+0x08]
-	inc rax
-	lea rax, [rsi+rax*8+0x08]
-	mov rcx, [rcx]
-	mov rax, [rax]
-	sub rax, rcx
-	add rsi, rcx
-	mov [rdi], rsi
-	mov [rdi+0x08], rax
-	ret
 main:
-	sub rsp, 0x18
-	lea rdi, [rsp]
-	lea rsi, [0x0000000000000007]
-	xor rdx, rdx
-	call :enums 4.NameMap(.Nm)([4]uint, [6]u8).get
-	mov rax, [rsp]
+	mov rcx, [0x0000000000000007] ; enums 4.map
+	lea rax, [0x0000000000000007] ; enums 4.map
+	add rax, rcx
 	mov al, [rax]
 	movzx rax, al
-	add rsp, 0x18
 	ret

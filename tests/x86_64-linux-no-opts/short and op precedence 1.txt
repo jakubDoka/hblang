@@ -1,54 +1,36 @@
 short and op precedence 1.foo:
-	sub rsp, 0x10
-	mov [rsp], di
-	mov cl, [rsp+0x01]
-	mov al, [rsp]
-	mov [rsp+0x02], cl
+	mov rcx, rdi
+	mov rdx, rcx
+	shr dx, 0x08
+	mov rax, rdx
 	test al, al
 	jz :0
-	mov cl, [rsp+0x01]
-	mov al, [rsp]
-	mov [rsp+0x04], cl
-	mov [rsp+0x06], al
+	mov rax, rcx
 	jmp :1
-0:	mov byte ptr [rsp+0x06], 0x00
-1:	mov al, [rsp+0x06]
-	test al, al
+0:	xor rdx, rdx
+1:	test dl, dl
 	jz :2
-	mov cl, [rsp+0x02]
-	mov al, [rsp+0x04]
 	cmp cl, al
 	setz al
 	movzx rax, al
 	jmp :3
 2:	xor rax, rax
-3:	add rsp, 0x10
-	ret
+3:	ret
 main:
 	sub rsp, 0x08
-	mov byte ptr [rsp], 0x00
-	mov di, [rsp]
+	xor rdi, rdi
 	call :short and op precedence 1.foo
-	mov [rsp+0x04], al
-	mov al, [rsp+0x04]
 	test al, al
 	jz :0
 	mov rax, 0x01
-	jmp :1
-0:	mov byte ptr [rsp+0x02], 0x01
-	mov byte ptr [rsp+0x03], 0x01
-	mov di, [rsp+0x02]
+	jmp :3
+0:	mov rdi, 0x101
 	call :short and op precedence 1.foo
-	mov [rsp+0x05], al
-	mov al, [rsp+0x05]
 	xor al, 0x01
 	test al, al
 	jz :2
 	mov rax, 0x02
-1:	jmp :3
-2:	mov byte ptr [rsp+0x07], 0x00
-	mov al, [rsp+0x07]
-	mov [rsp+0x06], al
-	xor rax, rax
+	jmp :3
+2:	xor rax, rax
 3:	add rsp, 0x08
 	ret

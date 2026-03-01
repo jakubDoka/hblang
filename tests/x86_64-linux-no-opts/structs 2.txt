@@ -1,20 +1,24 @@
 structs 2.swap:
-	sub rsp, 0x30
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
-	mov rsi, [rsp]
-	lea rdi, [rsp+0x10]
+	push rbx
+	push rbp
+	sub rsp, 0x20
+	mov rbp, rdi
+	mov rbx, rsi
+	mov rsi, rbp
+	lea rdi, [rsp]
 	mov rdx, 0x18
 	call :memcpy
-	mov rdi, [rsp]
-	mov rsi, [rsp+0x08]
+	mov rdi, rbp
+	mov rsi, rbx
 	mov rdx, 0x18
 	call :memcpy
-	mov rdi, [rsp+0x08]
-	lea rsi, [rsp+0x10]
+	mov rdi, rbx
+	lea rsi, [rsp]
 	mov rdx, 0x18
 	call :memcpy
-	add rsp, 0x30
+	add rsp, 0x20
+	pop rbp
+	pop rbx
 	ret
 main:
 	sub rsp, 0x38

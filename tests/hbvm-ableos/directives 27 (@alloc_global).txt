@@ -1,3 +1,5 @@
 main:
-      cp $1, $0
-      tx
+        lra $1, $0, :main.arr
+         ld $1, $1, 0, 1
+       andi $1, $1, 255
+         tx

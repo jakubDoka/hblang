@@ -5,14 +5,13 @@ forced div 1.one:
 	mov rax, 0x01
 	ret
 main:
-	sub rsp, 0x18
+	push rbx
 	call :forced div 1.two
-	mov [rsp], rax
+	mov rbx, rax
 	call :forced div 1.one
-	mov [rsp+0x08], rax
-	mov rcx, [rsp+0x08]
-	mov rax, [rsp]
+	mov rcx, rax
+	mov rax, rbx
 	xor rdx, rdx
 	div rcx
-	add rsp, 0x18
+	pop rbx
 	ret

@@ -1,48 +1,30 @@
 mem2reg crash 2.insert:
-	sub rsp, 0x30
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
-	mov [rsp+0x10], rdx
-	mov qword ptr [rsp+0x18], 0x00
-1:	mov qword ptr [rsp+0x20], 0x00
-3:	mov rax, [rsp+0x20]
-	cmp rax, 0x08
-	setnb al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov rax, [rsp+0x18]
-	inc rax
-	mov [rsp+0x18], rax
+	mov r9, 0x08
+	xor r8, r8
+1:	xor rcx, rcx
+3:	cmp rcx, r9
+	jb :0
+	inc r8
 	jmp :1
-0:	mov rax, [rsp]
-	mov rax, [rax]
-	mov [rsp+0x28], rax
-	mov rax, [rsp+0x28]
-	mov rdx, [rsp+0x08]
-	mov rcx, [rax]
-	cmp rcx, rdx
+0:	mov rax, [rdi]
+	mov rdx, [rax]
+	cmp rdx, rsi
 	jnz :2
 	add rax, 0x08
-	add rsp, 0x30
 	ret
-2:	mov rax, [rsp+0x20]
-	inc rax
-	mov [rsp+0x20], rax
+2:	inc rcx
 	jmp :3
 main:
 	sub rsp, 0x28
 	mov qword ptr [rsp+0x10], 0x01
 	mov qword ptr [rsp+0x18], 0x00
+	mov qword ptr [rsp+0x08], 0x01
 	lea rax, [rsp+0x10]
 	mov [rsp], rax
-	mov qword ptr [rsp+0x08], 0x01
-	lea rdi, [rsp]
 	mov rsi, 0x01
+	lea rdi, [rsp]
 	xor rdx, rdx
 	call :mem2reg crash 2.insert
-	mov [rsp+0x20], rax
-	mov rax, [rsp+0x20]
 	mov rax, [rax]
 	add rsp, 0x28
 	ret

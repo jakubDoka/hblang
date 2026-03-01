@@ -3,17 +3,11 @@ main:
 	lea rsi, [rsp]
 	xor rax, rax
 3:	cmp rax, 0x08
-	setz cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
+	jnz :0
 	xor rcx, rcx
 	xor rax, rax
 2:	cmp rcx, 0x08
-	setz dl
-	movzx rdx, dl
-	test dl, dl
-	jz :1
+	jnz :1
 	add rsp, 0x40
 	ret
 1:	lea rdx, [rsi+rcx*8]

@@ -1,5 +1,5 @@
 main:
-	mov rax, [0x0000000000000007]
-	mov rcx, [0x0000000000000007]
+	mov rax, [0x0000000000000007] ; global variables 2.some_fib
+	mov rcx, [0x0000000000000007] ; global variables 2.bigon_era
 	sub rax, rcx
 	ret

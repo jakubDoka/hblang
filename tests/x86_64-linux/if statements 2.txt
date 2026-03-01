@@ -5,10 +5,7 @@ if statements 2.fib:
 	mov rbp, rdi
 	mov rax, rbp
 	cmp rax, 0x02
-	setbe al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnbe :0
 	mov rbx, 0x01
 	jmp :1
 0:	mov rdi, rbp

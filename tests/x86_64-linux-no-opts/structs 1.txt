@@ -4,69 +4,40 @@ structs 1.odher_pass:
 	call :memcpy
 	ret
 structs 1.Ty.sum:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
-	mov rax, [rsp]
+	mov rax, rdi
 	sub rax, 0x02
-	mov [rsp], rax
-	mov rax, [rsp+0x08]
-	inc rax
-	mov [rsp+0x08], rax
-	mov rax, [rsp]
-	sub rax, [rsp+0x08]
-	add rsp, 0x10
+	inc rsi
+	sub rax, rsi
 	ret
 structs 1.pass:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov rcx, [rsp]
-	mov rax, [rcx]
+	mov rax, [rdi]
 	dec rax
-	mov [rcx], rax
-	mov rcx, [rsp]
-	mov rax, [rcx]
 	inc rax
-	mov [rcx], rax
-	mov rcx, [rsp]
-	mov rax, [rcx]
-	mov rcx, [rcx+0x08]
+	mov [rdi], rax
+	mov rcx, [rdi+0x08]
 	sub rax, rcx
-	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x58
-	mov qword ptr [rsp+0x18], 0x04
-	mov rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
-	mov qword ptr [rsp+0x28], 0x03
-	lea rsi, [rsp+0x18]
-	mov rdx, 0x18
-	lea rdi, [rsp]
-	call :memcpy
-	lea rdi, [rsp+0x30]
+	sub rsp, 0x38
+	mov qword ptr [rsp], 0x04
+	mov qword ptr [rsp+0x08], 0x01
+	mov qword ptr [rsp+0x10], 0x03
+	lea rdi, [rsp+0x18]
 	call :structs 1.odher_pass
-	mov rax, [rsp+0x40]
+	mov rax, [rsp+0x28]
 	cmp rax, 0x03
-	setnz al
-	movzx rax, al
-	test al, al
 	jz :0
 	xor rax, rax
-	jmp :1
-0:	mov rsi, [rsp+0x38]
-	mov rdi, [rsp+0x30]
+	jmp :3
+0:	mov rsi, [rsp+0x20]
+	mov rdi, [rsp+0x18]
 	call :structs 1.Ty.sum
-	mov [rsp+0x48], rax
-	mov rax, [rsp+0x48]
-	test rax, rax
+	cmp rax, 0x00
 	jz :2
 	mov rax, 0x64
-1:	jmp :3
-2:	lea rdi, [rsp+0x30]
+	jmp :3
+2:	lea rdi, [rsp+0x18]
 	call :structs 1.pass
-	mov [rsp+0x50], rax
-	mov rax, [rsp+0x50]
-3:	add rsp, 0x58
+3:	add rsp, 0x38
 	ret
 memcpy:

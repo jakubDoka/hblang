@@ -1,8 +1,8 @@
 main:
 	xor rax, rax
 	mov rcx, rax
-1:	test rcx, rcx
-	jz :0
+1:	cmp rcx, 0x00
+	jbe :0
 	ret
 0:	inc rcx
 	jmp :1
