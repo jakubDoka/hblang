@@ -2490,6 +2490,481 @@ main := fn(): uint {
 }
 ```
 
+#### directives 29 (@parent_ptr)
+```hb
+Stru := struct {
+    .a: uint;
+    .b: uint;
+}
+
+main := fn(): uint {
+    value := Stru.(1, 0)
+    return access(&value.a)
+}
+
+access := fn(vl: ^uint): uint {
+    return @as(^Stru, @parent_ptr("a", vl)).b
+}
+```
+
+#### bubble sort
+```hb
+expectations := .{
+    return_value: 0,
+}
+
+bubble_sort := fn(arr: []uint): void {
+    i := 0
+    loop if i == arr.len break else {
+        j := 0
+        loop if j == arr.len - 1 - i break else {
+            if arr[j] > arr[j + 1] {
+                tmp := arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = tmp
+            }
+            j += 1
+        }
+        i += 1
+    }
+}
+
+main := fn(): uint {
+    arr := uint.[5, 3, 8, 1, 9, 2, 7, 4, 6]
+    bubble_sort(arr[..])
+    i := 1
+    loop if i == arr.len break else {
+        if arr[i - 1] > arr[i] return i
+        i += 1
+    }
+    return 0
+}
+```
+
+#### binary search
+```hb
+expectations := .{
+    return_value: 3,
+}
+
+binary_search := fn(arr: []uint, target: uint): ?uint {
+    lo := 0
+    hi := arr.len
+    loop if lo >= hi return null else {
+        mid := lo + (hi - lo) / 2
+        if arr[mid] == target return mid
+        if arr[mid] < target {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+}
+
+main := fn(): uint {
+    arr := uint.[1, 3, 5, 7, 9, 11]
+    idx := binary_search(arr[..], 7)
+    if idx == null return 100
+    return idx.?
+}
+```
+
+#### hash map
+```hb
+expectations := .{
+    return_value: 0,
+}
+
+HashMap := fn($K: type, $V: type): type return struct {
+    Entry := struct {
+        .key: K;
+        .val: V;
+        .used: bool;
+        .dead: bool;
+    }
+
+    Self := @CurrentScope();
+
+    .entries: []Entry;
+    .count: uint;
+
+    init := fn(mem: []Entry): Self {
+        i := 0
+        loop if i == mem.len break else {
+            mem[i].used = false
+            mem[i].dead = false
+            i += 1
+        }
+        return .(mem, 0)
+    }
+
+    // FNV-1a inspired byte hash, works on any type via bit_cast to bytes
+    hash_key := fn(key: K, cap: uint): uint {
+        bytes: ^u8 = @bit_cast(&#key)
+        h: uint = 14695981039346656037
+        i := 0
+        loop if i == @size_of(K) break else {
+            h ^= bytes[i]
+            h *= 1099511628211
+            i += 1
+        }
+        return h % cap
+    }
+
+    insert := fn(self: ^Self, key: K, val: V): bool {
+        if self.count * 2 >= self.entries.len return false
+        slot := hash_key(key, self.entries.len)
+        loop {
+            e := &self.entries[slot]
+            if !e.used || e.dead {
+                e.key = key
+                e.val = val
+                e.used = true
+                e.dead = false
+                self.count += 1
+                return true
+            }
+            // already exists, overwrite
+            if e.key == key {
+                e.val = val
+                return true
+            }
+            slot = (slot + 1) % self.entries.len
+        }
+    }
+
+    get := fn(self: ^Self, key: K): ?V {
+        slot := hash_key(key, self.entries.len)
+        loop {
+            e := &self.entries[slot]
+            if !e.used return null
+            if !e.dead && e.key == key return e.val
+            slot = (slot + 1) % self.entries.len
+        }
+    }
+
+    delete := fn(self: ^Self, key: K): bool {
+        slot := hash_key(key, self.entries.len)
+        loop {
+            e := &self.entries[slot]
+            if !e.used return false
+            if !e.dead && e.key == key {
+                e.dead = true
+                self.count -= 1
+                return true
+            }
+            slot = (slot + 1) % self.entries.len
+        }
+    }
+
+    contains := fn(self: ^Self, key: K): bool {
+        return self.get(key) != null
+    }
+}
+
+IntMap := HashMap(uint, uint)
+
+main := fn(): uint {
+    buf: [64]IntMap.Entry = idk
+    map := IntMap.init(buf[..])
+
+    // basic insert and get
+    if !map.insert(1, 100) return 1
+    if !map.insert(2, 200) return 2
+    if !map.insert(3, 300) return 3
+
+    v := map.get(1) || return 4
+    if v != 100 return 5
+
+    v = map.get(2) || return 6
+    if v != 200 return 7
+
+    v = map.get(3) || return 8
+    if v != 300 return 9
+
+    // overwrite
+    if !map.insert(2, 999) return 10
+    v = map.get(2) || return 11
+    if v != 999 return 12
+
+    // delete
+    if !map.delete(2) return 13
+    if map.get(2) != null return 14
+
+    // miss
+    if map.get(42) != null return 15
+
+    // contains
+    if !map.contains(1) return 16
+    if map.contains(2) return 17
+
+    // collision stress: insert many keys
+    i := 10
+    loop if i == 30 break else {
+        if !map.insert(i, i * i) return 100 + i
+        i += 1
+    }
+
+    i = 10
+    loop if i == 30 break else {
+        v = map.get(i) || return 200 + i
+        if v != i * i return 300 + i
+        i += 1
+    }
+
+    // delete half and re-check
+    i = 10
+    loop if i == 20 break else {
+        if !map.delete(i) return 400 + i
+        i += 1
+    }
+
+    i = 10
+    loop if i == 20 break else {
+        if map.get(i) != null return 500 + i
+        i += 1
+    }
+
+    i = 20
+    loop if i == 30 break else {
+        v = map.get(i) || return 600 + i
+        if v != i * i return 700 + i
+        i += 1
+    }
+
+    return 0
+}
+```
+
+#### intrusive linked list
+```hb
+// Embed this inside any struct you want to put in the list
+ListNode := struct {
+    .prev: ?^ListNode;
+    .next: ?^ListNode;
+}
+
+// The list head just holds sentinel prev/next pointers
+List := fn($T: type): type return struct {
+    Self := @CurrentScope();
+
+    .head: ?^ListNode;
+    .tail: ?^ListNode;
+    .len: uint;
+
+    init := fn(): Self {
+        return .(null, null, 0)
+    }
+
+    // get the ListNode embedded in a T
+    node_of := fn(item: ^T): ^ListNode {
+        return &item.node
+    }
+
+    // recover the parent T from a ListNode pointer
+    item_of := fn(node: ^ListNode): ^T {
+        return @as(^T, @parent_ptr("node", node))
+    }
+
+    push_back := fn(self: ^Self, item: ^T): void {
+        node := node_of(item)
+        node.prev = self.tail
+        node.next = null
+
+        if self.tail != null {
+            self.tail.?.next = node
+        } else {
+            self.head = node
+        }
+        self.tail = node
+        self.len += 1
+    }
+
+    push_front := fn(self: ^Self, item: ^T): void {
+        node := node_of(item)
+        node.next = self.head
+        node.prev = null
+
+        if self.head != null {
+            self.head.?.prev = node
+        } else {
+            self.tail = node
+        }
+        self.head = node
+        self.len += 1
+    }
+
+    pop_back := fn(self: ^Self): ?^T {
+        if self.tail == null return null
+        node := self.tail.?
+        if node.prev != null {
+            node.prev.?.next = null
+        } else {
+            self.head = null
+        }
+        self.tail = node.prev
+        node.prev = null
+        node.next = null
+        self.len -= 1
+        return item_of(node)
+    }
+
+    pop_front := fn(self: ^Self): ?^T {
+        if self.head == null return null
+        node := self.head.?
+        if node.next != null {
+            node.next.?.prev = null
+        } else {
+            self.tail = null
+        }
+        self.head = node.next
+        node.prev = null
+        node.next = null
+        self.len -= 1
+        return item_of(node)
+    }
+
+    // unlink an arbitrary node from the middle
+    remove := fn(self: ^Self, item: ^T): void {
+        node := node_of(item)
+        if node.prev != null {
+            node.prev.?.next = node.next
+        } else {
+            self.head = node.next
+        }
+        if node.next != null {
+            node.next.?.prev = node.prev
+        } else {
+            self.tail = node.prev
+        }
+        node.prev = null
+        node.next = null
+        self.len -= 1
+    }
+
+    // insert item_new directly after item_before
+    insert_after := fn(self: ^Self, item_before: ^T, item_new: ^T): void {
+        before := node_of(item_before)
+        node := node_of(item_new)
+
+        node.prev = before
+        node.next = before.next
+
+        if before.next != null {
+            before.next.?.prev = node
+        } else {
+            self.tail = node
+        }
+        before.next = node
+        self.len += 1
+    }
+
+    // sum a uint field across all nodes via a user supplied accessor
+    fold_sum := fn(self: ^Self, $acc: fn(^T): uint): uint {
+        cur := self.head
+        sum := 0
+        loop {
+            if cur == null break
+            sum += acc(item_of(cur.?))
+            cur = cur.?.next
+        }
+        return sum
+    }
+}
+
+// ---- concrete usage ----
+
+Task := struct {
+    .id: uint;
+    .cost: uint;
+    .node: ListNode;
+}
+
+TaskList := List(Task, "node")
+
+main := fn(): uint {
+    // stack-allocate a pool of tasks
+    pool: [8]Task = idk
+
+    i := 0
+    loop if i == 8 break else {
+        pool[i].id = i
+        // costs 1..8
+        pool[i].cost = i + 1
+        pool[i].node = .(null, null)
+        i += 1
+    }
+
+    lst := TaskList.init()
+
+    // push all to back  →  0 1 2 3 4 5 6 7
+    i = 0
+    loop if i == 8 break else {
+        lst.push_back(&pool[i])
+        i += 1
+    }
+
+    if lst.len != 8 return 1
+
+    // pop front twice  →  2 3 4 5 6 7
+    a := lst.pop_front() || return 2
+    b := lst.pop_front() || return 3
+    if a.id != 0 return 4
+    if b.id != 1 return 5
+    if lst.len != 6 return 6
+
+    // pop back once  →  2 3 4 5 6
+    c := lst.pop_back() || return 7
+    if c.id != 7 return 8
+    if lst.len != 5 return 9
+
+    // remove middle element (id=4)  →  2 3 5 6
+    lst.remove(&pool[4])
+    if lst.len != 4 return 10
+
+    // check id=4 is gone by walking forward
+    cur := lst.head
+    expected := uint.[2, 3, 5, 6]
+    i = 0
+    loop {
+        if cur == null break
+        item := TaskList.item_of(cur.?)
+        if item.id != expected[i] return 20 + i
+        cur = cur.?.next
+        i += 1
+    }
+    if i != 4 return 30
+
+    // walk backward and check symmetry
+    cur = lst.tail
+    i = 3
+    loop {
+        if cur == null break
+        item := TaskList.item_of(cur.?)
+        if item.id != expected[i] return 40 + i
+        cur = cur.?.prev
+        if i == 0 break
+        i -= 1
+    }
+
+    // insert pool[4] back after pool[3]  →  2 3 4 5 6
+    lst.insert_after(&pool[3], &pool[4])
+    if lst.len != 5 return 50
+
+    // fold: sum of costs for ids 2 3 4 5 6  =  3+4+5+6+7 = 25
+    total := lst.fold_sum(fn(t: ^Task): uint return t.cost)
+    if total != 25 return 51
+
+    // push_front puts id=0 back  →  0 2 3 4 5 6
+    lst.push_front(&pool[0])
+    if lst.len != 6 return 60
+    front := lst.pop_front() || return 61
+    if front.id != 0 return 62
+
+    return 0
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target
@@ -2655,7 +3130,7 @@ main := fn(): uint {
     - [ ] inlining (heuristic)
     - [ ] loop unrolling
     - [x] folding
-  - [ ] clonable insructions
+  - [x] clonable insructions
   - [x] allocate abi registers
 - [ ] static analisys
   - [ ] source locations

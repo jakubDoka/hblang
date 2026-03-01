@@ -168,8 +168,6 @@ pub const Lexeme = enum(u16) {
     @"@export",
     @"@frame_pointer",
     @"@handler",
-    @"@SrcLoc",
-    @"@simd",
     @"@eval",
     @"@type_info",
     @"@Type",
@@ -407,9 +405,7 @@ const keyword_prefixes align(@alignOf(QueryVec)) = b: {
     break :b prefixes;
 };
 
-pub fn resolveKeyword(kw: []const u8) ?Lexeme {
-    const prefix: u8 = @truncate(std.hash.Fnv1a_32.hash(kw));
-
+pub fn resolveKeyword(prefix: u8, kw: []const u8) ?Lexeme {
     const search_vec: QueryVec = @splat(prefix);
 
     for (@as([]const QueryVec, @ptrCast(&keyword_prefixes)), 0..) |prefix_vec, i| {
@@ -487,6 +483,7 @@ pub fn next(self: *Lexer) Token {
     };
 
     var pos = self.cursor;
+    var ident_hash = std.hash.Fnv1a_32.init();
 
     const kind: Lexeme = state: switch (State.start) {
         .start => switch (self.source[self.cursor]) {
@@ -535,6 +532,7 @@ pub fn next(self: *Lexer) Token {
             },
         },
         .dollar => {
+            ident_hash.update(self.source[self.cursor..][0..1]);
             self.cursor += 1;
             switch (self.source[self.cursor]) {
                 '|', '&' => {
@@ -546,11 +544,12 @@ pub fn next(self: *Lexer) Token {
             }
         },
         .ident => {
+            ident_hash.update(self.source[self.cursor..][0..1]);
             self.cursor += 1;
             switch (self.source[self.cursor]) {
                 'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => continue :state .ident,
                 else => {
-                    if (resolveKeyword(self.source[pos..self.cursor])) |k| break :state k;
+                    if (resolveKeyword(@truncate(ident_hash.final()), self.source[pos..self.cursor])) |k| break :state k;
                     switch (self.source[pos]) {
                         '$' => |c| break :state @enumFromInt(c),
                         else => break :state .Ident,

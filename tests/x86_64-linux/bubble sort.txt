@@ -1,0 +1,55 @@
+main:
+	sub rsp, 0x50
+	mov qword ptr [rsp], 0x05
+	mov qword ptr [rsp+0x08], 0x03
+	mov qword ptr [rsp+0x10], 0x08
+	mov qword ptr [rsp+0x18], 0x01
+	mov qword ptr [rsp+0x20], 0x09
+	mov qword ptr [rsp+0x28], 0x02
+	mov qword ptr [rsp+0x30], 0x07
+	mov qword ptr [rsp+0x38], 0x04
+	mov qword ptr [rsp+0x40], 0x06
+	xor r9, r9
+	lea rax, [rsp]
+6:	cmp r9, 0x09
+	jnz :0
+	mov rcx, 0x01
+4:	cmp rcx, 0x09
+	jnz :1
+	xor rax, rax
+	jmp :2
+1:	mov rdx, rcx
+	dec rdx
+	lea rsi, [rax+rdx*8]
+	lea rdx, [rax+rcx*8]
+	mov rsi, [rsi]
+	mov rdx, [rdx]
+	cmp rsi, rdx
+	jbe :3
+	mov rax, rcx
+2:	add rsp, 0x50
+	ret
+3:	inc rcx
+	jmp :4
+0:	mov r10, 0x08
+	sub r10, r9
+	xor r8, r8
+8:	mov rcx, r8
+	cmp rcx, r10
+	jnz :5
+	inc r9
+	jmp :6
+5:	mov r8, rcx
+	inc r8
+	lea rdi, [rax+rcx*8]
+	lea rsi, [rax+r8*8]
+	mov rdx, [rdi]
+	mov rcx, [rsi]
+	cmp rdx, rcx
+	jbe :8
+	mov rdx, [rdi]
+	mov rcx, [rsi]
+	mov [rdi], rcx
+	mov [rsi], rdx
+	jmp :8
+8:	jmp :8

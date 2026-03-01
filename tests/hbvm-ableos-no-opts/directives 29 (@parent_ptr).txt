@@ -1,0 +1,14 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -24
+       li64 $1, 1
+         st $1, $254, 0, 8
+         st $0, $254, 8, 8
+     addi64 $1, $254, 0
+        jal $31, $0, :directives 29 (@parent_ptr).access
+     addi64 $254, $254, 24
+         ld $31, $254, -8, 8
+         tx
+directives 29 (@parent_ptr).access:
+         ld $1, $1, 8, 8
+       jala $0, $31, 0

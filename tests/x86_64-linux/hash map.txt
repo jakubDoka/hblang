@@ -1,0 +1,433 @@
+hash map.HashMap[=uint, =uint].delete:
+	sub rsp, 0x10
+	mov r8, 0x100000001B3
+	xor rdx, rdx
+	mov rax, 0xCBF29CE484222325
+	mov r9, [rdi+0x08]
+	mov [rsp], rsi
+7:	cmp rdx, 0x08
+	jnz :0
+	mov r8, 0x18
+	xor rdx, rdx
+	div r9
+	mov rax, rdx
+6:	mov rdx, [rdi]
+	mov rcx, rax
+	imul rcx, r8
+	add rdx, rcx
+	mov cl, [rdx+0x10]
+	xor cl, 0x01
+	test cl, cl
+	jz :1
+	xor rax, rax
+	jmp :2
+1:	mov cl, [rdx+0x11]
+	xor cl, 0x01
+	test cl, cl
+	jz :3
+	mov rcx, [rdx]
+	cmp rcx, rsi
+	setz cl
+	movzx rcx, cl
+	jmp :4
+3:	xor rcx, rcx
+4:	test cl, cl
+	jz :5
+	mov byte ptr [rdx+0x11], 0x01
+	mov rax, [rdi+0x10]
+	dec rax
+	mov [rdi+0x10], rax
+	mov rax, 0x01
+2:	add rsp, 0x10
+	ret
+5:	mov rcx, [rdi+0x08]
+	inc rax
+	xor rdx, rdx
+	div rcx
+	mov rax, rdx
+	jmp :6
+0:	lea rcx, [rsp]
+	add rcx, rdx
+	mov cl, [rcx]
+	movzx rcx, cl
+	xor rax, rcx
+	imul rax, r8
+	inc rdx
+	jmp :7
+hash map.HashMap[=uint, =uint].get:
+	sub rsp, 0x10
+	mov rcx, rdx
+	mov r10, 0x100000001B3
+	xor r9, r9
+	mov rax, 0xCBF29CE484222325
+	mov r8, [rsi+0x08]
+	mov rdx, rcx
+	mov [rsp], rdx
+7:	cmp r9, 0x08
+	jnz :0
+	mov r9, 0x18
+	xor rdx, rdx
+	div r8
+	mov rax, rdx
+6:	mov r8, [rsi]
+	mov rdx, rax
+	imul rdx, r9
+	add r8, rdx
+	mov dl, [r8+0x10]
+	xor dl, 0x01
+	test dl, dl
+	jz :1
+	mov byte ptr [rdi+0x08], 0x00
+	jmp :2
+1:	mov dl, [r8+0x11]
+	xor dl, 0x01
+	test dl, dl
+	jz :3
+	mov rdx, [r8]
+	cmp rdx, rcx
+	setz dl
+	movzx rdx, dl
+	jmp :4
+3:	xor rdx, rdx
+4:	test dl, dl
+	jz :5
+	mov byte ptr [rdi+0x08], 0x01
+	mov rax, [r8+0x08]
+	mov [rdi], rax
+2:	add rsp, 0x10
+	ret
+5:	mov r8, [rsi+0x08]
+	inc rax
+	xor rdx, rdx
+	div r8
+	mov rax, rdx
+	jmp :6
+0:	lea rdx, [rsp]
+	add rdx, r9
+	mov dl, [rdx]
+	movzx rdx, dl
+	xor rax, rdx
+	imul rax, r10
+	inc r9
+	jmp :7
+hash map.HashMap[=uint, =uint].insert:
+	sub rsp, 0x10
+	mov r11, rdx
+	mov rcx, [rdi+0x10]
+	mov rax, [rdi+0x08]
+	shl rcx, 0x01
+	cmp rcx, rax
+	jb :0
+	xor rax, rax
+	jmp :6
+0:	mov r10, 0x08
+	mov rax, 0xCBF29CE484222325
+	xor r8, r8
+	mov rdx, 0x100000001B3
+	mov r9, [rdi+0x08]
+	mov [rsp], rsi
+8:	cmp r8, r10
+	jnz :2
+	mov r8, 0x18
+	xor rdx, rdx
+	div r9
+	mov rax, rdx
+7:	mov rdx, [rdi]
+	mov rcx, rax
+	imul rcx, r8
+	add rdx, rcx
+	mov cl, [rdx+0x10]
+	xor cl, 0x01
+	test cl, cl
+	jz :3
+	mov rcx, 0x01
+	jmp :4
+3:	mov cl, [rdx+0x11]
+4:	test cl, cl
+	jz :5
+	mov [rdx], rsi
+	mov rax, r11
+	mov [rdx+0x08], rax
+	mov byte ptr [rdx+0x10], 0x01
+	mov byte ptr [rdx+0x11], 0x00
+	mov rax, [rdi+0x10]
+	inc rax
+	mov [rdi+0x10], rax
+	mov rax, 0x01
+	jmp :6
+5:	mov rcx, [rdx]
+	cmp rcx, rsi
+	jnz :6
+	mov rax, r11
+	mov [rdx+0x08], rax
+	mov rax, 0x01
+6:	add rsp, 0x10
+	ret
+6:	mov rcx, [rdi+0x08]
+	inc rax
+	xor rdx, rdx
+	div rcx
+	mov rax, rdx
+	jmp :7
+2:	lea rcx, [rsp]
+	add rcx, r8
+	mov cl, [rcx]
+	movzx rcx, cl
+	xor rax, rcx
+	imul rax, rdx
+	inc r8
+	jmp :8
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x6C8
+	lea rdi, [rsp]
+	mov rsi, 0x18
+	xor rax, rax
+24:	cmp rax, 0x40
+	jnz :0
+	mov [rsp+0x6B0], rdi
+	mov qword ptr [rsp+0x6B8], 0x40
+	mov qword ptr [rsp+0x6C0], 0x00
+	lea rdi, [rsp+0x6B0]
+	mov rdx, 0x64
+	mov rsi, 0x01
+	call :hash map.HashMap[=uint, =uint].insert
+	xor al, 0x01
+	test al, al
+	jz :1
+	mov rbx, 0x01
+	jmp :36
+1:	mov rsi, 0x02
+	mov rdx, 0xC8
+	lea rdi, [rsp+0x6B0]
+	call :hash map.HashMap[=uint, =uint].insert
+	xor al, 0x01
+	test al, al
+	jz :3
+	mov rbx, 0x02
+	jmp :36
+3:	mov rsi, 0x03
+	mov rdx, 0x12C
+	lea rdi, [rsp+0x6B0]
+	call :hash map.HashMap[=uint, =uint].insert
+	xor al, 0x01
+	test al, al
+	jz :4
+	mov rbx, 0x03
+	jmp :36
+4:	lea rdi, [rsp+0x610]
+	lea rsi, [rsp+0x6B0]
+	mov rdx, 0x01
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x618]
+	test al, al
+	jz :5
+	mov rax, [rsp+0x610]
+	cmp rax, 0x64
+	jz :6
+	mov rbx, 0x05
+	jmp :36
+6:	lea rdi, [rsp+0x620]
+	lea rsi, [rsp+0x6B0]
+	mov rdx, 0x02
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x628]
+	test al, al
+	jz :7
+	mov rax, [rsp+0x620]
+	cmp rax, 0xC8
+	jz :8
+	mov rbx, 0x07
+	jmp :36
+8:	lea rdi, [rsp+0x630]
+	lea rsi, [rsp+0x6B0]
+	mov rdx, 0x03
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x638]
+	test al, al
+	jz :9
+	mov rax, [rsp+0x630]
+	cmp rax, 0x12C
+	jz :10
+	mov rbx, 0x09
+	jmp :36
+a:	mov rdx, 0x3E7
+	lea rdi, [rsp+0x6B0]
+	mov rsi, 0x02
+	call :hash map.HashMap[=uint, =uint].insert
+	xor al, 0x01
+	test al, al
+	jz :11
+	mov rbx, 0x0A
+	jmp :36
+b:	lea rdi, [rsp+0x640]
+	lea rsi, [rsp+0x6B0]
+	mov rdx, 0x02
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x648]
+	test al, al
+	jz :12
+	mov rax, [rsp+0x640]
+	cmp rax, 0x3E7
+	jz :13
+	mov rbx, 0x0C
+	jmp :36
+d:	lea rdi, [rsp+0x6B0]
+	mov rsi, 0x02
+	call :hash map.HashMap[=uint, =uint].delete
+	xor al, 0x01
+	test al, al
+	jz :14
+	mov rbx, 0x0D
+	jmp :36
+e:	lea rdi, [rsp+0x650]
+	lea rsi, [rsp+0x6B0]
+	mov rdx, 0x02
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x658]
+	test al, al
+	jz :15
+	mov rbx, 0x0E
+	jmp :36
+f:	lea rdi, [rsp+0x660]
+	mov rdx, 0x2A
+	lea rsi, [rsp+0x6B0]
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x668]
+	test al, al
+	jz :16
+	mov rbx, 0x0F
+	jmp :36
+10:	lea rdi, [rsp+0x600]
+	lea rsi, [rsp+0x6B0]
+	mov rdx, 0x01
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x608]
+	xor al, 0x01
+	test al, al
+	jz :17
+	mov rbx, 0x10
+	jmp :36
+11:	lea rdi, [rsp+0x6A0]
+	lea rsi, [rsp+0x6B0]
+	mov rdx, 0x02
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x6A8]
+	test al, al
+	jz :18
+	mov rbx, 0x11
+	jmp :36
+12:	mov rbx, 0x1E
+	mov rbp, 0x0A
+23:	cmp rbp, rbx
+	jnz :19
+	mov rbp, 0x0A
+21:	cmp rbp, rbx
+	jnz :20
+	mov rbx, 0x0A
+1e:	mov rax, 0x14
+	cmp rbx, rax
+	jnz :21
+	mov rbx, 0x0A
+1c:	mov rax, 0x14
+	cmp rbx, rax
+	jnz :22
+	mov rbx, 0x14
+1a:	cmp rbx, 0x1E
+	jnz :23
+	xor rbx, rbx
+	jmp :36
+17:	lea rsi, [rsp+0x6B0]
+	mov rdx, rbx
+	lea rdi, [rsp+0x690]
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x698]
+	test al, al
+	jz :24
+	mov rcx, rbx
+	imul rcx, rbx
+	mov rax, [rsp+0x690]
+	cmp rax, rcx
+	jz :25
+	add rbx, 0x2BC
+	jmp :36
+19:	inc rbx
+	jmp :26
+18:	add rbx, 0x258
+	jmp :36
+16:	lea rsi, [rsp+0x6B0]
+	mov rdx, rbx
+	lea rdi, [rsp+0x680]
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x688]
+	test al, al
+	jz :27
+	add rbx, 0x1F4
+	jmp :36
+1b:	inc rbx
+	jmp :28
+15:	lea rdi, [rsp+0x6B0]
+	mov rsi, rbx
+	call :hash map.HashMap[=uint, =uint].delete
+	xor al, 0x01
+	test al, al
+	jz :29
+	add rbx, 0x190
+	jmp :36
+1d:	inc rbx
+	jmp :30
+14:	lea rsi, [rsp+0x6B0]
+	mov rdx, rbp
+	lea rdi, [rsp+0x670]
+	call :hash map.HashMap[=uint, =uint].get
+	mov al, [rsp+0x678]
+	test al, al
+	jz :31
+	mov rcx, rbp
+	imul rcx, rbp
+	mov rax, [rsp+0x670]
+	cmp rax, rcx
+	jz :32
+	add rbp, 0x12C
+	mov rbx, rbp
+	jmp :36
+20:	inc rbp
+	jmp :33
+1f:	add rbp, 0xC8
+	mov rbx, rbp
+	jmp :36
+13:	mov rax, rbp
+	imul rax, rbp
+	lea rdi, [rsp+0x6B0]
+	mov rsi, rbp
+	mov rdx, rax
+	call :hash map.HashMap[=uint, =uint].insert
+	xor al, 0x01
+	test al, al
+	jz :34
+	add rbp, 0x64
+	mov rbx, rbp
+	jmp :36
+22:	inc rbp
+	jmp :35
+c:	mov rbx, 0x0B
+	jmp :36
+9:	mov rbx, 0x08
+	jmp :36
+7:	mov rbx, 0x06
+	jmp :36
+5:	mov rbx, 0x04
+24:	mov rax, rbx
+	add rsp, 0x6C8
+	pop rbp
+	pop rbx
+	ret
+0:	mov rdx, rax
+	imul rdx, rsi
+	lea rcx, [rsp]
+	add rcx, rdx
+	mov byte ptr [rcx+0x10], 0x00
+	mov byte ptr [rcx+0x11], 0x00
+	inc rax
+	jmp :36

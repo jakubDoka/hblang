@@ -1,0 +1,423 @@
+intrusive linked list.List[=.Task].init:
+	mov qword ptr [rdi], 0x00
+	mov qword ptr [rdi+0x08], 0x00
+	mov qword ptr [rdi+0x10], 0x00
+	ret
+intrusive linked list.List[=.Task].pop_front:
+	sub rsp, 0x08
+	mov rcx, rdi
+	xor rax, rax
+	mov rdx, rcx
+	mov rdx, [rdx]
+	cmp rdx, 0x00
+	jnz :0
+	jmp :1
+0:	mov rdx, rcx
+	mov rdi, [rdx]
+	mov rdx, [rdi+0x08]
+	cmp rdx, rax
+	jz :2
+	mov rax, [rdi+0x08]
+	mov qword ptr [rax], 0x00
+	jmp :3
+2:	mov rax, rcx
+	mov qword ptr [rax+0x08], 0x00
+3:	mov rdx, [rdi+0x08]
+	mov rax, rcx
+	mov [rax], rdx
+	mov qword ptr [rdi], 0x00
+	mov qword ptr [rdi+0x08], 0x00
+	mov rax, rcx
+	mov rax, [rax+0x10]
+	dec rax
+	mov [rcx+0x10], rax
+	call :intrusive linked list.List[=.Task].item_of
+1:	add rsp, 0x08
+	ret
+intrusive linked list.List[=.Task].pop_back:
+	sub rsp, 0x08
+	mov rcx, rdi
+	xor rax, rax
+	mov rdx, rcx
+	mov rdx, [rdx+0x08]
+	cmp rdx, 0x00
+	jnz :0
+	jmp :1
+0:	mov rdx, rcx
+	mov rdi, [rdx+0x08]
+	mov rdx, [rdi]
+	cmp rdx, rax
+	jz :2
+	mov rax, [rdi]
+	mov qword ptr [rax+0x08], 0x00
+	jmp :3
+2:	mov rax, rcx
+	mov qword ptr [rax], 0x00
+3:	mov rdx, [rdi]
+	mov rax, rcx
+	mov [rax+0x08], rdx
+	mov qword ptr [rdi], 0x00
+	mov qword ptr [rdi+0x08], 0x00
+	mov rax, rcx
+	mov rax, [rax+0x10]
+	dec rax
+	mov [rcx+0x10], rax
+	call :intrusive linked list.List[=.Task].item_of
+1:	add rsp, 0x08
+	ret
+intrusive linked list.List[=.Task].remove:
+	push rbx
+	mov rax, rsi
+	mov rbx, rdi
+	mov rdi, rax
+	call :intrusive linked list.List[=.Task].node_of
+	xor rdx, rdx
+	mov rcx, [rax]
+	cmp rcx, rdx
+	jz :0
+	mov rdx, [rax]
+	mov rcx, [rax+0x08]
+	mov [rdx+0x08], rcx
+	jmp :1
+0:	mov rdx, [rax+0x08]
+	mov rcx, rbx
+	mov [rcx], rdx
+1:	mov rcx, [rax+0x08]
+	cmp rcx, 0x00
+	jz :2
+	mov rdx, [rax+0x08]
+	mov rcx, [rax]
+	mov [rdx], rcx
+	jmp :3
+2:	mov rdx, [rax]
+	mov rcx, rbx
+	mov [rcx+0x08], rdx
+3:	mov qword ptr [rax], 0x00
+	mov qword ptr [rax+0x08], 0x00
+	mov rax, rbx
+	mov rcx, [rax+0x10]
+	dec rcx
+	mov rax, rbx
+	mov [rax+0x10], rcx
+	pop rbx
+	ret
+intrusive linked list.List[=.Task].item_of:
+	sub rdi, 0x10
+	mov rax, rdi
+	ret
+intrusive linked list.List[=.Task].insert_after:
+	push rbx
+	push rbp
+	push r12
+	mov rax, rsi
+	mov r12, rdx
+	mov rbp, rdi
+	mov rdi, rax
+	call :intrusive linked list.List[=.Task].node_of
+	mov rbx, rax
+	mov rdi, r12
+	call :intrusive linked list.List[=.Task].node_of
+	mov rcx, rbx
+	mov [rax], rcx
+	mov rcx, rbx
+	mov rcx, [rcx+0x08]
+	mov [rax+0x08], rcx
+	mov rcx, rbx
+	mov rcx, [rcx+0x08]
+	cmp rcx, 0x00
+	jz :0
+	mov rcx, rbx
+	mov rcx, [rcx+0x08]
+	mov [rcx], rax
+	jmp :1
+0:	mov rcx, rbp
+	mov [rcx+0x08], rax
+1:	mov rcx, rbx
+	mov [rcx+0x08], rax
+	mov rax, rbp
+	mov rcx, [rax+0x10]
+	inc rcx
+	mov rax, rbp
+	mov [rax+0x10], rcx
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+intrusive linked list.List[=.Task].fold_sum[, =main.total]:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	mov rbx, [rdi]
+	xor rax, rax
+	mov rbp, rax
+1:	mov rax, rbx
+	cmp rax, 0x00
+	jnz :0
+	mov rax, rbp
+	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret
+0:	mov rdi, rbx
+	call :intrusive linked list.List[=.Task].item_of
+	mov rdi, rax
+	call :main.total
+	add rbp, rax
+	mov rbx, [rbx+0x08]
+	jmp :1
+intrusive linked list.List[=.Task].push_front:
+	push rbx
+	mov rax, rsi
+	mov rbx, rdi
+	mov rdi, rax
+	call :intrusive linked list.List[=.Task].node_of
+	mov rcx, rbx
+	mov rcx, [rcx]
+	mov [rax+0x08], rcx
+	mov qword ptr [rax], 0x00
+	mov rcx, rbx
+	mov rcx, [rcx]
+	cmp rcx, 0x00
+	jz :0
+	mov rcx, rbx
+	mov rcx, [rcx]
+	mov [rcx], rax
+	jmp :1
+0:	mov rcx, rbx
+	mov [rcx+0x08], rax
+1:	mov rcx, rbx
+	mov [rcx], rax
+	mov rax, rbx
+	mov rcx, [rax+0x10]
+	inc rcx
+	mov rax, rbx
+	mov [rax+0x10], rcx
+	pop rbx
+	ret
+intrusive linked list.List[=.Task].push_back:
+	push rbx
+	mov rax, rsi
+	mov rbx, rdi
+	mov rdi, rax
+	call :intrusive linked list.List[=.Task].node_of
+	mov rcx, rbx
+	mov rcx, [rcx+0x08]
+	mov [rax], rcx
+	mov qword ptr [rax+0x08], 0x00
+	mov rcx, rbx
+	mov rcx, [rcx+0x08]
+	cmp rcx, 0x00
+	jz :0
+	mov rcx, rbx
+	mov rcx, [rcx+0x08]
+	mov [rcx+0x08], rax
+	jmp :1
+0:	mov rcx, rbx
+	mov [rcx], rax
+1:	mov rcx, rbx
+	mov [rcx+0x08], rax
+	mov rax, rbx
+	mov rcx, [rax+0x10]
+	inc rcx
+	mov rax, rbx
+	mov [rax+0x10], rcx
+	pop rbx
+	ret
+intrusive linked list.List[=.Task].node_of:
+	add rdi, 0x10
+	mov rax, rdi
+	ret
+main.total:
+	mov rax, [rdi+0x08]
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	sub rsp, 0x138
+	xor rbx, rbx
+	mov rbp, 0x08
+	mov rax, rbx
+1c:	cmp rax, rbp
+	jnz :0
+	lea rax, [rsp+0x120]
+	mov rdi, rax
+	call :intrusive linked list.List[=.Task].init
+	xor r12, r12
+1b:	cmp r12, rbp
+	jnz :1
+	mov rax, [rsp+0x130]
+	cmp rax, 0x08
+	jz :2
+	mov rax, 0x01
+	jmp :27
+2:	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].pop_front
+	mov rbp, rax
+	mov rax, rbp
+	cmp rax, 0x00
+	jz :4
+	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].pop_front
+	cmp rax, 0x00
+	jz :5
+	mov rcx, [rbp]
+	cmp rcx, 0x00
+	jz :6
+	mov rax, 0x04
+	jmp :27
+6:	mov rax, [rax]
+	cmp rax, 0x01
+	jz :7
+	mov rax, 0x05
+	jmp :27
+7:	mov rax, [rsp+0x130]
+	cmp rax, 0x06
+	jz :8
+	mov rax, 0x06
+	jmp :27
+8:	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].pop_back
+	cmp rax, 0x00
+	jz :9
+	mov rax, [rax]
+	cmp rax, 0x07
+	jz :10
+	mov rax, 0x08
+	jmp :27
+a:	mov rax, [rsp+0x130]
+	cmp rax, 0x05
+	jz :11
+	mov rax, 0x09
+	jmp :27
+b:	lea rax, [rsp+0x80]
+	mov rsi, rax
+	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].remove
+	mov rax, [rsp+0x130]
+	cmp rax, 0x04
+	jz :12
+	mov rax, 0x0A
+	jmp :27
+c:	lea rbp, [rsp+0x100]
+	mov rcx, [rsp+0x120]
+	mov qword ptr [rsp+0x100], 0x02
+	mov qword ptr [rsp+0x108], 0x03
+	mov qword ptr [rsp+0x110], 0x05
+	mov qword ptr [rsp+0x118], 0x06
+	xor rax, rax
+1a:	mov r13, rcx
+	mov r12, rax
+	mov rax, r13
+	cmp rax, rbx
+	jnz :13
+	cmp r12, 0x04
+	jz :14
+	mov rax, 0x1E
+	jmp :27
+e:	mov rax, [rsp+0x128]
+	mov rcx, 0x03
+18:	mov r13, rax
+	mov r12, rcx
+	mov rax, r13
+	cmp rax, rbx
+	jnz :15
+	jmp :16
+f:	mov rdi, r13
+	call :intrusive linked list.List[=.Task].item_of
+	lea rdx, [rbp+r12*8]
+	mov rcx, [rax]
+	mov rax, [rdx]
+	cmp rcx, rax
+	jz :17
+	mov rax, r12
+	add rax, 0x28
+	jmp :27
+11:	cmp r12, rbx
+	jnz :18
+10:	lea rsi, [rsp+0x60]
+	lea rdx, [rsp+0x80]
+	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].insert_after
+	mov rax, [rsp+0x130]
+	cmp rax, 0x05
+	jz :19
+	mov rax, 0x32
+	jmp :27
+13:	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].fold_sum[, =main.total]
+	cmp rax, 0x19
+	jz :20
+	mov rax, 0x33
+	jmp :27
+14:	lea rdi, [rsp+0x120]
+	lea rsi, [rsp]
+	call :intrusive linked list.List[=.Task].push_front
+	mov rax, [rsp+0x130]
+	cmp rax, 0x06
+	jz :21
+	mov rax, 0x3C
+	jmp :27
+15:	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].pop_front
+	cmp rax, 0x00
+	jz :22
+	mov rax, [rax]
+	cmp rax, 0x00
+	jz :23
+	mov rax, 0x3E
+	jmp :27
+17:	xor rax, rax
+	jmp :27
+16:	mov rax, 0x3D
+	jmp :27
+12:	mov rcx, r12
+	dec rcx
+	mov rax, r13
+	mov rax, [rax]
+	jmp :24
+d:	mov rdi, r13
+	call :intrusive linked list.List[=.Task].item_of
+	lea rdx, [rbp+r12*8]
+	mov rcx, [rax]
+	mov rax, [rdx]
+	cmp rcx, rax
+	jz :25
+	mov rax, r12
+	add rax, 0x14
+	jmp :27
+19:	mov rax, r13
+	mov rcx, [rax+0x08]
+	mov rax, r12
+	inc rax
+	jmp :26
+9:	mov rax, 0x07
+	jmp :27
+5:	mov rax, 0x03
+	jmp :27
+4:	mov rax, 0x02
+1b:	add rsp, 0x138
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+1:	mov rax, r12
+	shl rax, 0x05
+	lea rsi, [rsp]
+	add rsi, rax
+	lea rdi, [rsp+0x120]
+	call :intrusive linked list.List[=.Task].push_back
+	inc r12
+	jmp :27
+0:	mov rdx, rax
+	shl rdx, 0x05
+	lea rcx, [rsp]
+	add rcx, rdx
+	mov [rcx], rax
+	inc rax
+	mov [rcx+0x08], rax
+	mov qword ptr [rcx+0x10], 0x00
+	mov qword ptr [rcx+0x18], 0x00
+	jmp :28

@@ -3060,9 +3060,55 @@ pub fn directive(
                 @intCast(idx),
             ));
         },
-        else => {
+        .handler, .@"export" => {
             lex.eatUntilClosingDelimeter();
-            return self.report(tok.pos, "unexpected directive", .{});
+            return self.report(tok.pos, "directive is only allowed in the file scope", .{});
+        },
+        .thread_local_storage => {
+            lex.eatUntilClosingDelimeter();
+            return self.report(tok.pos, "directive is only allowed as a initializer of a global variable", .{});
+        },
+        .import => {
+            lex.eatUntilClosingDelimeter();
+            return self.report(tok.pos, "directive is only allowed as a body of a function", .{});
+        },
+        .parent_ptr => {
+            const ty = try self.expectDestType(.parent_ptr, tok.pos, ctx.ty);
+
+            if (ty.data() != .Pointer) {
+                return self.report(tok.pos, "inferred parent {} is not a pointer", .{ty});
+            }
+
+            const parent = ty.data().Pointer.get(self.types).ty;
+
+            const name = try self.expect(lex, .@"\"", "to indicate the decl name");
+            var str_name = name.view(lex.source);
+            str_name = str_name[1 .. str_name.len - 1];
+
+            const field = switch (parent.data()) {
+                .Struct => |s| if (s.get(self.types).lookupField(self.types, str_name)) |idx|
+                    s.get(self.types).getLayout(self.types).fields[idx]
+                else
+                    return self.report(tok.pos, "{} does not have {} field (TODO: list fields)", .{}),
+                else => return self.report(tok.pos, "TODO: support this {} (maybe)", .{parent}),
+            };
+
+            try self.expectNext(iter);
+
+            const child_type = self.types.pointerTo(field.ty);
+
+            const child_ptr = try self.typedExpr(child_type, .{}, lex);
+
+            break :d .value(
+                ty,
+                self.bl.addBinOp(
+                    self.sloc(tok.pos),
+                    .isub,
+                    .i64,
+                    child_ptr.load(tok.pos, self),
+                    self.bl.addIntImm(self.sloc(tok.pos), .i64, field.offset),
+                ),
+            );
         },
     };
 

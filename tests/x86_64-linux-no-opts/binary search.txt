@@ -1,0 +1,50 @@
+binary search.binary_search:
+	mov r10, rdx
+	xor rax, rax
+4:	cmp rax, r10
+	jb :0
+	mov byte ptr [rdi+0x08], 0x00
+	jmp :1
+0:	mov r8, r10
+	sub r8, rax
+	shr r8, 0x01
+	mov rdx, rax
+	add rdx, r8
+	lea r9, [rsi+rdx*8]
+	mov r8, [r9]
+	cmp r8, rcx
+	jnz :2
+	mov byte ptr [rdi+0x08], 0x01
+	mov [rdi], rdx
+1:	ret
+2:	mov r8, [r9]
+	cmp r8, rcx
+	jnb :4
+	inc rdx
+	mov rax, rdx
+	mov rdx, r10
+	jmp :4
+4:	mov r10, rdx
+	jmp :4
+main:
+	sub rsp, 0x48
+	mov qword ptr [rsp], 0x01
+	mov qword ptr [rsp+0x08], 0x03
+	mov qword ptr [rsp+0x10], 0x05
+	mov qword ptr [rsp+0x18], 0x07
+	mov qword ptr [rsp+0x20], 0x09
+	mov qword ptr [rsp+0x28], 0x0B
+	lea rsi, [rsp]
+	mov rdx, 0x06
+	mov rcx, 0x07
+	lea rdi, [rsp+0x30]
+	call :binary search.binary_search
+	xor rcx, rcx
+	mov al, [rsp+0x38]
+	cmp al, cl
+	jnz :0
+	mov rax, 0x64
+	jmp :1
+0:	mov rax, [rsp+0x30]
+1:	add rsp, 0x48
+	ret

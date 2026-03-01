@@ -1,0 +1,386 @@
+main:
+         st $31, $254, -40, 40
+     addi64 $254, $254, -352
+         cp $3, $0
+25:     li64 $1, 8
+        jne $3, $1, :0
+     addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].init
+         cp $32, $0
+24:     li64 $1, 8
+        jne $32, $1, :2
+         ld $2, $254, 304, 8
+       li64 $1, 8
+        jeq $2, $1, :3
+       li64 $1, 1
+        jmp :4
+3:   addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].pop_front
+         cp $32, $1
+         cp $1, $32
+        jeq $1, $0, :6
+     addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].pop_front
+        jeq $1, $0, :7
+         ld $2, $32, 0, 8
+        jeq $2, $0, :8
+       li64 $1, 4
+        jmp :4
+8:       ld $2, $1, 0, 8
+       li64 $1, 1
+        jeq $2, $1, :9
+       li64 $1, 5
+        jmp :4
+9:       ld $2, $254, 304, 8
+       li64 $1, 6
+        jeq $2, $1, :a
+       li64 $1, 6
+        jmp :4
+a:   addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].pop_back
+        jeq $1, $0, :c
+         ld $2, $1, 0, 8
+       li64 $1, 7
+        jeq $2, $1, :d
+       li64 $1, 8
+        jmp :4
+d:       ld $2, $254, 304, 8
+       li64 $1, 5
+        jeq $2, $1, :e
+       li64 $1, 9
+        jmp :4
+e:   addi64 $1, $254, 0
+     addi64 $1, $1, 128
+         cp $35, $1
+         cp $2, $35
+     addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].remove
+         ld $2, $254, 304, 8
+       li64 $1, 4
+        jeq $2, $1, :10
+       li64 $1, 10
+        jmp :4
+10:   addi64 $34, $254, 256
+         ld $32, $254, 288, 8
+       li64 $1, 2
+         st $1, $254, 256, 8
+       li64 $1, 3
+         st $1, $254, 264, 8
+       li64 $1, 5
+         st $1, $254, 272, 8
+       li64 $1, 6
+         st $1, $254, 280, 8
+         cp $33, $0
+22:       cp $1, $32
+        jne $1, $0, :11
+       li64 $1, 4
+        jeq $33, $1, :12
+       li64 $1, 30
+        jmp :4
+12:       ld $32, $254, 296, 8
+       li64 $33, 3
+20:       cp $1, $32
+        jne $1, $0, :13
+        jmp :14
+13:       cp $1, $32
+        jal $31, $0, :intrusive linked list.List[=.Task].item_of
+       li64 $2, 3
+      slu64 $2, $33, $2
+      add64 $3, $34, $2
+         ld $2, $1, 0, 8
+         ld $1, $3, 0, 8
+        jeq $2, $1, :16
+     addi64 $1, $33, 40
+        jmp :4
+16:      jne $33, $0, :17
+14:   addi64 $1, $254, 0
+     addi64 $2, $1, 96
+         cp $3, $35
+     addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].insert_after
+         ld $2, $254, 304, 8
+       li64 $1, 5
+        jeq $2, $1, :19
+       li64 $1, 50
+        jmp :4
+19:   addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].fold_sum[, =main.total]
+       li64 $2, 25
+        jeq $1, $2, :1b
+       li64 $1, 51
+        jmp :4
+1b:   addi64 $1, $254, 288
+     addi64 $2, $254, 0
+        jal $31, $0, :intrusive linked list.List[=.Task].push_front
+         ld $2, $254, 304, 8
+       li64 $1, 6
+        jeq $2, $1, :1d
+       li64 $1, 60
+        jmp :4
+1d:   addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].pop_front
+        jeq $1, $0, :1e
+         ld $1, $1, 0, 8
+        jeq $1, $0, :1f
+       li64 $1, 62
+        jmp :4
+1f:       cp $1, $0
+        jmp :4
+1e:     li64 $1, 61
+        jmp :4
+17:   addi64 $33, $33, -1
+         ld $32, $32, 0, 8
+        jmp :20
+11:       cp $1, $32
+        jal $31, $0, :intrusive linked list.List[=.Task].item_of
+       li64 $2, 3
+      slu64 $2, $33, $2
+      add64 $3, $34, $2
+         ld $2, $1, 0, 8
+         ld $1, $3, 0, 8
+        jeq $2, $1, :21
+     addi64 $1, $33, 20
+        jmp :4
+21:       ld $32, $32, 8, 8
+     addi64 $33, $33, 1
+        jmp :22
+c:     li64 $1, 7
+        jmp :4
+7:     li64 $1, 3
+        jmp :4
+6:     li64 $1, 2
+4:   addi64 $254, $254, 352
+         ld $31, $254, -40, 40
+         tx
+2:     li64 $1, 5
+      slu64 $2, $32, $1
+     addi64 $1, $254, 0
+      add64 $2, $1, $2
+     addi64 $1, $254, 288
+        jal $31, $0, :intrusive linked list.List[=.Task].push_back
+     addi64 $32, $32, 1
+        jmp :24
+0:     li64 $1, 5
+      slu64 $2, $3, $1
+     addi64 $1, $254, 0
+      add64 $1, $1, $2
+         st $3, $1, 0, 8
+     addi64 $3, $3, 1
+         st $3, $1, 8, 8
+         st $0, $1, 16, 8
+         st $0, $1, 24, 8
+        jmp :25
+intrusive linked list.List[=.Task].init:
+         st $0, $1, 0, 8
+         st $0, $1, 8, 8
+         st $0, $1, 16, 8
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].pop_front:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+         cp $2, $1
+         cp $1, $2
+         ld $1, $1, 0, 8
+        jne $1, $0, :26
+         cp $1, $0
+        jmp :27
+26:       cp $1, $2
+         ld $1, $1, 0, 8
+         ld $3, $1, 8, 8
+        jeq $3, $0, :28
+         ld $3, $1, 8, 8
+         st $0, $3, 0, 8
+        jmp :29
+28:       cp $3, $2
+         st $0, $3, 8, 8
+29:       ld $4, $1, 8, 8
+         cp $3, $2
+         st $4, $3, 0, 8
+         st $0, $1, 0, 8
+         st $0, $1, 8, 8
+         cp $3, $2
+         ld $3, $3, 16, 8
+     addi64 $3, $3, -1
+         st $3, $2, 16, 8
+        jal $31, $0, :intrusive linked list.List[=.Task].item_of
+27:   addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].pop_back:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+         cp $2, $1
+         cp $1, $2
+         ld $1, $1, 8, 8
+        jne $1, $0, :2a
+         cp $1, $0
+        jmp :2b
+2a:       cp $1, $2
+         ld $1, $1, 8, 8
+         ld $3, $1, 0, 8
+        jeq $3, $0, :2c
+         ld $3, $1, 0, 8
+         st $0, $3, 8, 8
+        jmp :2d
+2c:       cp $3, $2
+         st $0, $3, 0, 8
+2d:       ld $4, $1, 0, 8
+         cp $3, $2
+         st $4, $3, 8, 8
+         st $0, $1, 0, 8
+         st $0, $1, 8, 8
+         cp $3, $2
+         ld $3, $3, 16, 8
+     addi64 $3, $3, -1
+         st $3, $2, 16, 8
+        jal $31, $0, :intrusive linked list.List[=.Task].item_of
+2b:   addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].remove:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+         cp $32, $1
+         cp $1, $2
+        jal $31, $0, :intrusive linked list.List[=.Task].node_of
+         ld $2, $1, 0, 8
+        jeq $2, $0, :2f
+         ld $3, $1, 0, 8
+         ld $2, $1, 8, 8
+         st $2, $3, 8, 8
+        jmp :30
+2f:       ld $3, $1, 8, 8
+         cp $2, $32
+         st $3, $2, 0, 8
+30:       ld $2, $1, 8, 8
+        jeq $2, $0, :31
+         ld $3, $1, 8, 8
+         ld $2, $1, 0, 8
+         st $2, $3, 0, 8
+        jmp :32
+31:       ld $3, $1, 0, 8
+         cp $2, $32
+         st $3, $2, 8, 8
+32:       st $0, $1, 0, 8
+         st $0, $1, 8, 8
+         cp $1, $32
+         ld $1, $1, 16, 8
+     addi64 $1, $1, -1
+         st $1, $32, 16, 8
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].item_of:
+     addi64 $1, $1, -16
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].insert_after:
+         st $31, $254, -32, 32
+     addi64 $254, $254, -32
+         cp $34, $3
+         cp $32, $1
+         cp $1, $2
+        jal $31, $0, :intrusive linked list.List[=.Task].node_of
+         cp $33, $1
+         cp $1, $34
+        jal $31, $0, :intrusive linked list.List[=.Task].node_of
+         cp $2, $33
+         st $2, $1, 0, 8
+         cp $2, $33
+         ld $2, $2, 8, 8
+         st $2, $1, 8, 8
+         cp $2, $33
+         ld $2, $2, 8, 8
+        jeq $2, $0, :33
+         cp $2, $33
+         ld $2, $2, 8, 8
+         st $1, $2, 0, 8
+        jmp :34
+33:       cp $2, $32
+         st $1, $2, 8, 8
+34:       st $1, $33, 8, 8
+         cp $1, $32
+         ld $1, $1, 16, 8
+     addi64 $1, $1, 1
+         st $1, $32, 16, 8
+     addi64 $254, $254, 32
+         ld $31, $254, -32, 32
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].fold_sum[, =main.total]:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -24
+         ld $32, $1, 0, 8
+         cp $33, $0
+37:       cp $1, $32
+        jne $1, $0, :35
+         cp $1, $33
+     addi64 $254, $254, 24
+         ld $31, $254, -24, 24
+       jala $0, $31, 0
+35:       cp $1, $32
+        jal $31, $0, :intrusive linked list.List[=.Task].item_of
+        jal $31, $0, :main.total
+      add64 $33, $33, $1
+         ld $32, $32, 8, 8
+        jmp :37
+intrusive linked list.List[=.Task].push_front:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+         cp $32, $1
+         cp $1, $2
+        jal $31, $0, :intrusive linked list.List[=.Task].node_of
+         cp $2, $32
+         ld $2, $2, 0, 8
+         st $2, $1, 8, 8
+         st $0, $1, 0, 8
+         cp $2, $32
+         ld $2, $2, 0, 8
+        jeq $2, $0, :38
+         cp $2, $32
+         ld $2, $2, 0, 8
+         st $1, $2, 0, 8
+        jmp :39
+38:       cp $2, $32
+         st $1, $2, 8, 8
+39:       cp $2, $32
+         st $1, $2, 0, 8
+         cp $1, $32
+         ld $1, $1, 16, 8
+     addi64 $1, $1, 1
+         st $1, $32, 16, 8
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].push_back:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+         cp $32, $1
+         cp $1, $2
+        jal $31, $0, :intrusive linked list.List[=.Task].node_of
+         cp $2, $32
+         ld $2, $2, 8, 8
+         st $2, $1, 0, 8
+         st $0, $1, 8, 8
+         cp $2, $32
+         ld $2, $2, 8, 8
+        jeq $2, $0, :3a
+         cp $2, $32
+         ld $2, $2, 8, 8
+         st $1, $2, 8, 8
+        jmp :3b
+3a:       cp $2, $32
+         st $1, $2, 0, 8
+3b:       cp $2, $32
+         st $1, $2, 8, 8
+         cp $1, $32
+         ld $1, $1, 16, 8
+     addi64 $1, $1, 1
+         st $1, $32, 16, 8
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+       jala $0, $31, 0
+intrusive linked list.List[=.Task].node_of:
+     addi64 $1, $1, 16
+       jala $0, $31, 0
+main.total:
+         ld $1, $1, 8, 8
+       jala $0, $31, 0

@@ -1,0 +1,407 @@
+main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -1584
+     addi64 $1, $254, 1536
+     addi64 $2, $254, 0
+       li64 $3, 64
+        jal $31, $0, :hash map.HashMap[=uint, =uint].init
+       li64 $2, 1
+     addi64 $1, $254, 1536
+       li64 $3, 100
+        jal $31, $0, :hash map.HashMap[=uint, =uint].insert
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :2
+       li64 $1, 1
+        jmp :3
+2:     li64 $2, 2
+     addi64 $1, $254, 1536
+       li64 $3, 200
+        jal $31, $0, :hash map.HashMap[=uint, =uint].insert
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :4
+       li64 $1, 2
+        jmp :3
+4:     li64 $2, 3
+     addi64 $1, $254, 1536
+       li64 $3, 300
+        jal $31, $0, :hash map.HashMap[=uint, =uint].insert
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :5
+       li64 $1, 3
+        jmp :3
+5:     li64 $2, 1
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+       andi $2, $2, 255
+        jeq $2, $0, :7
+       li64 $2, 100
+        jeq $1, $2, :8
+       li64 $1, 5
+        jmp :3
+8:     li64 $2, 2
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+       andi $2, $2, 255
+        jeq $2, $0, :9
+       li64 $2, 200
+        jeq $1, $2, :a
+       li64 $1, 7
+        jmp :3
+a:     li64 $2, 3
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+       andi $2, $2, 255
+        jeq $2, $0, :b
+       li64 $2, 300
+        jeq $1, $2, :c
+       li64 $1, 9
+        jmp :3
+c:     li64 $3, 999
+       li64 $2, 2
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].insert
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :d
+       li64 $1, 10
+        jmp :3
+d:     li64 $2, 2
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+       andi $2, $2, 255
+        jeq $2, $0, :e
+       li64 $2, 999
+        jeq $1, $2, :f
+       li64 $1, 12
+        jmp :3
+f:     li64 $2, 2
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].delete
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :11
+       li64 $1, 13
+        jmp :3
+11:     li64 $2, 2
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+         cp $1, $2
+       andi $1, $1, 255
+        jeq $1, $0, :12
+       li64 $1, 14
+        jmp :3
+12:     li64 $2, 42
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+         cp $1, $2
+       andi $1, $1, 255
+        jeq $1, $0, :13
+       li64 $1, 15
+        jmp :3
+13:     li64 $2, 1
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].contains
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :15
+       li64 $1, 16
+        jmp :3
+15:     li64 $2, 2
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].contains
+       andi $1, $1, 255
+        jeq $1, $0, :16
+       li64 $1, 17
+        jmp :3
+16:     li64 $33, 30
+       li64 $32, 10
+27:      jne $32, $33, :17
+       li64 $32, 10
+25:      jne $32, $33, :18
+       li64 $32, 10
+22:     li64 $1, 20
+        jne $32, $1, :19
+       li64 $32, 10
+20:     li64 $1, 20
+        jne $32, $1, :1a
+       li64 $32, 20
+1e:       cp $1, $32
+        jne $1, $33, :1b
+         cp $1, $0
+        jmp :3
+1b:   addi64 $1, $254, 1536
+         cp $2, $32
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+       andi $2, $2, 255
+        jeq $2, $0, :1c
+         cp $3, $32
+         cp $2, $32
+      mul64 $2, $3, $2
+        jeq $1, $2, :1d
+     addi64 $1, $32, 700
+        jmp :3
+1d:   addi64 $32, $32, 1
+        jmp :1e
+1c:   addi64 $1, $32, 600
+        jmp :3
+1a:       cp $2, $32
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+         cp $1, $2
+       andi $1, $1, 255
+        jeq $1, $0, :1f
+     addi64 $1, $32, 500
+        jmp :3
+1f:   addi64 $32, $32, 1
+        jmp :20
+19:       cp $2, $32
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].delete
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :21
+     addi64 $1, $32, 400
+        jmp :3
+21:   addi64 $32, $32, 1
+        jmp :22
+18:       cp $2, $32
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+       andi $2, $2, 255
+        jeq $2, $0, :23
+      mul64 $2, $32, $32
+        jeq $1, $2, :24
+     addi64 $1, $32, 300
+        jmp :3
+24:   addi64 $32, $32, 1
+        jmp :25
+23:   addi64 $1, $32, 200
+        jmp :3
+17:    mul64 $3, $32, $32
+         cp $2, $32
+     addi64 $1, $254, 1536
+        jal $31, $0, :hash map.HashMap[=uint, =uint].insert
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :26
+     addi64 $1, $32, 100
+        jmp :3
+26:   addi64 $32, $32, 1
+        jmp :27
+e:     li64 $1, 11
+        jmp :3
+b:     li64 $1, 8
+        jmp :3
+9:     li64 $1, 6
+        jmp :3
+7:     li64 $1, 4
+3:   addi64 $254, $254, 1584
+         ld $31, $254, -24, 24
+         tx
+hash map.HashMap[=uint, =uint].init:
+     addi64 $254, $254, -16
+         st $2, $254, 0, 8
+         st $3, $254, 8, 8
+         cp $5, $0
+29:       ld $4, $254, 0, 8
+         ld $2, $254, 8, 8
+        jne $5, $2, :28
+         st $4, $1, 0, 8
+         ld $2, $254, 8, 8
+         st $2, $1, 8, 8
+         st $0, $1, 16, 8
+     addi64 $254, $254, 16
+       jala $0, $31, 0
+28:   muli64 $3, $5, 24
+      add64 $2, $4, $3
+         st $0, $2, 16, 1
+         ld $2, $254, 0, 8
+      add64 $2, $2, $3
+         st $0, $2, 17, 1
+     addi64 $5, $5, 1
+        jmp :29
+hash map.HashMap[=uint, =uint].insert:
+         st $31, $254, -32, 32
+     addi64 $254, $254, -32
+         cp $33, $1
+         cp $34, $2
+         cp $32, $3
+       li64 $4, 1
+         cp $1, $33
+         ld $3, $1, 16, 8
+         cp $1, $33
+         ld $2, $1, 8, 8
+      slu64 $1, $3, $4
+       jltu $1, $2, :2a
+         cp $1, $0
+        jmp :2b
+2a:       cp $1, $33
+         ld $2, $1, 8, 8
+         cp $1, $34
+        jal $31, $0, :hash map.HashMap[=uint, =uint].hash_key
+31:       ld $3, $33, 0, 8
+     muli64 $2, $1, 24
+      add64 $3, $3, $2
+         ld $2, $3, 16, 1
+       andi $2, $2, 255
+        not $2, $2
+       andi $2, $2, 255
+        jeq $2, $0, :2d
+        li8 $2, 1
+        jmp :2e
+2d:       ld $2, $3, 17, 1
+2e:     andi $2, $2, 255
+        jeq $2, $0, :2f
+         st $34, $3, 0, 8
+         st $32, $3, 8, 8
+        li8 $1, 1
+         st $1, $3, 16, 1
+         st $0, $3, 17, 1
+         cp $1, $33
+         ld $1, $1, 16, 8
+     addi64 $1, $1, 1
+         st $1, $33, 16, 8
+        li8 $1, 1
+        jmp :2b
+2f:       ld $2, $3, 0, 8
+        jne $2, $34, :30
+         st $32, $3, 8, 8
+        li8 $1, 1
+2b:   addi64 $254, $254, 32
+         ld $31, $254, -32, 32
+       jala $0, $31, 0
+30:       ld $2, $33, 8, 8
+     addi64 $1, $1, 1
+     diru64 $0, $1, $1, $2
+        jmp :31
+hash map.HashMap[=uint, =uint].get:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -56
+         cp $33, $2
+         cp $32, $1
+         cp $1, $32
+         ld $2, $1, 8, 8
+         cp $1, $33
+        jal $31, $0, :hash map.HashMap[=uint, =uint].hash_key
+37:       ld $3, $32, 0, 8
+     muli64 $2, $1, 24
+      add64 $3, $3, $2
+         ld $2, $3, 16, 1
+       andi $2, $2, 255
+        not $2, $2
+       andi $2, $2, 255
+        jeq $2, $0, :32
+         st $0, $254, 8, 1
+         ld $1, $254, 0, 8
+         ld $2, $254, 8, 8
+        jmp :33
+32:       ld $2, $3, 17, 1
+       andi $2, $2, 255
+        not $2, $2
+       andi $2, $2, 255
+        jeq $2, $0, :34
+         ld $2, $3, 0, 8
+       cmpu $2, $2, $33
+      cmpui $2, $2, 0
+        not $2, $2
+        jmp :35
+34:       cp $2, $0
+35:     andi $2, $2, 255
+        jeq $2, $0, :36
+        li8 $1, 1
+         st $1, $254, 24, 1
+         ld $1, $3, 8, 8
+         st $1, $254, 16, 8
+         ld $2, $254, 24, 8
+33:   addi64 $254, $254, 56
+         ld $31, $254, -24, 24
+       jala $0, $31, 0
+36:       ld $2, $32, 8, 8
+     addi64 $1, $1, 1
+     diru64 $0, $1, $1, $2
+        jmp :37
+hash map.HashMap[=uint, =uint].delete:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -24
+         cp $33, $2
+         cp $32, $1
+         cp $1, $32
+         ld $2, $1, 8, 8
+         cp $1, $33
+        jal $31, $0, :hash map.HashMap[=uint, =uint].hash_key
+3d:       ld $3, $32, 0, 8
+     muli64 $2, $1, 24
+      add64 $3, $3, $2
+         ld $2, $3, 16, 1
+       andi $2, $2, 255
+        not $2, $2
+       andi $2, $2, 255
+        jeq $2, $0, :38
+         cp $1, $0
+        jmp :39
+38:       ld $2, $3, 17, 1
+       andi $2, $2, 255
+        not $2, $2
+       andi $2, $2, 255
+        jeq $2, $0, :3a
+         ld $2, $3, 0, 8
+       cmpu $2, $2, $33
+      cmpui $2, $2, 0
+        not $2, $2
+        jmp :3b
+3a:       cp $2, $0
+3b:     andi $2, $2, 255
+        jeq $2, $0, :3c
+        li8 $1, 1
+         st $1, $3, 17, 1
+         cp $1, $32
+         ld $1, $1, 16, 8
+     addi64 $1, $1, -1
+         st $1, $32, 16, 8
+        li8 $1, 1
+39:   addi64 $254, $254, 24
+         ld $31, $254, -24, 24
+       jala $0, $31, 0
+3c:       ld $2, $32, 8, 8
+     addi64 $1, $1, 1
+     diru64 $0, $1, $1, $2
+        jmp :3d
+hash map.HashMap[=uint, =uint].contains:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :hash map.HashMap[=uint, =uint].get
+         cp $1, $2
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+hash map.HashMap[=uint, =uint].hash_key:
+     addi64 $254, $254, -8
+         st $1, $254, 0, 8
+     addi64 $6, $254, 0
+       li64 $5, 8
+       li64 $4, -3750763034362895579
+         cp $1, $0
+3f:       cp $3, $1
+        jne $3, $5, :3e
+     diru64 $0, $1, $4, $2
+     addi64 $254, $254, 8
+       jala $0, $31, 0
+3e:       cp $3, $1
+      add64 $3, $6, $3
+         ld $3, $3, 0, 1
+       andi $3, $3, 255
+        xor $3, $4, $3
+     muli64 $4, $3, 1099511628211
+     addi64 $1, $1, 1
+        jmp :3f

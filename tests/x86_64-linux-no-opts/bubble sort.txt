@@ -1,0 +1,69 @@
+bubble sort.bubble_sort:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	xor r8, r8
+2:	mov rax, [rsp+0x08]
+	cmp r8, rax
+	jnz :0
+	add rsp, 0x10
+	ret
+0:	xor rdi, rdi
+4:	mov rcx, rdi
+	mov rax, [rsp+0x08]
+	dec rax
+	sub rax, r8
+	cmp rcx, rax
+	jnz :1
+	inc r8
+	jmp :2
+1:	mov rax, [rsp]
+	mov rdi, rcx
+	inc rdi
+	lea rsi, [rax+rcx*8]
+	lea rdx, [rax+rdi*8]
+	mov rcx, [rsi]
+	mov rax, [rdx]
+	cmp rcx, rax
+	jbe :4
+	mov rcx, [rsi]
+	mov rax, [rdx]
+	mov [rsi], rax
+	mov rax, [rsp]
+	lea rax, [rax+rdi*8]
+	mov [rax], rcx
+	jmp :4
+4:	jmp :4
+main:
+	sub rsp, 0x48
+	mov qword ptr [rsp], 0x05
+	mov qword ptr [rsp+0x08], 0x03
+	mov qword ptr [rsp+0x10], 0x08
+	mov qword ptr [rsp+0x18], 0x01
+	mov qword ptr [rsp+0x20], 0x09
+	mov qword ptr [rsp+0x28], 0x02
+	mov qword ptr [rsp+0x30], 0x07
+	mov qword ptr [rsp+0x38], 0x04
+	mov qword ptr [rsp+0x40], 0x06
+	lea rdi, [rsp]
+	mov rsi, 0x09
+	call :bubble sort.bubble_sort
+	mov rax, 0x01
+3:	cmp rax, 0x09
+	jnz :0
+	xor rax, rax
+	jmp :1
+0:	mov rdx, rax
+	dec rdx
+	lea rcx, [rsp]
+	lea rdx, [rcx+rdx*8]
+	lea rcx, [rsp]
+	lea rcx, [rcx+rax*8]
+	mov rdx, [rdx]
+	mov rcx, [rcx]
+	cmp rdx, rcx
+	jbe :2
+1:	add rsp, 0x48
+	ret
+2:	inc rax
+	jmp :3

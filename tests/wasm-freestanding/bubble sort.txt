@@ -1,0 +1,193 @@
+(module
+  (type (;0;) (func (result i64)))
+  (type (;1;) (func (param i64 i64)))
+  (func $main (type 0) (result i64)
+    (local i64 i64)
+    global.get 0
+    i64.const 72
+    i64.sub
+    global.set 0
+    global.get 0
+    i32.wrap_i64
+    i64.const 5
+    i64.store
+    i64.const 1
+    local.set 1
+    global.get 0
+    i32.wrap_i64
+    i64.const 3
+    i64.store offset=8
+    global.get 0
+    i32.wrap_i64
+    i64.const 8
+    i64.store offset=16
+    global.get 0
+    i32.wrap_i64
+    local.get 1
+    i64.store offset=24
+    global.get 0
+    i32.wrap_i64
+    i64.const 9
+    i64.store offset=32
+    global.get 0
+    i32.wrap_i64
+    i64.const 2
+    i64.store offset=40
+    global.get 0
+    i32.wrap_i64
+    i64.const 7
+    i64.store offset=48
+    global.get 0
+    i32.wrap_i64
+    i64.const 4
+    i64.store offset=56
+    global.get 0
+    i32.wrap_i64
+    i64.const 6
+    i64.store offset=64
+    i64.const 0
+    global.get 0
+    i64.add
+    i64.const 9
+    call $bubble_sort.bubble_sort
+    i64.const 1
+    local.set 0
+    loop  ;; label = @1
+      block  ;; label = @2
+        block  ;; label = @3
+          local.get 0
+          i64.const 9
+          i64.eq
+          br_if 0 (;@3;)
+          block  ;; label = @4
+            local.get 0
+            local.get 1
+            i64.sub
+            i64.const 3
+            i64.shl
+            i64.const 0
+            global.get 0
+            i64.add
+            i64.add
+            i32.wrap_i64
+            i64.load
+            local.get 0
+            i64.const 3
+            i64.shl
+            i64.const 0
+            global.get 0
+            i64.add
+            i64.add
+            i32.wrap_i64
+            i64.load
+            i64.gt_u
+            br_if 0 (;@4;)
+            local.get 0
+            local.get 1
+            i64.add
+            local.set 0
+            br 3 (;@1;)
+          end
+          br 1 (;@2;)
+        end
+        i64.const 0
+        local.set 0
+      end
+      local.get 0
+      i64.const 72
+      global.get 0
+      i64.add
+      global.set 0
+      return
+    end
+    unreachable)
+  (func $bubble_sort.bubble_sort (type 1) (param i64 i64)
+    (local i64 i64 i64 i64 i64 i64 i64)
+    local.get 1
+    i64.const 1
+    i64.sub
+    local.set 4
+    i64.const 0
+    local.set 2
+    loop  ;; label = @1
+      block  ;; label = @2
+        local.get 1
+        local.get 2
+        i64.eq
+        br_if 0 (;@2;)
+        local.get 4
+        local.get 2
+        i64.sub
+        local.set 5
+        i64.const 0
+        local.set 6
+        loop  ;; label = @3
+          block  ;; label = @4
+            local.get 6
+            local.get 5
+            i64.eq
+            br_if 0 (;@4;)
+            block  ;; label = @5
+              block  ;; label = @6
+                local.get 6
+                i64.const 3
+                i64.shl
+                local.get 0
+                i64.add
+                local.tee 7
+                i32.wrap_i64
+                i64.load
+                local.set 3
+                local.get 6
+                i64.const 1
+                i64.add
+                local.set 6
+                local.get 0
+                local.get 6
+                i64.const 3
+                i64.shl
+                i64.add
+                local.set 8
+                local.get 3
+                local.get 8
+                i32.wrap_i64
+                i64.load
+                i64.gt_u
+                br_if 0 (;@6;)
+                br 1 (;@5;)
+              end
+              local.get 7
+              i32.wrap_i64
+              i64.load
+              local.set 3
+              local.get 7
+              i32.wrap_i64
+              local.get 8
+              i32.wrap_i64
+              i64.load
+              i64.store
+              local.get 8
+              i32.wrap_i64
+              local.get 3
+              i64.store
+            end
+            br 1 (;@3;)
+          end
+          local.get 2
+          i64.const 1
+          i64.add
+          local.set 2
+          br 2 (;@1;)
+        end
+      end
+      return
+    end
+    unreachable)
+  (table (;0;) 0 funcref)
+  (memory (;0;) 3)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "memory" (memory 0))
+  (export "main" (func $main))
+  (elem (;0;) (i32.const 0) func)
+  (data (;0;) (i32.const 131072) ""))
