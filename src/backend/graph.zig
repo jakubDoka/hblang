@@ -993,7 +993,7 @@ pub fn Func(comptime Backend: type) type {
             kind: Kind,
             data_type: mod.DataType = .top,
             // additional ref count for frontends
-            tmp_rc: u16 = 0,
+            tmp_rc: u8 = 0,
             id: u32,
 
             input_ordered_len: u16,
@@ -1587,6 +1587,20 @@ pub fn Func(comptime Backend: type) type {
             };
 
             threadlocal var arna: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+
+            pub fn lockTmpExtra(self: *Node, slot: anytype) void {
+                if (slot.* == 0) {
+                    self.lockTmp();
+                }
+                slot.* += 1;
+            }
+
+            pub fn unlockTmpExtra(self: *Node, slot: anytype) void {
+                slot.* -= 1;
+                if (slot.* == 0) {
+                    self.unlockTmp();
+                }
+            }
 
             pub fn lockTmp(self: *Node) void {
                 self.tmp_rc += 1;

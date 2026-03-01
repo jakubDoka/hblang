@@ -8,6 +8,8 @@ pub fn Mixin(comptime Backend: type) type {
         const Self = @This();
         const Node = Func.Node;
 
+        ctx: *Ctx = undefined,
+
         const escaped_schedue = std.math.maxInt(u32);
 
         pub fn getGraph(self: *Self) *Func {
@@ -93,7 +95,7 @@ pub fn Mixin(comptime Backend: type) type {
             }
 
             pub fn set(self: *Scope, func: *Func, idx: usize, value: *Node) void {
-                value.lockTmp();
+                value.lockTmpExtra(&func.mem2reg.ctx.ref_counts[value.id]);
                 self.clearSlot(func, idx);
                 self.locals[idx] = .compact(.{ .Node = value });
             }
@@ -103,7 +105,7 @@ pub fn Mixin(comptime Backend: type) type {
                     switch (l) {
                         .Loop => |lp| lp.items[0].deinit(func),
                         .Node => |n| {
-                            n.unlockTmp();
+                            n.unlockTmpExtra(&func.mem2reg.ctx.ref_counts[n.id]);
                             if (n.outputs().len == 0) {
                                 func.kill(n);
                             }
@@ -113,12 +115,12 @@ pub fn Mixin(comptime Backend: type) type {
                 self.locals[idx] = undefined;
             }
 
-            pub fn clone(self: *Scope, scratch: *utils.Arena) Scope {
+            pub fn clone(self: *Scope, func: *Func, scratch: *utils.Arena) Scope {
                 const new = Scope{ .locals = scratch.dupe(Local, self.locals) };
                 for (new.locals) |l| {
                     switch (l.expand() orelse continue) {
                         .Loop => |lp| lp.items[0].rc += 1,
-                        .Node => |n| n.lockTmp(),
+                        .Node => |n| n.lockTmpExtra(&func.mem2reg.ctx.ref_counts[n.id]),
                     }
                 }
                 count += 1;
@@ -142,6 +144,7 @@ pub fn Mixin(comptime Backend: type) type {
         }
 
         pub const Ctx = struct {
+            ref_counts: []u16,
             slot_ids: []u32,
             scope: Scope,
             states: []?*Local.Join,
@@ -169,7 +172,8 @@ pub fn Mixin(comptime Backend: type) type {
             return node;
         }
 
-        pub fn traverseMemThread(ctx: *Ctx, self: *Func, node: Func.Node.Out) void {
+        pub fn traverseMemThread(self: *Func, node: Func.Node.Out) void {
+            const ctx = self.mem2reg.ctx;
             var da_cursor = node;
             while (true) {
                 var should_remove = false;
@@ -279,7 +283,7 @@ pub fn Mixin(comptime Backend: type) type {
                             ctx.states[cursor.id] = loop;
                             if (child.kind == .Loop) {
                                 loop.items = ctx.arena.alloc(Scope, 1);
-                                loop.items[0] = ctx.scope.clone(ctx.arena);
+                                loop.items[0] = ctx.scope.clone(self, ctx.arena);
                                 std.debug.assert(child.kind == .Loop);
                                 for (ctx.scope.locals, 0..) |*l, i| {
                                     if (l.expand() != null) {
@@ -337,12 +341,12 @@ pub fn Mixin(comptime Backend: type) type {
                     var tmp = utils.Arena.scrath(ctx.arena);
                     defer tmp.deinit();
 
-                    var saved = ctx.scope.clone(ctx.arena);
+                    var saved = ctx.scope.clone(self, ctx.arena);
 
                     for (tmp.arena.dupe(Node.Out, cursor.outputs())) |o| {
                         if (o.get().isNextInMemThread()) {
                             next_count -= 1;
-                            traverseMemThread(ctx, self, bypassCall(o) orelse {
+                            traverseMemThread(self, bypassCall(o) orelse {
                                 if (next_count == 1) {
                                     ctx.scope.deinit(self);
                                     ctx.scope = saved;
@@ -353,7 +357,7 @@ pub fn Mixin(comptime Backend: type) type {
                             });
 
                             if (next_count > 1) {
-                                ctx.scope = saved.clone(ctx.arena);
+                                ctx.scope = saved.clone(self, ctx.arena);
                             } else if (next_count > 0) {
                                 ctx.scope = saved;
                             } else {}
@@ -479,19 +483,23 @@ pub fn Mixin(comptime Backend: type) type {
                 bail = false;
             }
 
-            //if (alloc_offset_count == 0) return;
+            if (alloc_offset_count == 0) return;
 
             var ctx = Ctx{
+                .ref_counts = tmp.arena.alloc(u16, self.node_count * 2),
                 .slot_ids = slot_ids,
                 .scope = .init(alloc_offset_count, tmp.arena),
                 .states = tmp.arena.alloc(?*Local.Join, self.node_count),
                 .arena = tmp.arena,
             };
 
+            @memset(ctx.ref_counts, 0);
             @memset(ctx.states, null);
 
+            self.mem2reg.ctx = &ctx;
+
             std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
-            traverseMemThread(&ctx, self, self.start.outputs()[1]);
+            traverseMemThread(self, self.start.outputs()[1]);
 
             if (Scope.count != 0) {
                 self.gcm.buildCfg();
