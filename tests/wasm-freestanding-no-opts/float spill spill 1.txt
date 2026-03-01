@@ -1,0 +1,38 @@
+(module
+  (type (;0;) (func (result i64)))
+  (type (;1;) (func (param f32) (result f32)))
+  (type (;2;) (func))
+  (type (;3;) (func (param f32)))
+  (func $main (type 0) (result i64)
+    (local f32)
+    f32.const 0x0p+0 (;=0;)
+    call $float_spill_spill_1.opaque_float
+    local.set 0
+    f32.const 0x1p+0 (;=1;)
+    call $float_spill_spill_1.opaque_float
+    drop
+    local.get 0
+    i64.trunc_f32_s
+    return
+    unreachable)
+  (func $float_spill_spill_1.opaque_float (type 1) (param f32) (result f32)
+    call $float_spill_spill_1.other_ff
+    local.get 0
+    return
+    unreachable)
+  (func $float_spill_spill_1.other_ff (type 2)
+    f32.const 0x1.19999ap+0 (;=1.1;)
+    call $float_spill_spill_1.other_f
+    return
+    unreachable)
+  (func $float_spill_spill_1.other_f (type 3) (param f32)
+    return
+    unreachable)
+  (table (;0;) 0 funcref)
+  (memory (;0;) 3)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "memory" (memory 0))
+  (export "main" (func $main))
+  (elem (;0;) (i32.const 0) func)
+  (data (;0;) (i32.const 131072) ""))

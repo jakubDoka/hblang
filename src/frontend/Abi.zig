@@ -64,7 +64,7 @@ pub fn categorize(self: Abi, ty: Id, types: *Types, buf: *Buf) ?[]graph.AbiParam
         .ablecall, .wasmcall, .systemv, .syscall => switch (ty.data()) {
             else => {
                 // NOTE: well, maybe we can improve some stuff, but eh
-                categorizeSystemv(ty, buf, types) catch |err| switch (err) {
+                categorizeSystemv(ty, buf, types, self.cc) catch |err| switch (err) {
                     error.ByRef => buf.spilled(ty.stackSpec(types)),
                     error.Impossible => return null,
                 };
@@ -112,7 +112,7 @@ pub fn categorizeBuiltin(b: Types.Builtin) !?graph.DataType {
     };
 }
 
-pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
+pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) !void {
     std.debug.assert(bufr.len == 0);
 
     const max_vector_size = 512;
@@ -131,8 +131,10 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
 
         const Error = error{ ByRef, Impossible };
 
-        pub fn classify(t: Id, ts: *Types, offset: u64, catas: []?Cata) Error!void {
+        pub fn classify(t: Id, ts: *Types, offset: u64, catas: []?Cata, f32_count: *usize) Error!void {
             if (offset & (t.alignment(ts) - 1) != 0) return error.ByRef;
+
+            if (t == .f32) f32_count.* += 1;
 
             var class: Cata = switch (t.data()) {
                 .Builtin => |b| switch (b) {
@@ -150,7 +152,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                 else
                     .int,
                 .Option => |o| {
-                    classify(o.get(ts).inner, ts, offset, catas) catch |err| switch (err) {
+                    classify(o.get(ts).inner, ts, offset, catas, f32_count) catch |err| switch (err) {
                         error.Impossible => return,
                         else => |e| return e,
                     };
@@ -161,19 +163,20 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                             ts,
                             offset + layout.inner.offset,
                             catas,
+                            f32_count,
                         );
                     }
 
                     return;
                 },
                 .Slice => {
-                    try classify(.uint, ts, offset + 0, catas);
-                    try classify(.uint, ts, offset + 8, catas);
+                    try classify(.uint, ts, offset + 0, catas, f32_count);
+                    try classify(.uint, ts, offset + 8, catas, f32_count);
                     return;
                 },
                 .Struct => |s| {
                     for (s.get(ts).getLayout(ts).fields) |f| {
-                        try classify(f.ty, ts, offset + f.offset, catas);
+                        try classify(f.ty, ts, offset + f.offset, catas, f32_count);
                     }
                     return;
                 },
@@ -185,7 +188,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                     var impossible = true;
 
                     for (layout.fields) |f| {
-                        classify(f, ts, offset, catas) catch |err| switch (err) {
+                        classify(f, ts, offset, catas, f32_count) catch |err| switch (err) {
                             error.ByRef => return err,
                             error.Impossible => continue,
                         };
@@ -193,7 +196,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                     }
 
                     if (layout.tagLayout()) |tl| {
-                        try classify(.nany(tl.id), ts, offset + tl.offset, catas);
+                        try classify(.nany(tl.id), ts, offset + tl.offset, catas, f32_count);
                     }
 
                     if (impossible) return error.Impossible;
@@ -201,7 +204,13 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                 },
                 .Array => |a| {
                     for (0..@intCast(a.get(ts).len.s)) |i| {
-                        try classify(a.get(ts).elem, ts, offset + a.get(ts).elem.size(ts) * i, catas);
+                        try classify(
+                            a.get(ts).elem,
+                            ts,
+                            offset + a.get(ts).elem.size(ts) * i,
+                            catas,
+                            f32_count,
+                        );
                     }
                     return;
                 },
@@ -267,7 +276,8 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
     var categories_mem: [max_eight_bytes]?Cata = @splat(null);
     const categories = categories_mem[0..@intCast(eight_bytes)];
 
-    try Cata.classify(ty, types, 0, categories);
+    var f32_count: usize = 0;
+    try Cata.classify(ty, types, 0, categories, &f32_count);
 
     // NOTE: we do this after classify sinc classify catches impossible
     if (eight_bytes == 0) {
@@ -297,5 +307,16 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
     bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types)) });
     if (i * 8 < ty.size(types)) {
         bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types) - i * 8) });
+    }
+
+    if (cc == .wasmcall or cc == .ablecall) {
+        if (f32_count > 2 or (f32_count != 0 and bufr.len != 1)) return error.ByRef;
+
+        if (f32_count == 2) {
+            std.debug.assert(bufr.len == 1);
+
+            bufr.len = 2;
+            @memset(&bufr.slots, .{ .Reg = .f32 });
+        }
     }
 }

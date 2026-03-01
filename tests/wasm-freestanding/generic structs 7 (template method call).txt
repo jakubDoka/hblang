@@ -3,13 +3,11 @@
   (type (;1;) (func (param i64)))
   (func $main (type 0) (result i64)
     i64.const 0
-    global.get 0
-    i64.add
-    call $generic_structs_7__template_method_call_.A.apply_.main.y_
+    call $generic_structs_7__template_method_call_.A.apply___=main.y_
     i64.const 0
     return
     unreachable)
-  (func $generic_structs_7__template_method_call_.A.apply_.main.y_ (type 1) (param i64)
+  (func $generic_structs_7__template_method_call_.A.apply___=main.y_ (type 1) (param i64)
     return
     unreachable)
   (table (;0;) 0 funcref)

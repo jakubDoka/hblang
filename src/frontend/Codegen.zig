@@ -1323,6 +1323,13 @@ pub fn emitToBackend(
         .name = name,
         .linkage = fnid.get(self.types).linkage,
         .optimizations = .{ .opts = opts },
+        .special = if (fnid == self.types.handlers.get(.entry))
+            .entry
+        else if (fnid == self.types.handlers.get(.memcpy))
+            .memcpy
+        else
+            null,
+
         .builtins = .{},
         .uuid = @splat(0),
     });
@@ -6404,14 +6411,11 @@ pub fn collectExports(types: *Types) !void {
     }
 
     if (types.handlers.get(.memcpy).asOpt()) |h| {
-        h.get(types).linkage = .exported;
-        h.get(types).scope.name_pos = .memcpy;
         h.get(types).queue(.runtime, types);
     }
 
     if (types.handlers.get(.entry).asOpt()) |h| {
         h.get(types).linkage = .exported;
-        h.get(types).scope.name_pos = .entry;
         h.get(types).queue(.runtime, types);
     }
 
@@ -6792,6 +6796,8 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .release, &scratch);
     try runTestForTarget(name, code, gpa, .@"x86_64-linux", .debug, &scratch);
     try runTestForTarget(name, code, gpa, .@"x86_64-linux", .release, &scratch);
+    try runTestForTarget(name, code, gpa, .@"wasm-freestanding", .debug, &scratch);
+    try runTestForTarget(name, code, gpa, .@"wasm-freestanding", .release, &scratch);
 }
 
 pub fn runTestForTarget(
@@ -6816,7 +6822,7 @@ pub fn runTestForTarget(
     const backend = target.toMachine(exp.should_error, scratch, gpa);
     defer backend.deinit();
 
-    var types = Types.init(asts, &kl.loader, @tagName(target), backend, scratch.*, gpa);
+    var types = Types.init(asts, &kl.loader, target, backend, scratch.*, gpa);
     defer types.deinit();
 
     try collectExports(&types);

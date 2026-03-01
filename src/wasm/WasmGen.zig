@@ -80,10 +80,10 @@ pub const Set = Regalloc.RegMask(RegTag, set_cap);
 pub const i_know_the_api = {};
 
 // TODO: maybe we can avoid this, but it works too well
-threadlocal var stacked: std.DynamicBitSetUnmanaged = undefined;
+threadlocal var stacked: ?std.DynamicBitSetUnmanaged = null;
 
 pub fn isDef(self: *Func.Node) bool {
-    return !stacked.isSet(self.id) and
+    return (if (stacked) |*s| !s.isSet(self.id) else true) and
         self.kind != .GetLocal and
         self.kind != .WrapI64 and
         self.kind != .StackAddr;
@@ -527,15 +527,16 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    // Its reasonamble to assume we wont insert more nodes that this
-    const count = func.node_count * 3;
-
-    stacked = try .initEmpty(tmp.arena.allocator(), count);
-
     switch (opts.optimizations.opts.mode) {
         .release => Mach.optimizeRelease(WasmGen, self, func),
         .debug => Mach.optimizeDebug(WasmGen, self, func),
     }
+
+    // Its reasonamble to assume we wont insert more nodes that this
+    const count = func.node_count * 3;
+
+    stacked = try .initEmpty(tmp.arena.allocator(), count);
+    defer stacked = null;
 
     //func.fmtScheduledLog();
 
@@ -574,7 +575,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 .block = block,
                 .second_round = i != 0,
                 .schedules = self.ctx.schedules,
-                .stacked = &stacked,
+                .stacked = &stacked.?,
                 .deleted = &deleted,
             };
             stacker.recoverBlockTrees();
@@ -832,7 +833,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             }
 
             if (log_cfg) print("  {f}\n", .{instr});
-            if (deleted.isSet(instr.id) and !stacked.isSet(instr.id)) {
+            if (deleted.isSet(instr.id) and !stacked.?.isSet(instr.id)) {
                 continue;
             }
             self.emitInstr(instr);
@@ -1293,7 +1294,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             for (0..ret.len) |i| {
                 for (instr.outputs()[0].get().outputs()) |out| {
                     if (out.get().kind == .Ret) {
-                        if (stacked.isSet(out.get().id)) {
+                        if (stacked.?.isSet(out.get().id)) {
                             std.debug.assert(!dropped);
                             break;
                         }
@@ -1402,7 +1403,7 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {
-    if (stacked.isSet(for_instr.id)) {
+    if (stacked.?.isSet(for_instr.id)) {
         return;
     }
 

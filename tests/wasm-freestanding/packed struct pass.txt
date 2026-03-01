@@ -1,10 +1,9 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (param i32 i32)))
+  (type (;1;) (func))
   (func $main (type 0) (result i64)
-    (local i32)
     global.get 0
-    i64.const 8
+    i64.const 3
     i64.sub
     global.set 0
     global.get 0
@@ -15,21 +14,15 @@
     i32.wrap_i64
     i32.const 0
     i32.store16 offset=1
-    i32.const 0
-    global.get 0
-    i32.wrap_i64
-    i32.load8_u offset=2
-    i32.const 8
-    i32.shl
     call $packed_struct_pass.broken
     i64.const 0
-    i64.const 8
+    i64.const 3
     global.get 0
     i64.add
     global.set 0
     return
     unreachable)
-  (func $packed_struct_pass.broken (type 1) (param i32 i32)
+  (func $packed_struct_pass.broken (type 1)
     return
     unreachable)
   (table (;0;) 0 funcref)

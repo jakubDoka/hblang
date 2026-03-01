@@ -3,13 +3,13 @@
   (type (;1;) (func (param i64) (result i32)))
   (func $main (type 0) (result i64)
     i64.const 1
-    call $functions_7__return_postion_@Any_.quirky_int_cast_uint_
+    call $functions_7__return_postion_@Any_.quirky_int_cast_uint_:u8
     i32.const 255
     i32.and
     i64.extend_i32_u
     return
     unreachable)
-  (func $functions_7__return_postion_@Any_.quirky_int_cast_uint_ (type 1) (param i64) (result i32)
+  (func $functions_7__return_postion_@Any_.quirky_int_cast_uint_:u8 (type 1) (param i64) (result i32)
     local.get 0
     i64.const 1
     i64.sub

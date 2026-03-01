@@ -1293,9 +1293,11 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 utils.panic("{f}", .{instr});
             }
             const instr_lrg = lrg_table[instr.id].get(lrgs);
-            const tag = instr_lrg.def.regMask(func, 0, tmp.arena).tag;
-            if (tag != instr_lrg.mask.tag) {
-                utils.panic("{f} {} {}\n", .{ instr_lrg, instr_lrg.mask.tag, tag });
+            if (!instr_lrg.def.isDead()) {
+                const tag = instr_lrg.def.regMask(func, 0, tmp.arena).tag;
+                if (tag != instr_lrg.mask.tag) {
+                    utils.panic("{f} {} {}\n", .{ instr_lrg, instr_lrg.mask.tag, tag });
+                }
             }
             alloc[instr.id] = .{ .index = @intCast(instr_lrg.reg), .tag = instr_lrg.mask.tag };
         }

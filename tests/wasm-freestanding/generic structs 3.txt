@@ -3,11 +3,11 @@
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
     i64.const 10
-    call $generic_structs_3.Foo_uint_.sub
-    call $generic_structs_3.Foo_uint_.sub
+    call $generic_structs_3.Foo_=uint_.sub
+    call $generic_structs_3.Foo_=uint_.sub
     return
     unreachable)
-  (func $generic_structs_3.Foo_uint_.sub (type 1) (param i64) (result i64)
+  (func $generic_structs_3.Foo_=uint_.sub (type 1) (param i64) (result i64)
     local.get 0
     return
     unreachable)

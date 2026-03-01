@@ -44,7 +44,7 @@ loader: *Loader,
 backend: *Machine,
 vm: hb.hbvm.Vm = .{},
 target: []const u8,
-abi: Abi = .systemv,
+abi: Abi,
 func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
     .initFill(.empty),
 errored: usize = 0,
@@ -917,9 +917,7 @@ pub const Scope = extern struct {
     }
 
     pub const NamePos = enum(u32) {
-        entry = std.math.maxInt(u32) - 6,
-        memcpy,
-        tuple,
+        tuple = std.math.maxInt(u32) - 4,
         string,
         file,
         empty,
@@ -947,8 +945,6 @@ pub const Scope = extern struct {
             .file => self.file.get(types).path,
             .empty => "",
             .tuple => "tuple",
-            .entry => "_start",
-            .memcpy => "memcpy",
             .string => {
                 const global: *Global = @fieldParentPtr("scope", self);
                 return global.data.get(types);
@@ -1737,7 +1733,7 @@ pub const Global = struct {
 pub fn init(
     files: []File,
     loader: *Loader,
-    target: []const u8,
+    target: Machine.SupportedTarget,
     backend: *Machine,
     arena: utils.Arena,
     gpa: std.mem.Allocator,
@@ -1752,8 +1748,9 @@ pub fn init(
             .emit_global_reloc_offsets = true,
         },
         .loader = loader,
+        .abi = .{ .cc = target.toCallConv() },
         .backend = backend,
-        .target = target,
+        .target = @tagName(target),
         .tmp = undefined,
         .arena = arena,
         .builtins = undefined,

@@ -390,12 +390,11 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
     var types = hb.frontend.Types.init(
         asts,
         &loader.loader,
-        @tagName(opts.target),
+        opts.target,
         bckend,
         type_system_memory,
         opts.gpa,
     );
-    types.abi = .{ .cc = opts.target.toCallConv() };
 
     const opt_options = backend.Machine.OptOptions{
         .mode = opts.optimizations,

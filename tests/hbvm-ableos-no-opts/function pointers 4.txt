@@ -3,9 +3,10 @@ main:
      addi64 $254, $254, -32
         li8 $1, -1
          st $1, $254, 16, 1
-     addi64 $1, $254, 0
-     addi64 $2, $254, 16
+     addi64 $1, $254, 16
         jal $31, $0, :function pointers 4.DynObj.new[^.Obj]
+         st $1, $254, 0, 8
+         st $2, $254, 8, 8
      addi64 $1, $254, 0
         jal $31, $0, :function pointers 4.DynObj.func
        andi $1, $1, 255
@@ -13,9 +14,7 @@ main:
          ld $31, $254, -8, 8
          tx
 function pointers 4.DynObj.new[^.Obj]:
-         st $2, $1, 0, 8
         lra $2, $0, :function pointers 4.Obj.func
-         st $2, $1, 8, 8
        jala $0, $31, 0
 function pointers 4.DynObj.func:
          st $31, $254, -8, 8

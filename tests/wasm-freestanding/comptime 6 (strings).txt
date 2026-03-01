@@ -1,47 +1,37 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (param i64)))
+  (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    i64.const 0
-    global.get 0
-    i64.add
-    call $comptime_6__strings_.main.string_to_array__Edward__
-    global.get 0
+    call $main.string_to_array_=_Edward__
     i32.wrap_i64
-    i64.load8_u
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
+    i32.const 255
+    i32.and
+    i64.extend_i32_u
     return
     unreachable)
-  (func $comptime_6__strings_.main.string_to_array__Edward__ (type 1) (param i64)
+  (func $main.string_to_array_=_Edward__ (type 1) (result i64)
     (local i64 i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     i64.const 0
-    local.set 2
+    local.set 0
     loop  ;; label = @1
       block  ;; label = @2
-        local.get 2
+        local.get 0
         i64.const 6
         i64.lt_u
         br_if 0 (;@2;)
-        local.get 0
-        i32.wrap_i64
-        i64.const 0
         global.get 0
-        i64.add
         i32.wrap_i64
-        i64.const 6
+        i64.load32_u
+        global.get 0
         i32.wrap_i64
-        memory.copy
+        i64.load16_u offset=4
+        i64.const 32
+        i64.shl
+        i64.or
         i64.const 8
         global.get 0
         i64.add
@@ -51,19 +41,19 @@
       i64.const 0
       global.get 0
       i64.add
-      local.get 2
+      local.get 0
       i64.add
       i32.wrap_i64
-      local.get 2
       global.get 1
+      local.get 0
       i64.add
       i32.wrap_i64
       i32.load8_u
       i32.store8
-      local.get 2
+      local.get 0
       i64.const 1
       i64.add
-      local.set 2
+      local.set 0
       br 0 (;@1;)
     end
     unreachable)

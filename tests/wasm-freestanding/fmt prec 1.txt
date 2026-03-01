@@ -2,10 +2,10 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
-    call $fmt_prec_1.main
+    call $main.funcs_1_
     return
     unreachable)
-  (func $fmt_prec_1.main (type 1) (result i64)
+  (func $main.funcs_1_ (type 1) (result i64)
     i64.const 0
     return
     unreachable)

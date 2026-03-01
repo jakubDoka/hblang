@@ -4,16 +4,16 @@
   (type (;2;) (func (param i64 i64) (result i64)))
   (func $main (type 0) (result i64)
     i64.const 1
-    call $generic_structs_1.nvec_uint_
-    call $generic_structs_1.Vec_uint_.sub
+    call $generic_structs_1.nvec_=uint_
+    call $generic_structs_1.Vec_=uint_.sub
     return
     unreachable)
-  (func $generic_structs_1.nvec_uint_ (type 1) (param i64) (result i64 i64)
+  (func $generic_structs_1.nvec_=uint_ (type 1) (param i64) (result i64 i64)
     local.get 0
     local.get 0
     return
     unreachable)
-  (func $generic_structs_1.Vec_uint_.sub (type 2) (param i64 i64) (result i64)
+  (func $generic_structs_1.Vec_=uint_.sub (type 2) (param i64 i64) (result i64)
     local.get 0
     local.get 1
     i64.sub

@@ -12,261 +12,73 @@
   (type (;10;) (func (result i32)))
   (type (;11;) (func (result i32)))
   (func $main (type 0) (result i64)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S__________.Z__________.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
-    global.get 1
-    i32.wrap_i64
-    i64.load
-    global.get 0
-    i32.wrap_i64
-    i64.load32_u
+    call $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z__________.get
+    i64.extend_i32_u
+    i64.const 10
     i64.ne
     i32.const 255
     i32.and
     i64.extend_i32_u
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S__________.Z__________.get (type 1) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S_________.Z_________.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z__________.get (type 1) (result i32)
+    call $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z_________.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S_________.Z_________.get (type 2) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S________.Z________.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z_________.get (type 2) (result i32)
+    call $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z________.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S________.Z________.get (type 3) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S_______.Z_______.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z________.get (type 3) (result i32)
+    call $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z_______.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S_______.Z_______.get (type 4) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S______.Z______.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z_______.get (type 4) (result i32)
+    call $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.Z______.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S______.Z______.get (type 5) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S_____.Z_____.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.S_=.Z______.get (type 5) (result i32)
+    call $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.Z_____.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S_____.Z_____.get (type 6) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S____.Z____.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.S_=.S_=.Z_____.get (type 6) (result i32)
+    call $deep_instantiation_1.S_=.S_=.S_=.S_=.Z____.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S____.Z____.get (type 7) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S___.Z___.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.S_=.Z____.get (type 7) (result i32)
+    call $deep_instantiation_1.S_=.S_=.S_=.Z___.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S___.Z___.get (type 8) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S__.Z__.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.S_=.Z___.get (type 8) (result i32)
+    call $deep_instantiation_1.S_=.S_=.Z__.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S__.Z__.get (type 9) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $deep_instantiation_1.S_.Z_.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
+  (func $deep_instantiation_1.S_=.S_=.Z__.get (type 9) (result i32)
+    call $deep_instantiation_1.S_=.Z_.get
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $deep_instantiation_1.S_.Z_.get (type 10) (result i32)
-    (local i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
+  (func $deep_instantiation_1.S_=.Z_.get (type 10) (result i32)
     call $deep_instantiation_1.Z.get
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store
     i32.const 1
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i32.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (func $deep_instantiation_1.Z.get (type 11) (result i32)
@@ -274,11 +86,10 @@
     return
     unreachable)
   (table (;0;) 0 funcref)
-  (memory (;0;) 4)
+  (memory (;0;) 3)
   (global (;0;) (mut i64) (i64.const 131072))
-  (global (;1;) i64 (i64.const 131072))
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
-  (data (;0;) (i32.const 131072) "\0a\00\00\00\00\00\00\00"))
+  (data (;0;) (i32.const 131072) ""))

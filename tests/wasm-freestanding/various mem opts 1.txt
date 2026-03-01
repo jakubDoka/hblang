@@ -35,19 +35,19 @@
                     local.get 1
                     i64.ne
                     br_if 0 (;@8;)
-                    br 7 (;@1;)
+                    br 4 (;@4;)
                   end
                   i64.const 4
                   local.set 1
-                  br 5 (;@2;)
+                  br 4 (;@3;)
                 end
                 i64.const 3
                 local.set 1
-                br 3 (;@3;)
+                br 4 (;@2;)
               end
               i64.const 2
               local.set 1
-              br 1 (;@4;)
+              br 4 (;@1;)
             end
             i64.const 1
             local.set 1
@@ -59,19 +59,39 @@
     return
     unreachable)
   (func $various_mem_opts_1.store_pullout (type 1) (result i64)
+    (local i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
+    block  ;; label = @1
+      block  ;; label = @2
+        global.get 0
+        i32.wrap_i64
+        i64.const 1
+        i64.store
+        i64.const 0
+        global.get 0
+        i64.add
+        call $various_mem_opts_1.use_^uint_
+        global.get 1
+        i32.wrap_i64
+        i32.load8_u
+        br_if 0 (;@2;)
+        global.get 0
+        i32.wrap_i64
+        i64.const 0
+        i64.store
+        br 1 (;@1;)
+      end
+      global.get 0
+      i32.wrap_i64
+      i64.const 0
+      i64.store
+    end
     global.get 0
     i32.wrap_i64
-    i64.const 1
-    i64.store
-    i64.const 0
-    global.get 0
-    i64.add
-    call $various_mem_opts_1.use_^uint_
-    i64.const 0
+    i64.load
     i64.const 8
     global.get 0
     i64.add
@@ -115,14 +135,31 @@
     i64.const 8
     i64.sub
     global.set 0
-    global.get 0
-    i32.wrap_i64
-    i64.const 1
-    i64.store
-    i64.const 0
-    global.get 0
-    i64.add
-    call $various_mem_opts_1.use_^uint_
+    block  ;; label = @1
+      block  ;; label = @2
+        global.get 0
+        i32.wrap_i64
+        i64.const 1
+        i64.store
+        i64.const 0
+        global.get 0
+        i64.add
+        call $various_mem_opts_1.use_^uint_
+        global.get 1
+        i32.wrap_i64
+        i32.load8_u
+        br_if 0 (;@2;)
+        global.get 0
+        i32.wrap_i64
+        i64.const 0
+        i64.store
+        br 1 (;@1;)
+      end
+      global.get 0
+      i32.wrap_i64
+      i64.const 0
+      i64.store
+    end
     global.get 0
     i32.wrap_i64
     i64.const 0

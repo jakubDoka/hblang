@@ -1,13 +1,13 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (result i32 i64)))
+  (type (;1;) (func (result i64 i64)))
   (type (;2;) (func (param i64)))
-  (type (;3;) (func (param i32 i64) (result i64)))
+  (type (;3;) (func (param i64 i64) (result i64)))
   (type (;4;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i64)
+    (local i64 i64)
     global.get 0
-    i64.const 80
+    i64.const 64
     i64.sub
     global.set 0
     block  ;; label = @1
@@ -18,7 +18,7 @@
         global.get 0
         i32.wrap_i64
         local.get 0
-        i32.store8 offset=24
+        i64.store offset=24
         global.get 0
         i32.wrap_i64
         local.get 1
@@ -29,16 +29,12 @@
         call $structs_3__call_stress_test_.return_triple
         global.get 0
         i32.wrap_i64
-        i32.load8_u offset=24
+        i64.load offset=24
         global.get 0
         i32.wrap_i64
         i64.load offset=32
         call $structs_3__call_stress_test_.take_pair
-        local.set 1
-        global.get 0
-        i32.wrap_i64
-        local.get 1
-        i64.store offset=64
+        local.set 0
         i64.const 0
         global.get 0
         i64.add
@@ -52,16 +48,8 @@
         memory.copy
         call $structs_3__call_stress_test_.take_triple
         local.set 1
-        global.get 0
-        i32.wrap_i64
+        local.get 0
         local.get 1
-        i64.store offset=72
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=64
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=72
         i64.ne
         br_if 0 (;@2;)
         i64.const 0
@@ -72,13 +60,14 @@
       local.set 1
     end
     local.get 1
-    i64.const 80
+    i64.const 64
     global.get 0
     i64.add
     global.set 0
     return
     unreachable)
-  (func $structs_3__call_stress_test_.return_pair (type 1) (result i32 i64)
+  (func $structs_3__call_stress_test_.return_pair (type 1) (result i64 i64)
+    (local i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -93,10 +82,8 @@
     i64.store offset=8
     global.get 0
     i32.wrap_i64
-    i32.load8_u
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
+    i64.load
+    i64.const 5
     i64.const 16
     global.get 0
     i64.add
@@ -119,45 +106,25 @@
     i32.store8 offset=16
     return
     unreachable)
-  (func $structs_3__call_stress_test_.take_pair (type 3) (param i32 i64) (result i64)
-    global.get 0
-    i64.const 16
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store8
-    global.get 0
-    i32.wrap_i64
+  (func $structs_3__call_stress_test_.take_pair (type 3) (param i64 i64) (result i64)
     local.get 1
-    i64.store offset=8
-    global.get 0
+    local.get 0
     i32.wrap_i64
-    i64.load8_u
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
+    i32.const 255
+    i32.and
+    i64.extend_i32_u
     i64.add
-    i64.const 16
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (func $structs_3__call_stress_test_.take_triple (type 4) (result i64)
-    (local i64)
-    i64.const 0
     global.get 0
-    i64.add
-    local.tee 0
     i32.wrap_i64
     i64.load
-    local.get 0
+    global.get 0
     i32.wrap_i64
     i64.load offset=8
     i64.add
-    local.get 0
+    global.get 0
     i32.wrap_i64
     i64.load8_u offset=16
     i64.add

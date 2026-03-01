@@ -1,28 +1,22 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (param i64 i64) (result i32 i64)))
+  (type (;1;) (func (param i64 i64) (result i64 i64)))
   (type (;2;) (func (param i64 i64) (result i32)))
   (type (;3;) (func (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64 i64)
+    (local i64 i64)
     global.get 0
-    i64.const 80
+    i64.const 16
     i64.sub
     global.set 0
     global.get 0
     i32.wrap_i64
-    global.get 1
-    i64.store
-    global.get 0
-    i32.wrap_i64
     i64.const 21
     i64.store offset=8
-    i64.const 0
-    local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i64.store offset=64
+    global.get 1
+    i64.store
     loop  ;; label = @1
       block  ;; label = @2
         block  ;; label = @3
@@ -31,219 +25,95 @@
               global.get 0
               i32.wrap_i64
               i64.load
-              local.set 2
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=64
-              local.set 3
-              local.get 2
-              local.get 3
-              i64.add
-              local.set 4
               global.get 0
               i32.wrap_i64
               i64.load offset=8
-              local.set 2
-              global.get 0
-              i32.wrap_i64
-              local.get 4
-              i64.store offset=32
-              global.get 0
-              i32.wrap_i64
-              local.get 2
-              local.get 3
-              i64.sub
-              i64.store offset=40
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=32
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=40
               call $loop_check_1.nextPos
-              local.set 2
               local.set 0
-              global.get 0
-              i32.wrap_i64
+              local.set 1
               local.get 0
-              i32.store8 offset=16
-              global.get 0
               i32.wrap_i64
-              local.get 2
-              i64.store offset=24
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=24
-              local.set 2
-              global.get 0
-              i32.wrap_i64
-              i32.load8_u offset=16
-              local.set 0
-              global.get 0
-              i32.wrap_i64
-              local.get 2
-              i64.store offset=16
-              local.get 0
               br_if 0 (;@5;)
               i64.const 1
-              local.set 1
+              local.set 0
               br 1 (;@4;)
             end
             block  ;; label = @5
               global.get 0
               i32.wrap_i64
-              i64.load offset=16
-              local.set 2
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=64
-              local.set 4
-              local.get 2
-              local.get 4
-              i64.sub
-              local.set 2
-              global.get 0
-              i32.wrap_i64
-              local.get 4
-              global.get 0
-              i32.wrap_i64
               i64.load
-              i64.add
-              i64.store offset=48
-              global.get 0
-              i32.wrap_i64
-              local.get 2
-              i64.store offset=56
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=56
-              local.set 2
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=48
-              local.get 2
-              call $loop_check_1.check
-              local.set 0
-              global.get 0
-              i32.wrap_i64
-              local.get 0
-              i32.store8 offset=72
-              global.get 0
-              i32.wrap_i64
-              i32.load8_u offset=72
-              br_if 0 (;@5;)
-              global.get 0
-              i32.wrap_i64
               local.get 1
-              i64.store offset=64
+              call $loop_check_1.check
+              br_if 0 (;@5;)
               br 3 (;@2;)
             end
             call $loop_check_1.blackbox
-            local.set 0
-            global.get 0
-            i32.wrap_i64
-            local.get 0
-            i32.store8 offset=73
-            global.get 0
-            i32.wrap_i64
-            i32.load8_u offset=73
             i32.eqz
             br_if 1 (;@3;)
+            i64.const 0
+            local.set 0
           end
-          local.get 1
-          i64.const 80
+          local.get 0
+          i64.const 16
           global.get 0
           i64.add
           global.set 0
           return
         end
-        global.get 0
-        i32.wrap_i64
-        local.get 1
-        i64.store offset=64
       end
       br 0 (;@1;)
     end
     unreachable)
-  (func $loop_check_1.nextPos (type 1) (param i64 i64) (result i32 i64)
-    (local i32)
+  (func $loop_check_1.nextPos (type 1) (param i64 i64) (result i64 i64)
     global.get 0
-    i64.const 48
+    i64.const 32
     i64.sub
     global.set 0
     block  ;; label = @1
       block  ;; label = @2
-        global.get 0
-        i32.wrap_i64
-        local.get 0
-        i64.store
-        global.get 0
-        i32.wrap_i64
         local.get 1
-        i64.store offset=8
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=8
         i64.const 1
         i64.ge_u
         br_if 0 (;@2;)
         global.get 0
         i32.wrap_i64
         i32.const 0
-        i32.store8 offset=32
+        i32.store8 offset=24
         global.get 0
         i32.wrap_i64
-        i64.load offset=40
+        i64.load offset=16
+        local.set 1
+        global.get 0
+        i32.wrap_i64
+        i64.load offset=24
         local.set 0
-        global.get 0
-        i32.wrap_i64
-        i32.load8_u offset=32
-        local.set 2
         br 1 (;@1;)
       end
       global.get 0
       i32.wrap_i64
       i32.const 1
-      i32.store8 offset=16
+      i32.store8 offset=8
+      i64.const 17
+      local.set 1
       global.get 0
       i32.wrap_i64
       i64.const 17
-      i64.store offset=24
+      i64.store
       global.get 0
       i32.wrap_i64
-      i32.load8_u offset=16
-      local.set 2
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=24
+      i64.load offset=8
       local.set 0
     end
-    local.get 2
+    local.get 1
     local.get 0
-    i64.const 48
+    i64.const 32
     global.get 0
     i64.add
     global.set 0
     return
     unreachable)
   (func $loop_check_1.check (type 2) (param i64 i64) (result i32)
-    global.get 0
-    i64.const 16
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store offset=8
     i32.const 1
-    i64.const 16
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (func $loop_check_1.blackbox (type 3) (result i32)

@@ -475,6 +475,7 @@ pub const CcBuilder = struct {
             .syscall => {
                 spilled = self.int_reg_count > 7 or r.isFloat();
             },
+            .wasmcall => {},
             else => utils.panic("{}", .{cc}),
         }
 
@@ -2350,10 +2351,10 @@ pub fn Func(comptime Backend: type) type {
             oper: *Node,
         ) *Node {
             if (op == .uext and ty.size() < oper.data_type.size()) {
-                utils.panic("{f} {f}", .{ ty, oper });
+                return oper;
             }
             if (op == .sext and ty.size() < oper.data_type.size()) {
-                utils.panic("{f} {f}", .{ ty, oper });
+                return oper;
             }
             if (op == .ired and ty.size() == oper.data_type.size()) {
                 return oper;

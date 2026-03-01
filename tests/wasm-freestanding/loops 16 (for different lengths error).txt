@@ -2,45 +2,28 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func))
   (func $main (type 0) (result i64)
-    (local i64)
     global.get 0
-    i64.const 48
+    i64.const 24
     i64.sub
     global.set 0
     global.get 0
     i32.wrap_i64
-    global.get 1
-    i64.store offset=24
+    i32.const 9
+    i32.store offset=16
     global.get 0
     i32.wrap_i64
-    i64.const 38
-    i64.store offset=32
-    global.get 0
-    i32.wrap_i64
-    i64.const 4294967303
-    i64.store offset=40
-    i64.const 0
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    i64.const 24
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    i64.const 24
-    i32.wrap_i64
-    memory.copy
+    i32.const 1
+    i32.store offset=20
     call $loops_16__for_different_lengths_error_.for_loop_length_mismatch
     unreachable)
   (func $loops_16__for_different_lengths_error_.for_loop_length_mismatch (type 1)
     unreachable
     unreachable)
   (table (;0;) 0 funcref)
-  (memory (;0;) 4)
+  (memory (;0;) 3)
   (global (;0;) (mut i64) (i64.const 131072))
-  (global (;1;) i64 (i64.const 131072))
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
-  (data (;0;) (i32.const 131072) "loops 16 (for different lengths error)"))
+  (data (;0;) (i32.const 131072) ""))

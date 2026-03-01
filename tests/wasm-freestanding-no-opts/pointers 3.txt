@@ -2,9 +2,8 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     global.get 0
-    i64.const 16
+    i64.const 8
     i64.sub
     global.set 0
     global.get 0
@@ -15,34 +14,20 @@
     global.get 0
     i64.add
     call $pointers_3.do_stuff
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=8
+    drop
     global.get 0
     i32.wrap_i64
     i64.load
-    i64.const 16
+    i64.const 8
     global.get 0
     i64.add
     global.set 0
     return
     unreachable)
   (func $pointers_3.do_stuff (type 1) (param i64) (result i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
     block  ;; label = @1
       block  ;; label = @2
-        global.get 0
-        i32.wrap_i64
         local.get 0
-        i64.store
-        global.get 0
-        i32.wrap_i64
-        i64.load
         i32.wrap_i64
         i64.load
         i64.eqz
@@ -55,10 +40,6 @@
       local.set 0
     end
     local.get 0
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -3,16 +3,16 @@
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
     (local i64 i64)
-    call $deep_dedup_2__generics_.size_int_
+    call $deep_dedup_2__generics_.size_=int_
     local.set 0
-    call $deep_dedup_2__generics_.size_int_
+    call $deep_dedup_2__generics_.size_=int_
     local.set 1
     local.get 0
     local.get 1
     i64.sub
     return
     unreachable)
-  (func $deep_dedup_2__generics_.size_int_ (type 1) (result i64)
+  (func $deep_dedup_2__generics_.size_=int_ (type 1) (result i64)
     i64.const 8
     return
     unreachable)

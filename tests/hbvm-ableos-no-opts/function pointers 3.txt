@@ -1,22 +1,20 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -32
+     addi64 $254, $254, -16
         li8 $1, -1
-         st $1, $254, 16, 1
-     addi64 $2, $254, 16
+         st $1, $254, 0, 1
      addi64 $1, $254, 0
         jal $31, $0, :function pointers 3.DynObj.new[=.Obj]
-         ld $2, $254, 0, 8
-         ld $1, $254, 8, 8
-       jala $31, $2, 0
+         cp $3, $1
+         cp $1, $2
+       jala $31, $3, 0
        andi $1, $1, 255
-     addi64 $254, $254, 32
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
 function pointers 3.DynObj.new[=.Obj]:
-        lra $3, $0, :function pointers 3.Obj.do_thing
-         st $3, $1, 0, 8
-         st $2, $1, 8, 8
+         cp $2, $1
+        lra $1, $0, :function pointers 3.Obj.do_thing
        jala $0, $31, 0
 function pointers 3.Obj.do_thing:
          ld $1, $1, 0, 1

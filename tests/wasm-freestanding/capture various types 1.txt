@@ -1,0 +1,24 @@
+(module
+  (type (;0;) (func (result i64)))
+  (type (;1;) (func))
+  (type (;2;) (func (result i64)))
+  (func $main (type 0) (result i64)
+    call $capture_various_types_1.bar_=&0_
+    call $capture_various_types_1.foo_=.yes_
+    return
+    unreachable)
+  (func $capture_various_types_1.bar_=&0_ (type 1)
+    return
+    unreachable)
+  (func $capture_various_types_1.foo_=.yes_ (type 2) (result i64)
+    i64.const 0
+    return
+    unreachable)
+  (table (;0;) 0 funcref)
+  (memory (;0;) 3)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "memory" (memory 0))
+  (export "main" (func $main))
+  (elem (;0;) (i32.const 0) func)
+  (data (;0;) (i32.const 131072) ""))

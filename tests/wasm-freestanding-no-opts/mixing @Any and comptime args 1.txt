@@ -1,153 +1,43 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (param i32 i32) (result i32 i32)))
-  (type (;2;) (func (param i32) (result i32 i32)))
+  (type (;1;) (func (param i64) (result i64)))
+  (type (;2;) (func (param i32) (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i64)
-    global.get 0
-    i64.const 24
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
-    i32.const 1
-    i32.store8 offset=8
-    global.get 0
-    i32.wrap_i64
-    i32.const 0
-    i32.store offset=12
+    i64.const 4294967296
+    call $mixing_@Any_and_comptime_args_1.bind_?i32__=main.a_
+    drop
     i64.const 0
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    i64.const 8
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    i64.const 8
-    i32.wrap_i64
-    memory.copy
-    global.get 0
-    i32.wrap_i64
-    i32.load8_u
-    global.get 0
-    i32.wrap_i64
-    i32.load offset=4
-    call $mixing_@Any_and_comptime_args_1.bind_.main.a__?i32_
-    local.set 1
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store8 offset=16
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i32.store offset=20
-    i64.const 0
-    i64.const 24
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $mixing_@Any_and_comptime_args_1.bind_.main.a__?i32_ (type 1) (param i32 i32) (result i32 i32)
-    global.get 0
-    i64.const 24
-    i64.sub
-    global.set 0
+  (func $mixing_@Any_and_comptime_args_1.bind_?i32__=main.a_ (type 1) (param i64) (result i64)
     block  ;; label = @1
       block  ;; label = @2
-        global.get 0
-        i32.wrap_i64
         local.get 0
-        i32.store8
-        global.get 0
+        i64.const 32
+        i64.shr_u
         i32.wrap_i64
-        local.get 1
-        i32.store offset=4
-        global.get 0
-        i32.wrap_i64
-        i32.load8_u
         br_if 0 (;@2;)
-        global.get 0
-        i32.wrap_i64
-        i32.const 0
-        i32.store8 offset=16
-        global.get 0
-        i32.wrap_i64
-        i32.load offset=20
+        i64.const 0
         local.set 0
-        global.get 0
-        i32.wrap_i64
-        i32.load8_u offset=16
-        local.set 1
         br 1 (;@1;)
       end
-      global.get 0
-      i32.wrap_i64
-      i32.load offset=4
-      call $mixing_@Any_and_comptime_args_1.main.a
-      local.set 0
-      local.set 1
-      global.get 0
-      i32.wrap_i64
-      local.get 1
-      i32.store8 offset=8
-      global.get 0
-      i32.wrap_i64
       local.get 0
-      i32.store offset=12
-      global.get 0
       i32.wrap_i64
-      i32.load8_u offset=8
-      local.set 1
-      global.get 0
-      i32.wrap_i64
-      i32.load offset=12
+      call $main.a
       local.set 0
     end
-    local.get 1
     local.get 0
-    i64.const 24
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
-  (func $mixing_@Any_and_comptime_args_1.main.a (type 2) (param i32) (result i32 i32)
-    global.get 0
-    i64.const 16
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
+  (func $main.a (type 2) (param i32) (result i64)
     local.get 0
-    i32.store offset=8
-    global.get 0
-    i32.wrap_i64
-    i32.load offset=8
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    i32.const 1
-    i32.store8
-    global.get 0
-    i32.wrap_i64
     i32.const 5
-    local.get 0
     i32.add
-    i32.store offset=4
-    global.get 0
-    i32.wrap_i64
-    i32.load8_u
-    global.get 0
-    i32.wrap_i64
-    i32.load offset=4
-    i64.const 16
-    global.get 0
-    i64.add
-    global.set 0
+    i64.extend_i32_u
+    i64.const 0
+    i64.shl
+    i64.const 4294967296
+    i64.or
     return
     unreachable)
   (table (;0;) 0 funcref)

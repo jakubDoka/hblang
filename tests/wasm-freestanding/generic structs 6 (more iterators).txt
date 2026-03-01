@@ -4,11 +4,11 @@
   (func $main (type 0) (result i64)
     (local i64)
     i64.const 0
-    call $foo.foo_u8_
+    call $foo.foo___=u8_
     i64.const 0
     return
     unreachable)
-  (func $foo.foo_u8_ (type 1) (param i64)
+  (func $foo.foo___=u8_ (type 1) (param i64)
     return
     unreachable)
   (table (;0;) 0 funcref)

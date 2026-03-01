@@ -10,7 +10,7 @@
   (type (;8;) (func (result i32)))
   (type (;9;) (func (result i32)))
   (func $main (type 0) (result i64)
-    call $deep_instantiation_2.S________.Z________.get
+    call $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z________.get
     i32.const 8
     i32.ne
     i32.const 255
@@ -18,49 +18,49 @@
     i64.extend_i32_u
     return
     unreachable)
-  (func $deep_instantiation_2.S________.Z________.get (type 1) (result i32)
-    call $deep_instantiation_2.S_______.Z_______.get
+  (func $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z________.get (type 1) (result i32)
+    call $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z_______.get
     i32.const 1
     i32.add
     return
     unreachable)
-  (func $deep_instantiation_2.S_______.Z_______.get (type 2) (result i32)
-    call $deep_instantiation_2.S______.Z______.get
+  (func $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.S_=.S_=.Z_______.get (type 2) (result i32)
+    call $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.S_=.Z______.get
     i32.const 1
     i32.add
     return
     unreachable)
-  (func $deep_instantiation_2.S______.Z______.get (type 3) (result i32)
-    call $deep_instantiation_2.S_____.Z_____.get
+  (func $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.S_=.Z______.get (type 3) (result i32)
+    call $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.Z_____.get
     i32.const 1
     i32.add
     return
     unreachable)
-  (func $deep_instantiation_2.S_____.Z_____.get (type 4) (result i32)
-    call $deep_instantiation_2.S____.Z____.get
+  (func $deep_instantiation_2.S_=.S_=.S_=.S_=.S_=.Z_____.get (type 4) (result i32)
+    call $deep_instantiation_2.S_=.S_=.S_=.S_=.Z____.get
     i32.const 1
     i32.add
     return
     unreachable)
-  (func $deep_instantiation_2.S____.Z____.get (type 5) (result i32)
-    call $deep_instantiation_2.S___.Z___.get
+  (func $deep_instantiation_2.S_=.S_=.S_=.S_=.Z____.get (type 5) (result i32)
+    call $deep_instantiation_2.S_=.S_=.S_=.Z___.get
     i32.const 1
     i32.add
     return
     unreachable)
-  (func $deep_instantiation_2.S___.Z___.get (type 6) (result i32)
-    call $deep_instantiation_2.S__.Z__.get
+  (func $deep_instantiation_2.S_=.S_=.S_=.Z___.get (type 6) (result i32)
+    call $deep_instantiation_2.S_=.S_=.Z__.get
     i32.const 1
     i32.add
     return
     unreachable)
-  (func $deep_instantiation_2.S__.Z__.get (type 7) (result i32)
-    call $deep_instantiation_2.S_.Z_.get
+  (func $deep_instantiation_2.S_=.S_=.Z__.get (type 7) (result i32)
+    call $deep_instantiation_2.S_=.Z_.get
     i32.const 1
     i32.add
     return
     unreachable)
-  (func $deep_instantiation_2.S_.Z_.get (type 8) (result i32)
+  (func $deep_instantiation_2.S_=.Z_.get (type 8) (result i32)
     call $deep_instantiation_2.Z.get
     i32.const 1
     i32.add

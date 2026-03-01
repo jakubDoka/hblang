@@ -1,4 +1,4 @@
-_start:
+entry:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :directives 20 (@handler, @SourceLoc).main
@@ -49,12 +49,12 @@ directives 20 (@handler, @SourceLoc).use_slice:
        jala $0, $31, 0
 directives 20 (@handler, @SourceLoc).slice_ioob:
          un
-memcpy:
+lib.memcpy:
         jeq $3, $0, :5
          ld $4, $2, 0, 1
          st $4, $1, 0, 1
      addi64 $3, $3, -1
      addi64 $2, $2, 1
      addi64 $1, $1, 1
-        jmp :memcpy
-5:       tx
+        jmp :lib.memcpy
+5:     jala $0, $31, 0

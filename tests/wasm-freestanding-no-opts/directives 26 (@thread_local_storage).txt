@@ -5,11 +5,7 @@
     i32.wrap_i64
     i64.const 1
     i64.store
-    global.get 1
-    i32.wrap_i64
-    i64.load
-    i64.const 1
-    i64.sub
+    i64.const 0
     return
     unreachable)
   (table (;0;) 0 funcref)

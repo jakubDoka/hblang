@@ -44,6 +44,14 @@
     return
     unreachable)
   (func $exhausitve_inlining_1.some_mem_ops (type 2) (param i64)
+    local.get 0
+    i32.wrap_i64
+    i64.const 1
+    local.get 0
+    i32.wrap_i64
+    i64.load
+    i64.add
+    i64.store
     return
     unreachable)
   (func $exhausitve_inlining_1.loop_fn (type 3) (param i64)

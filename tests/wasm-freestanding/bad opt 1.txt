@@ -1,19 +1,23 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (param i32) (result i32 i32)))
+  (type (;1;) (func (param i32) (result i64)))
   (func $main (type 0) (result i64)
-    (local i32)
     i32.const 0
-    call $bad_opt_1.Result_i32__i32_.value
-    drop
-    local.set 0
-    local.get 0
+    call $bad_opt_1.Result_=i32__=i32_.value
+    i32.wrap_i64
     i64.extend_i32_s
     return
     unreachable)
-  (func $bad_opt_1.Result_i32__i32_.value (type 1) (param i32) (result i32 i32)
+  (func $bad_opt_1.Result_=i32__=i32_.value (type 1) (param i32) (result i64)
+    (local i64)
     local.get 0
-    i32.const 0
+    i64.extend_i32_u
+    local.set 1
+    i64.const 0
+    local.get 1
+    i64.const 0
+    i64.shl
+    i64.or
     return
     unreachable)
   (table (;0;) 0 funcref)

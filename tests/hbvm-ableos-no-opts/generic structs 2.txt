@@ -1,19 +1,19 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -24
-     addi64 $1, $254, 0
+     addi64 $254, $254, -8
         jal $31, $0, :generic structs 2.Foo[=uint].Bar[=u8].init
-         ld $1, $254, 0, 8
-         ld $2, $254, 8, 8
         jal $31, $0, :generic structs 2.Foo[=uint].Bar[=u8].sub
-     addi64 $254, $254, 24
+     addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
 generic structs 2.Foo[=uint].Bar[=u8].init:
-       li64 $2, 1
-         st $2, $1, 0, 8
+     addi64 $254, $254, -16
+       li64 $1, 1
+         st $1, $254, 0, 8
         li8 $2, 1
-         st $2, $1, 8, 1
+         st $2, $254, 8, 1
+         ld $2, $254, 8, 8
+     addi64 $254, $254, 16
        jala $0, $31, 0
 generic structs 2.Foo[=uint].Bar[=u8].sub:
        andi $2, $2, 255

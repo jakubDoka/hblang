@@ -42,7 +42,7 @@
     unreachable)
   (func $function_pointers_6__vtable_.Test.from_^.Dyn2_ (type 3) (param i64 i64)
     (local i64 i64)
-    call $function_pointers_6__vtable_.vtable_.Dyn2__.Test_
+    call $function_pointers_6__vtable_.vtable_=.Test__=.Dyn2_
     local.set 3
     local.set 2
     local.get 0
@@ -87,7 +87,15 @@
     call_indirect (type 0)
     return
     unreachable)
-  (func $function_pointers_6__vtable_.vtable_.Dyn2__.Test_ (type 6) (result i64 i64)
+  (func $function_pointers_6__vtable_.vtable_=.Test__=.Dyn2_ (type 6) (result i64 i64)
+    global.get 2
+    i32.wrap_i64
+    global.get 1
+    i64.store
+    global.get 2
+    i32.wrap_i64
+    i64.const 2
+    i64.store offset=8
     i64.const 0
     i64.const 1
     return
@@ -106,10 +114,12 @@
     return
     unreachable)
   (table (;0;) 2 funcref)
-  (memory (;0;) 3)
+  (memory (;0;) 4)
   (global (;0;) (mut i64) (i64.const 131072))
+  (global (;1;) i64 (i64.const 131072))
+  (global (;2;) i64 (i64.const 131080))
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func $function_pointers_6__vtable_.Dyn2.a $function_pointers_6__vtable_.Dyn2.b)
-  (data (;0;) (i32.const 131072) ""))
+  (data (;0;) (i32.const 131072) "\06\00\00\02\07\00\00\02\00\00\02\00\00\00\00\00\02\00\00\00\00\00\00\00"))

@@ -3,66 +3,18 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $function_types_1.main.take_fun_.fun_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
+    call $main.take_fun_=main.fun_
     return
     unreachable)
-  (func $function_types_1.main.take_fun_.fun_ (type 1) (result i64)
-    (local i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
+  (func $main.take_fun_=main.fun_ (type 1) (result i64)
     i64.const 10
-    call $function_types_1.main.fun
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
+    call $main.fun
     return
     unreachable)
-  (func $function_types_1.main.fun (type 2) (param i64) (result i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
+  (func $main.fun (type 2) (param i64) (result i64)
     local.get 0
-    i64.store
     i64.const 1
-    global.get 0
-    i32.wrap_i64
-    i64.load
     i64.add
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -4,19 +4,19 @@
   (type (;2;) (func))
   (type (;3;) (func))
   (func $main (type 0) (result i64)
-    call $false_positive_in_cycle_detection.main.Wrap_.Wrapper___.A__.test
+    call $main.Wrap_=main.Wrap_=main.A__.test
     i64.const 0
     return
     unreachable)
-  (func $false_positive_in_cycle_detection.main.Wrap_.Wrapper___.A__.test (type 1)
-    call $false_positive_in_cycle_detection.main.Wrap_.Wrapper__.A_.test
+  (func $main.Wrap_=main.Wrap_=main.A__.test (type 1)
+    call $main.Wrap_=main.A_.test
     return
     unreachable)
-  (func $false_positive_in_cycle_detection.main.Wrap_.Wrapper__.A_.test (type 2)
-    call $false_positive_in_cycle_detection.main.A.test
+  (func $main.Wrap_=main.A_.test (type 2)
+    call $main.A.test
     return
     unreachable)
-  (func $false_positive_in_cycle_detection.main.A.test (type 3)
+  (func $main.A.test (type 3)
     return
     unreachable)
   (table (;0;) 0 funcref)

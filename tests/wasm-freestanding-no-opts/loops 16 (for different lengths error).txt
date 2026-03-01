@@ -2,147 +2,28 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64)
     global.get 0
-    i64.const 96
+    i64.const 24
     i64.sub
     global.set 0
-    block  ;; label = @1
-      global.get 0
-      i32.wrap_i64
-      i64.const 0
-      i64.store offset=40
-      global.get 0
-      i32.wrap_i64
-      i64.const 0
-      i64.store offset=48
-      global.get 0
-      i32.wrap_i64
-      i32.const 1
-      i32.store8 offset=88
-      global.get 0
-      i32.wrap_i64
-      i32.const 2
-      i32.store8 offset=89
-      global.get 0
-      i32.wrap_i64
-      i32.const 3
-      i32.store8 offset=90
-      global.get 0
-      i32.wrap_i64
-      i64.const 88
-      global.get 0
-      i64.add
-      i64.store offset=24
-      global.get 0
-      i32.wrap_i64
-      i64.const 3
-      i64.store offset=32
-      global.get 0
-      i32.wrap_i64
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=24
-      i64.store offset=56
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=32
-      local.set 2
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=48
-      local.set 3
-      local.get 2
-      i64.const 2
-      local.get 3
-      i64.sub
-      i64.ne
-      br_if 0 (;@1;)
-      loop  ;; label = @2
-        block  ;; label = @3
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=40
-          local.set 3
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=48
-          local.tee 1
-          i64.const 2
-          i64.lt_u
-          br_if 0 (;@3;)
-          local.get 3
-          i64.const 96
-          global.get 0
-          i64.add
-          global.set 0
-          return
-        end
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=56
-        i32.wrap_i64
-        i64.load8_u
-        local.get 1
-        i64.add
-        i64.add
-        i64.store offset=40
-        global.get 0
-        i32.wrap_i64
-        i64.const 1
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=48
-        i64.add
-        i64.store offset=48
-        global.get 0
-        i32.wrap_i64
-        i64.const 1
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=56
-        i64.add
-        i64.store offset=56
-        br 0 (;@2;)
-      end
-    end
     global.get 0
     i32.wrap_i64
-    global.get 1
-    i64.store offset=64
+    i32.const 9
+    i32.store offset=16
     global.get 0
     i32.wrap_i64
-    i64.const 38
-    i64.store offset=72
-    global.get 0
-    i32.wrap_i64
-    i64.const 4294967303
-    i64.store offset=80
-    i64.const 0
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    i64.const 64
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    i64.const 24
-    i32.wrap_i64
-    memory.copy
+    i32.const 1
+    i32.store offset=20
     call $loops_16__for_different_lengths_error_.for_loop_length_mismatch
     unreachable)
   (func $loops_16__for_different_lengths_error_.for_loop_length_mismatch (type 1)
     unreachable
     unreachable)
   (table (;0;) 0 funcref)
-  (memory (;0;) 4)
+  (memory (;0;) 3)
   (global (;0;) (mut i64) (i64.const 131072))
-  (global (;1;) i64 (i64.const 131072))
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
-  (data (;0;) (i32.const 131072) "loops 16 (for different lengths error)"))
+  (data (;0;) (i32.const 131072) ""))

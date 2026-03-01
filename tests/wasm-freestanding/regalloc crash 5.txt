@@ -3,7 +3,7 @@
   (type (;1;) (func (param i64)))
   (type (;2;) (func (param i32) (result i32)))
   (func $main (type 0) (result i64)
-    global.get 2
+    i64.const 1
     call $regalloc_crash_5.ignore
     global.get 1
     i32.wrap_i64
@@ -25,7 +25,6 @@
   (memory (;0;) 4)
   (global (;0;) (mut i64) (i64.const 131072))
   (global (;1;) i64 (i64.const 131072))
-  (global (;2;) i64 (i64.const 131074))
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))

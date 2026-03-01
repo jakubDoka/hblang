@@ -3,48 +3,14 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $functions_6__comptime_@Any_.foo_.main_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
+    call $functions_6__comptime_@Any_.foo_=main.funcs_1__
     return
     unreachable)
-  (func $functions_6__comptime_@Any_.foo_.main_ (type 1) (result i64)
-    (local i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    call $functions_6__comptime_@Any_.main
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
+  (func $functions_6__comptime_@Any_.foo_=main.funcs_1__ (type 1) (result i64)
+    call $main.funcs_1_
     return
     unreachable)
-  (func $functions_6__comptime_@Any_.main (type 2) (result i64)
+  (func $main.funcs_1_ (type 2) (result i64)
     i64.const 0
     return
     unreachable)

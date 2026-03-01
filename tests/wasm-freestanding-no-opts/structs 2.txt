@@ -58,51 +58,35 @@
   (func $structs_2.swap (type 1) (param i64 i64)
     (local i64)
     global.get 0
-    i64.const 40
+    i64.const 24
     i64.sub
     global.set 0
+    i64.const 0
     global.get 0
+    i64.add
     i32.wrap_i64
     local.get 0
-    i64.store
-    global.get 0
+    i32.wrap_i64
+    i64.const 24
+    i32.wrap_i64
+    memory.copy
+    local.get 0
     i32.wrap_i64
     local.get 1
-    i64.store offset=8
-    i64.const 16
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    global.get 0
-    i32.wrap_i64
-    i64.load
     i32.wrap_i64
     i64.const 24
     i32.wrap_i64
     memory.copy
-    global.get 0
+    local.get 1
     i32.wrap_i64
-    i64.load
-    i32.wrap_i64
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
-    i32.wrap_i64
-    i64.const 24
-    i32.wrap_i64
-    memory.copy
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
-    i32.wrap_i64
-    i64.const 16
+    i64.const 0
     global.get 0
     i64.add
     i32.wrap_i64
     i64.const 24
     i32.wrap_i64
     memory.copy
-    i64.const 40
+    i64.const 24
     global.get 0
     i64.add
     global.set 0

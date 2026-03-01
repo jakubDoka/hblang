@@ -2,9 +2,8 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     global.get 0
-    i64.const 16
+    i64.const 8
     i64.sub
     global.set 0
     global.get 0
@@ -14,39 +13,17 @@
     i64.const 0
     global.get 0
     i64.add
-    call $directives_8__@ChildOf_.deref_^uint_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=8
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
-    i64.const 16
+    call $directives_8__@ChildOf_.deref_=^uint_
+    i64.const 8
     global.get 0
     i64.add
     global.set 0
     return
     unreachable)
-  (func $directives_8__@ChildOf_.deref_^uint_ (type 1) (param i64) (result i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
+  (func $directives_8__@ChildOf_.deref_=^uint_ (type 1) (param i64) (result i64)
     local.get 0
-    i64.store
-    global.get 0
     i32.wrap_i64
     i64.load
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -1,10 +1,10 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    global.get 2
+    global.get 1
     i32.wrap_i64
     i64.load
-    global.get 1
+    global.get 2
     i32.wrap_i64
     i64.load
     i64.sub
@@ -19,4 +19,4 @@
   (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
-  (data (;0;) (i32.const 131072) "\00\00\00\00\00\00\00\007\00\00\00\00\00\00\00"))
+  (data (;0;) (i32.const 131072) "7\00\00\00\00\00\00\00"))

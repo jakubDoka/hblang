@@ -2,145 +2,46 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64)))
   (func $main (type 0) (result i64)
-    (local i32 i64)
+    (local i64)
     global.get 0
-    i64.const 88
+    i64.const 24
     i64.sub
     global.set 0
-    block  ;; label = @1
-      block  ;; label = @2
-        block  ;; label = @3
-          block  ;; label = @4
-            block  ;; label = @5
-              i64.const 0
-              local.set 1
-              global.get 0
-              i32.wrap_i64
-              i32.const 1
-              i32.store8 offset=16
-              global.get 0
-              i32.wrap_i64
-              local.get 1
-              i64.store offset=24
-              global.get 0
-              i32.wrap_i64
-              local.get 1
-              i64.store offset=32
-              global.get 0
-              i32.wrap_i64
-              i32.const 1
-              i32.store8 offset=40
-              global.get 0
-              i32.wrap_i64
-              local.get 1
-              i64.store offset=48
-              global.get 0
-              i32.wrap_i64
-              local.get 1
-              i64.store offset=56
-              global.get 0
-              i32.wrap_i64
-              i32.const 1
-              i32.store8 offset=64
-              global.get 0
-              i32.wrap_i64
-              local.get 1
-              i64.store offset=72
-              global.get 0
-              i32.wrap_i64
-              local.get 1
-              i64.store offset=80
-              global.get 0
-              i32.wrap_i64
-              global.get 1
-              i64.store
-              global.get 0
-              i32.wrap_i64
-              local.get 1
-              i64.store offset=8
-              global.get 0
-              i32.wrap_i64
-              i32.load8_u offset=16
-              local.set 0
-              i64.const 1
-              local.set 1
-              local.get 0
-              i32.eqz
-              br_if 0 (;@5;)
-              block  ;; label = @6
-                global.get 0
-                i32.wrap_i64
-                i32.load8_u offset=40
-                i32.eqz
-                br_if 0 (;@6;)
-                block  ;; label = @7
-                  global.get 0
-                  i32.wrap_i64
-                  i32.load8_u offset=64
-                  i32.eqz
-                  br_if 0 (;@7;)
-                  block  ;; label = @8
-                    global.get 0
-                    i32.wrap_i64
-                    i64.load
-                    i64.eqz
-                    br_if 0 (;@8;)
-                    global.get 0
-                    i32.wrap_i64
-                    i64.const 1
-                    i64.store offset=32
-                    i64.const 16
-                    global.get 0
-                    i64.add
-                    i64.const 8
-                    i64.add
-                    call $nullable_types_2.take
-                    global.get 0
-                    i32.wrap_i64
-                    i64.load offset=24
-                    global.get 0
-                    i32.wrap_i64
-                    i64.load offset=32
-                    i64.sub
-                    local.set 1
-                    br 7 (;@1;)
-                  end
-                  i64.const 4
-                  local.set 1
-                  br 5 (;@2;)
-                end
-                i64.const 3
-                local.set 1
-                br 3 (;@3;)
-              end
-              i64.const 2
-              local.set 1
-              br 1 (;@4;)
-            end
-          end
-        end
-      end
-    end
-    local.get 1
-    i64.const 88
+    global.get 0
+    i32.wrap_i64
+    i32.const 1
+    i32.store8 offset=16
+    global.get 0
+    i32.wrap_i64
+    i64.const 0
+    i64.store
+    global.get 0
+    i32.wrap_i64
+    i64.const 0
+    i64.store offset=8
+    global.get 0
+    i32.wrap_i64
+    i64.const 1
+    i64.store offset=8
+    i64.const 0
+    global.get 0
+    i64.add
+    call $nullable_types_2.take
+    global.get 0
+    i32.wrap_i64
+    i64.load
+    global.get 0
+    i32.wrap_i64
+    i64.load offset=8
+    i64.sub
+    i64.const 24
     global.get 0
     i64.add
     global.set 0
     return
     unreachable)
   (func $nullable_types_2.take (type 1) (param i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
     local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    local.tee 0
     i32.wrap_i64
     i64.const 1
     local.get 0
@@ -148,16 +49,11 @@
     i64.load
     i64.add
     i64.store
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (table (;0;) 0 funcref)
   (memory (;0;) 3)
   (global (;0;) (mut i64) (i64.const 131072))
-  (global (;1;) i64 (i64.const 131072))
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))

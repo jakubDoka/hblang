@@ -3,20 +3,20 @@
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
     (local i64)
-    call $comptime_5__integers_.main.func_1_
+    call $main.func
     local.set 0
-    global.get 2
+    global.get 1
     i32.wrap_i64
     i64.load
     local.get 0
     i64.sub
-    global.get 1
+    global.get 2
     i32.wrap_i64
     i64.load
     i64.add
     return
     unreachable)
-  (func $comptime_5__integers_.main.func_1_ (type 1) (result i64)
+  (func $main.func (type 1) (result i64)
     i64.const 1
     return
     unreachable)
@@ -29,4 +29,4 @@
   (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
-  (data (;0;) (i32.const 131072) "\00\00\00\00\00\00\00\00\01\00\00\00\00\00\00\00"))
+  (data (;0;) (i32.const 131072) "\01\00\00\00\00\00\00\00"))

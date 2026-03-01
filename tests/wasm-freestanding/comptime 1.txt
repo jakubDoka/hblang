@@ -4,13 +4,13 @@
   (func $main (type 0) (result i64)
     (local i64 i64 i64)
     i64.const 9
-    call $comptime_1.main.some_fn_uint__uint_
+    call $main.some_fn_=uint_
     local.set 0
     i64.const 5
-    call $comptime_1.main.some_fn_uint__uint_
+    call $main.some_fn_=uint_
     local.set 1
     i64.const 7
-    call $comptime_1.main.some_fn_uint__uint_
+    call $main.some_fn_=uint_
     local.set 2
     local.get 0
     local.get 1
@@ -19,7 +19,7 @@
     i64.sub
     return
     unreachable)
-  (func $comptime_1.main.some_fn_uint__uint_ (type 1) (param i64) (result i64)
+  (func $main.some_fn_=uint_ (type 1) (param i64) (result i64)
     local.get 0
     i64.const 1
     i64.add

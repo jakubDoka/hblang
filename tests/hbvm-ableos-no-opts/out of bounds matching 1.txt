@@ -1,10 +1,11 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -24
-     addi64 $1, $254, 0
-        lra $2, $0, :main.
-       li64 $3, 3
+        lra $1, $0, :main.
+       li64 $2, 3
         jal $31, $0, :out of bounds matching 1.byte_iter
+         st $1, $254, 0, 8
+         st $2, $254, 8, 8
      addi64 $1, $254, 0
         jal $31, $0, :out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]
         lra $1, $0, :out of bounds matching 1.sum
@@ -13,23 +14,18 @@ main:
          ld $31, $254, -8, 8
          tx
 out of bounds matching 1.byte_iter:
-         st $2, $1, 0, 8
-         st $3, $1, 8, 8
        jala $0, $31, 0
 out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]:
          st $31, $254, -16, 16
-     addi64 $254, $254, -32
+     addi64 $254, $254, -16
          cp $32, $1
-7:       cp $2, $32
-     addi64 $1, $254, 0
+7:       cp $1, $32
         jal $31, $0, :out of bounds matching 1.Iterator[=.byte_iter].next
-         ld $1, $254, 8, 1
-       andi $1, $1, 255
-        jeq $1, $0, :5
-         ld $1, $254, 0, 8
+       andi $2, $2, 255
+        jeq $2, $0, :5
         jal $31, $0, :main.funcs[4]
         jmp :7
-5:   addi64 $254, $254, 32
+5:   addi64 $254, $254, 16
          ld $31, $254, -16, 16
        jala $0, $31, 0
 out of bounds matching 1.Iterator[=.byte_iter].next:
@@ -46,19 +42,24 @@ main.funcs[4]:
          st $1, $3, 0, 8
        jala $0, $31, 0
 out of bounds matching 1.byte_iter.next:
-         ld $3, $2, 8, 8
-        jne $3, $0, :9
-         st $0, $1, 8, 1
+     addi64 $254, $254, -32
+         ld $2, $1, 8, 8
+        jne $2, $0, :9
+         st $0, $254, 8, 1
+         ld $1, $254, 0, 8
+         ld $2, $254, 8, 8
         jmp :a
-9:      li8 $7, 1
-         ld $6, $2, 0, 8
-     addi64 $5, $6, 1
-         ld $3, $2, 8, 8
-     addi64 $4, $3, -1
-         ld $3, $6, 0, 1
-         st $4, $2, 8, 8
-         st $5, $2, 0, 8
-         st $7, $1, 8, 1
-       andi $2, $3, 255
-         st $2, $1, 0, 8
-a:     jala $0, $31, 0
+9:      li8 $6, 1
+         ld $5, $1, 0, 8
+     addi64 $4, $5, 1
+         ld $2, $1, 8, 8
+     addi64 $3, $2, -1
+         ld $2, $5, 0, 1
+         st $3, $1, 8, 8
+         st $4, $1, 0, 8
+         st $6, $254, 24, 1
+       andi $1, $2, 255
+         st $1, $254, 16, 8
+         ld $2, $254, 24, 8
+a:   addi64 $254, $254, 32
+       jala $0, $31, 0

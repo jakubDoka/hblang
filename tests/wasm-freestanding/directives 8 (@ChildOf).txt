@@ -13,14 +13,14 @@
     i64.const 0
     global.get 0
     i64.add
-    call $directives_8__@ChildOf_.deref_^uint_
+    call $directives_8__@ChildOf_.deref_=^uint_
     i64.const 8
     global.get 0
     i64.add
     global.set 0
     return
     unreachable)
-  (func $directives_8__@ChildOf_.deref_^uint_ (type 1) (param i64) (result i64)
+  (func $directives_8__@ChildOf_.deref_=^uint_ (type 1) (param i64) (result i64)
     local.get 0
     i32.wrap_i64
     i64.load

@@ -6,104 +6,48 @@
   (type (;4;) (func (result i64)))
   (type (;5;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64)
-    global.get 0
-    i64.const 48
-    i64.sub
-    global.set 0
-    call $directives_23.type_id_u8_
+    (local i64 i64 i64 i64 i64)
+    call $directives_23.type_id_=u8_
     local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    call $directives_23.type_id_u16_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=8
-    global.get 0
-    i32.wrap_i64
-    i64.load
+    call $directives_23.type_id_=u16_
     local.set 1
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
+    call $directives_23.type_id_=u32_
     local.set 2
-    call $directives_23.type_id_u32_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=16
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=16
+    call $directives_23.type_id_=u64_
     local.set 3
-    call $directives_23.type_id_u64_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=24
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=24
+    call $directives_23.type_id_=i8_
     local.set 4
-    call $directives_23.type_id_i8_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=32
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=32
-    local.set 5
-    call $directives_23.type_id_u8_
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=40
-    local.get 5
+    call $directives_23.type_id_=u8_
     local.get 4
-    local.get 1
-    local.get 2
-    i64.add
     local.get 3
+    local.get 2
+    local.get 0
+    local.get 1
     i64.add
     i64.add
     i64.add
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=40
     i64.add
-    i64.const 48
-    global.get 0
     i64.add
-    global.set 0
     return
     unreachable)
-  (func $directives_23.type_id_u8_ (type 1) (result i64)
-    i64.const 0
-    return
-    unreachable)
-  (func $directives_23.type_id_u16_ (type 2) (result i64)
+  (func $directives_23.type_id_=u8_ (type 1) (result i64)
     i64.const 4
     return
     unreachable)
-  (func $directives_23.type_id_u32_ (type 3) (result i64)
+  (func $directives_23.type_id_=u16_ (type 2) (result i64)
     i64.const 3
     return
     unreachable)
-  (func $directives_23.type_id_u64_ (type 4) (result i64)
+  (func $directives_23.type_id_=u32_ (type 3) (result i64)
     i64.const 2
     return
     unreachable)
-  (func $directives_23.type_id_i8_ (type 5) (result i64)
+  (func $directives_23.type_id_=u64_ (type 4) (result i64)
     i64.const 1
+    return
+    unreachable)
+  (func $directives_23.type_id_=i8_ (type 5) (result i64)
+    i64.const 0
     return
     unreachable)
   (table (;0;) 0 funcref)
