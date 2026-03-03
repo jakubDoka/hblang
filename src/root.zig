@@ -553,6 +553,10 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
         return;
     }
 
+    if (opts.check) {
+        return;
+    }
+
     if (opts.colors == .no_color or opts.mangle_terminal) {
         bckend.finalize(opts.output, options);
         if (types.errored > 0) return error.Failed;

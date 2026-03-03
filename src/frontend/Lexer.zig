@@ -334,6 +334,39 @@ pub const Token = struct {
     }
 };
 
+pub const Prelexed = struct {
+    pub const Internal = struct {
+        kind: Lexeme,
+        len: u16,
+        pos: u32,
+    };
+
+    tokens: []const Internal,
+    source: [:0]const u8,
+    cursor: usize,
+
+    pub fn next(self: *Prelexed) Token {
+        const tok = self.tokens[self.cursor];
+        defer self.cursor += 1;
+        return .{ .pos = tok.pos, .end = tok.pos + tok.len, .kind = tok.kind };
+    }
+
+    pub fn prelex(source: [:0]const u8, scratch: *utils.Arena) []const Internal {
+        var toks = std.ArrayList(Internal).empty;
+        var lex = Lexer.init(source, 0);
+        while (true) {
+            const tok = lex.next();
+            toks.append(scratch.allocator(), .{
+                .kind = tok.kind,
+                .pos = tok.pos,
+                .len = @intCast(tok.end - tok.pos),
+            }) catch unreachable;
+            if (tok.kind == .Eof) break;
+        }
+        return toks.items;
+    }
+};
+
 pub fn init(source: [:0]const u8, cursor: u32) Lexer {
     return Lexer{ .source = source, .cursor = cursor };
 }
@@ -351,7 +384,7 @@ fn isKeyword(name: []const u8) bool {
     return name[0] == '@' or (name[0] == '$' and name.len != 1) or std.ascii.isLower(name[0]) or name[0] == '_';
 }
 
-const all_keywords = b: {
+pub const all_keywords = b: {
     @setEvalBranchQuota(2000);
 
     const auto_migration_mapping = [_]struct { []const u8, Lexeme }{

@@ -2590,7 +2590,7 @@ pub fn Func(comptime Backend: type) type {
 
             func.waste += self.input_len * @sizeOf(?*Node);
             func.waste += self.size();
-            func.waste += self.output_cap * @sizeOf(Node.Out);
+            func.waste += @as(usize, self.output_cap) * @sizeOf(Node.Out);
             const kill_meta = self.killed_at;
             self.* = undefined;
             self.killed_at = kill_meta;
