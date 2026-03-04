@@ -3,14 +3,15 @@ const hb = @import("hb");
 const utils = hb.utils;
 const Lexer = hb.frontend.Lexer;
 const Types = hb.frontend.Types;
+const graph = hb.backend.graph;
 
 entries: std.MultiArrayList(Entry),
 sub_scopes: std.MultiArrayList(Child),
 imports: std.MultiArrayList(Import),
 fields: std.MultiArrayList(Field),
-exports: []const u32,
-start: u32,
-end: u32,
+exports: []const File.TokenIdx,
+start: File.TokenIdx,
+end: File.TokenIdx,
 
 const DeclIndex = @This();
 
@@ -20,12 +21,12 @@ pub const empty = DeclIndex{
     .imports = .empty,
     .fields = .empty,
     .exports = &.{},
-    .start = 0,
-    .end = 0,
+    .start = .start,
+    .end = .start,
 };
 
 pub const Child = struct {
-    offset: u32,
+    offset: File.TokenIdx,
     index: DeclIndex,
 };
 
@@ -36,16 +37,16 @@ pub const Entry = struct {
 
 pub const Field = struct {
     prefix: u8,
-    offset: u32,
+    offset: File.TokenIdx,
 };
 
 pub const Decl = struct {
-    offset: u32,
-    root: u32,
+    offset: File.TokenIdx,
+    root: File.TokenIdx,
 
-    pub fn collectPath(self: Decl, arena: *utils.Arena, source: [:0]const u8) struct { u32, [][]const u8 } {
+    pub fn collectPath(self: Decl, arena: *utils.Arena, file: *const File) struct { File.TokenIdx, [][]const u8 } {
         var path = std.ArrayList([]const u8).empty;
-        var lex = Lexer.init(source, self.root);
+        var lex = file.lex(self.root);
         _ = self.collectPathRecur(arena, &path, &lex);
         return .{ lex.cursor, path.items };
     }
@@ -54,7 +55,7 @@ pub const Decl = struct {
         self: Decl,
         arena: *utils.Arena,
         path: *std.ArrayList([]const u8),
-        lex: *Lexer,
+        lex: *Lexer.Prelexed,
     ) bool {
         const tok = lex.next();
         switch (tok.kind) {
@@ -65,7 +66,7 @@ pub const Decl = struct {
                     }
                 }
 
-                if (tok.pos == self.offset) {
+                if (tok.idx == self.offset) {
                     return true;
                 }
             },
@@ -84,7 +85,7 @@ pub const Decl = struct {
                     switch (suffix.kind) {
                         .@":" => {},
                         .@".{", .@",", .@"}" => {
-                            lex.cursor = ident.pos;
+                            lex.cursor = ident.idx;
                         },
                         else => unreachable,
                     }
@@ -110,7 +111,7 @@ pub const Import = struct {
 };
 
 pub const Builder = struct {
-    lexer: Lexer,
+    lexer: Lexer.Prelexed,
     depth: u32 = 0,
     loader: *Loader,
 };
@@ -118,8 +119,27 @@ pub const Builder = struct {
 pub const File = struct {
     path: []const u8,
     source: [:0]const u8,
+    tokens: []const Lexer.Prelexed.Internal,
     decls: DeclIndex,
     lines: hb.LineIndex,
+
+    pub const TokenIdx = enum(u32) {
+        start,
+        invalid = std.math.maxInt(u32),
+        _,
+
+        pub fn raw(self: TokenIdx) u32 {
+            return @intFromEnum(self);
+        }
+
+        pub fn next(self: TokenIdx) TokenIdx {
+            return @enumFromInt(@intFromEnum(self) + 1);
+        }
+
+        pub fn prev(self: TokenIdx) TokenIdx {
+            return @enumFromInt(@intFromEnum(self) - 1);
+        }
+    };
 
     pub const Id = enum(u32) {
         root,
@@ -138,11 +158,38 @@ pub const File = struct {
         }
     };
 
+    pub fn sloc(self: *const File, id: File.Id, idx: File.TokenIdx) graph.Sloc {
+        return .{
+            .namespace = id.index(),
+            .index = self.peek(idx).pos,
+        };
+    }
+
+    pub fn lex(file: *const File, pos: TokenIdx) Lexer.Prelexed {
+        return .{
+            .tokens = file.tokens,
+            .source = file.source,
+            .cursor = pos,
+        };
+    }
+
+    pub fn peek(file: *const File, cursor: File.TokenIdx) Lexer.Token {
+        var lexer = file.lex(cursor);
+        return lexer.next();
+    }
+
+    pub fn peekStr(file: *const File, cursor: File.TokenIdx) []const u8 {
+        // TODO: THIS is needlesly complicated
+        return file.peek(cursor).view(file.source);
+    }
+
     pub fn init(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) File {
+        const tokens = Lexer.Prelexed.prelex(source, scratch);
         return .{
             .path = loader.path,
             .source = source,
-            .decls = .build(source, loader, scratch),
+            .tokens = tokens,
+            .decls = .build(source, loader, tokens, scratch),
             .lines = .init(source, scratch),
         };
     }
@@ -155,13 +202,11 @@ pub const File = struct {
         );
     }
 
-    pub fn isComptime(self: File, offset: u32) bool {
-        return offset != 0 and self.source[offset - 1] == '$';
+    pub fn isComptime(self: File, offset: TokenIdx) bool {
+        return self.peek(offset).kind == .@"$";
     }
 
-    pub fn tokenStr(self: File, offset: u32) []const u8 {
-        return Lexer.peekStr(self.source, offset);
-    }
+    pub const tokenStr = peekStr;
 };
 
 pub const Loader = struct {
@@ -188,7 +233,8 @@ pub const Loader = struct {
     pub const noop = &noop_state.loader;
 
     pub const LoadOptions = struct {
-        pos: u32,
+        tokens: []const Lexer.Prelexed.Internal,
+        pos: File.TokenIdx,
         path: []const u8,
     };
 
@@ -218,9 +264,18 @@ pub const Loader = struct {
     }
 };
 
-pub fn build(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) DeclIndex {
-    var bl = Builder{ .lexer = .init(source, 0), .loader = loader };
-    const res = buildLow(&bl, 0, scratch);
+pub fn build(
+    source: [:0]const u8,
+    loader: *Loader,
+    tokens: []const Lexer.Prelexed.Internal,
+    scratch: *utils.Arena,
+) DeclIndex {
+    var bl = Builder{
+        .lexer = .{ .source = source, .tokens = tokens, .cursor = .start },
+        .loader = loader,
+    };
+    const res = buildLow(&bl, .start, scratch);
+
     std.debug.assert(bl.depth == 0);
     return res;
 }
@@ -231,7 +286,7 @@ pub fn build(source: [:0]const u8, loader: *Loader, scratch: *utils.Arena) DeclI
 // struct align(enum{}) {}) which is just prohibited for simplicity reasons
 pub fn buildLow(
     bl: *Builder,
-    start: u32,
+    start: File.TokenIdx,
     scratch: *utils.Arena,
 ) DeclIndex {
     var tmp = utils.Arena.scrath(scratch);
@@ -240,12 +295,12 @@ pub fn buildLow(
     const init_depth = bl.depth;
 
     var decls = std.ArrayList(Decl).empty;
-    var fields = std.ArrayList(u32).empty;
+    var fields = std.ArrayList(File.TokenIdx).empty;
     var sub_scopes = std.ArrayList(Child).empty;
     var imports = std.ArrayList(Import).empty;
-    var exports = std.ArrayList(u32).empty;
-    var subscope: struct { start: u32, depth: u32 } = .{
-        .start = 0,
+    var exports = std.ArrayList(File.TokenIdx).empty;
+    var subscope: struct { start: File.TokenIdx, depth: u32 } = .{
+        .start = .start,
         .depth = std.math.maxInt(u32),
     };
 
@@ -271,7 +326,7 @@ pub fn buildLow(
                     .@";", .@"{", .Comment => true,
                     else => false,
                 }) {
-                    fields.append(tmp.arena.allocator(), ident.pos) catch unreachable;
+                    fields.append(tmp.arena.allocator(), ident.idx) catch unreachable;
                 }
             },
             .@".(", .@".[", .@"(", .@"[" => bl.depth += 1,
@@ -288,7 +343,7 @@ pub fn buildLow(
                         .{ .index = sub, .offset = subscope.start },
                     ) catch unreachable;
 
-                    std.debug.assert(subscope.start < tok.pos);
+                    std.debug.assert(subscope.start.raw() < tok.idx.raw());
                     std.debug.assert(bl.depth == prev_depth);
 
                     subscope = scope_nesting_stack.pop().?;
@@ -308,11 +363,11 @@ pub fn buildLow(
             .@"struct", .@"enum", .@"union" => {
                 scope_nesting_stack
                     .appendAssumeCapacity(subscope);
-                subscope = .{ .depth = bl.depth, .start = tok.pos };
+                subscope = .{ .depth = bl.depth, .start = tok.idx };
             },
             .@"@handler", .@"@export" => exports.append(
                 tmp.arena.allocator(),
-                tok.pos,
+                tok.idx,
             ) catch unreachable,
             .@"@use" => {
                 if (bl.lexer.next().kind != .@"(") continue;
@@ -323,7 +378,8 @@ pub fn buildLow(
                 path_str = path_str[1 .. path_str.len - 1];
 
                 const file = bl.loader.load(.{
-                    .pos = tok.pos,
+                    .tokens = bl.lexer.tokens,
+                    .pos = tok.idx,
                     .path = path_str,
                 }) orelse continue;
 
@@ -338,10 +394,10 @@ pub fn buildLow(
                     continue;
                 }
 
-                bl.lexer.cursor = tok.pos;
+                bl.lexer.cursor = tok.idx;
 
                 const checkpoint = decls.items.len;
-                addPattern(bl, tok.pos, &decls, scratch);
+                addPattern(bl, tok.idx, &decls, scratch);
 
                 switch (bl.lexer.peekNext().kind) {
                     .@":", .@":=" => {},
@@ -352,7 +408,7 @@ pub fn buildLow(
                 }
             },
             .@"for" => {
-                bl.lexer.cursor = tok.pos;
+                bl.lexer.cursor = tok.idx;
                 bl.lexer.skipExpr() catch {};
             },
             .@"$", .Ident => {
@@ -360,7 +416,7 @@ pub fn buildLow(
 
                 if (bl.lexer.eatMatch(.@".")) continue;
 
-                const off = tok.pos + @intFromBool(tok.kind == .@"$");
+                const off = tok.idx;
 
                 const next = bl.lexer.peekNext();
                 switch (next.kind) {
@@ -371,7 +427,7 @@ pub fn buildLow(
                         ) catch unreachable;
                     },
                     .@".{" => {
-                        bl.lexer.cursor = tok.pos;
+                        bl.lexer.cursor = tok.idx;
                         const checkpoint = decls.items.len;
                         addPattern(bl, off, &decls, tmp.arena);
 
@@ -404,7 +460,8 @@ pub fn buildLow(
             slice.items(.prefix),
             slice.items(.offset),
         ) |i, *prefix, *offset| {
-            prefix.* = prefixOfToken(bl.lexer.source, i.offset);
+            prefix.* = prefixOf(bl.lexer.get(i.offset)
+                .view(bl.lexer.source));
             offset.* = i;
         }
     }
@@ -464,7 +521,8 @@ pub fn buildLow(
             slice.items(.offset),
             slice.items(.prefix),
         ) |c, *off, *pre| {
-            pre.* = prefixOfToken(bl.lexer.source, c);
+            pre.* = prefixOf(bl.lexer.get(c)
+                .view(bl.lexer.source));
             off.* = c;
         }
     }
@@ -475,20 +533,9 @@ pub fn buildLow(
         .imports = import_arr,
         .fields = field_arr,
         .start = start,
-        .exports = scratch.dupe(u32, exports.items),
+        .exports = scratch.dupe(File.TokenIdx, exports.items),
         .end = bl.lexer.cursor,
     };
-}
-
-pub fn prefixOfToken(source: [:0]const u8, pos: u32) u8 {
-    var cursor: u32 = pos + 1;
-    while (true) : (cursor += 1) {
-        switch (source[cursor]) {
-            'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => {},
-            else => break,
-        }
-    }
-    return prefixOf(source[pos..cursor]);
 }
 
 pub fn prefixOf(str: []const u8) u8 {
@@ -497,7 +544,7 @@ pub fn prefixOf(str: []const u8) u8 {
 
 pub fn addPattern(
     bl: *Builder,
-    root: u32,
+    root: File.TokenIdx,
     entries: *std.ArrayList(Decl),
     scrath: *utils.Arena,
 ) void {
@@ -508,7 +555,7 @@ pub fn addPattern(
     switch (tok.kind) {
         .Ident => {
             try entries.append(scrath.allocator(), .{
-                .offset = tok.pos,
+                .offset = tok.idx,
                 .root = root,
             });
 
@@ -530,7 +577,7 @@ pub fn addPattern(
                 switch (suffix.kind) {
                     .@":" => {},
                     .@".{", .@",", .@"}" => {
-                        bl.lexer.cursor = ident.pos;
+                        bl.lexer.cursor = ident.idx;
                     },
                     else => {
                         break;
@@ -540,7 +587,7 @@ pub fn addPattern(
                 addPattern(bl, root, entries, scrath);
             }
 
-            if (bl.lexer.source[bl.lexer.cursor - 1] == '}') {
+            if (bl.lexer.tokens[bl.lexer.cursor.raw() - 1].kind == .@"}") {
                 // NOTE: this means we were uninterrupted
                 bl.depth -= 1;
             }
@@ -549,7 +596,7 @@ pub fn addPattern(
             // NOTE: this should recover any closing/opening delimeter to
             // keep the depth balance, this does not happen often, not
             // including syntax errors
-            bl.lexer.cursor = tok.pos;
+            bl.lexer.cursor = tok.idx;
             return;
         },
     }
@@ -559,7 +606,7 @@ pub fn filePrefixLookup(
     prefixes: []const u8,
     comptime Off: type,
     offsets: []Off,
-    source: [:0]const u8,
+    source: *const File,
     name: []const u8,
 ) ?*Off {
     const prefix = prefixOf(name);
@@ -573,14 +620,14 @@ pub fn filePrefixLookup(
     )) |index| : (cursor = index + 1) {
         const decl = &offsets[index];
 
-        const offset = if (Off == u32)
+        const offset: File.TokenIdx = if (Off == File.TokenIdx)
             decl.*
         else if (@hasField(Off, "offset"))
             decl.offset
         else
-            decl.meta.pos;
+            @enumFromInt(decl.meta.pos);
 
-        if (Lexer.compareIdent(source, offset, name)) {
+        if (std.mem.eql(u8, source.tokenStr(offset), name)) {
             return decl;
         }
     } else null;
@@ -588,7 +635,7 @@ pub fn filePrefixLookup(
 
 pub fn lookup(
     self: DeclIndex,
-    source: [:0]const u8,
+    source: *const File,
     name: []const u8,
 ) ?*Decl {
     return filePrefixLookup(
@@ -602,22 +649,22 @@ pub fn lookup(
 
 pub fn lookupField(
     self: DeclIndex,
-    source: [:0]const u8,
+    source: *const File,
     name: []const u8,
-) ?*u32 {
+) ?*File.TokenIdx {
     return filePrefixLookup(
         self.fields.items(.prefix),
-        u32,
+        File.TokenIdx,
         self.fields.items(.offset),
         source,
         name,
     );
 }
 
-pub fn lookupScope(self: *const DeclIndex, source_offset: u32) ?*const DeclIndex {
+pub fn lookupScope(self: *const DeclIndex, source_offset: File.TokenIdx) ?*const DeclIndex {
     // TODO: add binary search since we are always sorted
     const offs = self.sub_scopes.items(.offset);
-    const idx = std.mem.indexOfScalar(u32, offs, source_offset) orelse
+    const idx = std.mem.indexOfScalar(File.TokenIdx, offs, source_offset) orelse
         return null;
     return &self.sub_scopes.items(.index)[idx];
 }

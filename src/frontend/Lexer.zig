@@ -4,6 +4,7 @@ cursor: u32,
 const std = @import("std");
 const hb = @import("hb");
 const utils = hb.utils;
+const File = hb.frontend.DeclIndex.File;
 //const Types = @import("Types.zig");
 
 const Lexer = @This();
@@ -324,6 +325,7 @@ pub const Token = struct {
     pos: Pos,
     end: u32,
     kind: Lexeme,
+    idx: File.TokenIdx = undefined,
 
     pub fn init(pos: Pos, end: u32, kind: Lexeme) Token {
         return Token{ .pos = pos, .end = end, .kind = kind };
@@ -336,19 +338,47 @@ pub const Token = struct {
 
 pub const Prelexed = struct {
     pub const Internal = struct {
-        kind: Lexeme,
+        kind: Lexer.Lexeme,
         len: u16,
         pos: u32,
     };
 
+    pub const Lexeme = Lexer.Lexeme;
+    pub const Token = Lexer.Token;
+
     tokens: []const Internal,
     source: [:0]const u8,
-    cursor: usize,
+    cursor: File.TokenIdx,
 
-    pub fn next(self: *Prelexed) Token {
-        const tok = self.tokens[self.cursor];
-        defer self.cursor += 1;
-        return .{ .pos = tok.pos, .end = tok.pos + tok.len, .kind = tok.kind };
+    pub fn sub(self: Prelexed, cursor: File.TokenIdx) Prelexed {
+        return .{
+            .tokens = self.tokens,
+            .source = self.source,
+            .cursor = cursor,
+        };
+    }
+
+    pub fn pos(self: *Prelexed) u32 {
+        return self.curr().pos;
+    }
+
+    pub fn next(self: *Prelexed) Lexer.Token {
+        defer self.cursor = self.cursor.next();
+        return self.curr();
+    }
+
+    pub fn get(self: *Prelexed, idxe: File.TokenIdx) Lexer.Token {
+        const tok = self.tokens[idxe.raw()];
+        return .{
+            .pos = tok.pos,
+            .end = tok.pos + tok.len,
+            .kind = tok.kind,
+            .idx = self.cursor,
+        };
+    }
+
+    pub fn curr(self: *Prelexed) Lexer.Token {
+        return self.get(self.cursor);
     }
 
     pub fn prelex(source: [:0]const u8, scratch: *utils.Arena) []const Internal {
@@ -365,19 +395,312 @@ pub const Prelexed = struct {
         }
         return toks.items;
     }
+
+    pub fn expect(self: *Prelexed, kind: Lexer.Lexeme) !Lexer.Token {
+        const res = self.peekNext();
+        if (res.kind != kind) return error.SyntaxError;
+        self.cursor = res.idx.next();
+        return res;
+    }
+
+    pub fn eatUntilSameLevelToken(self: *@This(), kinds: []const Lexer.Lexeme) Lexer.Lexeme {
+        var depth: usize = 0;
+        while (true) {
+            const tok = self.next();
+
+            if (depth == 0) {
+                for (kinds) |kind| {
+                    if (tok.kind == kind) {
+                        return tok.kind;
+                    }
+                }
+            }
+
+            switch (tok.kind) {
+                .Eof => return tok.kind,
+                .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
+                    depth += 1;
+                },
+                .@"}", .@")", .@"]" => {
+                    if (depth == 0) return tok.kind;
+                    depth -= 1;
+                },
+                else => {},
+            }
+        }
+    }
+
+    pub fn eatUntilClosingDelimeter(self: *@This()) void {
+        var depth: usize = 0;
+        while (true) {
+            const tok = self.next();
+            switch (tok.kind) {
+                .Eof => break,
+                .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
+                    depth += 1;
+                },
+                .@"}", .@")", .@"]" => {
+                    if (depth == 0) break;
+                    depth -= 1;
+                },
+                else => {},
+            }
+        }
+    }
+
+    pub fn list(self: *Prelexed, comptime sep: Lexer.Lexeme, comptime end: Lexer.Lexeme) *struct {
+        lexer: Prelexed,
+
+        pub fn nextExt(slf: *@This()) enum { has_next, end, trailing_end } {
+            const tok = slf.lexer.peekNext();
+            switch (tok.kind) {
+                sep => {
+                    slf.lexer.cursor = tok.idx.next();
+                    const ptok = slf.lexer.peekNext();
+                    if (ptok.kind == end) {
+                        slf.lexer.cursor = ptok.idx.next();
+                        return .trailing_end;
+                    }
+
+                    return .has_next;
+                },
+                end => {
+                    slf.lexer.cursor = tok.idx.next();
+                    return .end;
+                },
+                .Eof => return .end,
+                else => return .has_next,
+            }
+        }
+
+        pub fn next(slf: *@This()) bool {
+            return slf.nextExt() == .has_next;
+        }
+
+        pub fn recover(slf: *@This()) bool {
+            var depth: usize = 0;
+            while (true) {
+                const tok = slf.lexer.next();
+                switch (tok.kind) {
+                    sep => {
+                        if (depth > 0) {
+                            continue;
+                        }
+
+                        const ptok = slf.lexer.peekNext();
+                        if (ptok.kind == end) {
+                            slf.lexer.cursor = ptok.idx.next();
+                            return true;
+                        }
+
+                        return false;
+                    },
+                    .Eof => return true,
+                    .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
+                        depth += 1;
+                    },
+                    .@"}", .@")", .@"]" => {
+                        if (depth == 0) return true;
+                        depth -= 1;
+                    },
+                    else => {},
+                }
+            }
+        }
+    } {
+        return @ptrCast(self);
+    }
+
+    pub fn eatIdent(self: *Prelexed) ?struct { Lexer.Token, bool } {
+        const tok = self.next();
+        return .{ tok, switch (tok.kind) {
+            .Ident => false,
+            .@"$" => true,
+            else => return null,
+        } };
+    }
+
+    pub fn eatMatchOrRevert(self: *Prelexed, kind: Lexer.Lexeme) bool {
+        const tok = self.peekNext();
+        if (tok.kind != kind) {
+            return false;
+        }
+        self.cursor = tok.idx.next();
+        return true;
+    }
+
+    pub fn eatMatch(self: *Prelexed, kind: Lexer.Lexeme) bool {
+        const tok = self.next();
+        if (tok.kind != kind) {
+            self.cursor = tok.idx;
+            return false;
+        }
+        return true;
+    }
+
+    pub fn peekNext(self: Prelexed) Lexer.Token {
+        var s = self;
+        return s.next();
+    }
+
+    pub fn slit(self: *Prelexed, comptime tok: Lexer.Lexeme) Lexer.Token {
+        const vl = self.next();
+        if (vl.kind != tok) utils.panic("{s} != {s}", .{ @tagName(vl.kind), @tagName(tok) });
+        return vl;
+    }
+
+    pub const SkipError = error{SyntaxError};
+
+    pub fn skipExprDropErr(lex: *Prelexed) void {
+        lex.skipExpr() catch {};
+    }
+
+    pub fn skipExpr(lex: *Prelexed) SkipError!void {
+        return lex.skipExprPrec(254);
+    }
+
+    pub fn skipLabel(lex: *Prelexed) SkipError!void {
+        if (lex.eatMatch(.@":")) {
+            _ = try lex.expect(.Ident);
+        }
+    }
+
+    pub fn skipExprPrec(lex: *Prelexed, prevPrec: u8) SkipError!void {
+        try lex.skipUnitExpr();
+
+        while (true) {
+            const top = lex.peekNext();
+
+            const prec = top.kind.precedence(false);
+            if (prec >= prevPrec) break;
+
+            lex.cursor = top.idx.next();
+
+            try lex.skipSuffix(top, prec);
+        }
+    }
+
+    pub fn skipSuffix(lex: *Prelexed, top: Lexer.Token, prevPrec: u8) SkipError!void {
+        switch (top.kind) {
+            .@"." => {
+                _ = try lex.expect(.Ident);
+
+                if (lex.eatMatch(.@"(")) {
+                    lex.eatUntilClosingDelimeter();
+                }
+            },
+            .@".*", .@".?" => {},
+            .@".{", .@".[", .@"[", .@".(", .@"(" => {
+                lex.eatUntilClosingDelimeter();
+            },
+            else => {
+                try lex.skipExprPrec(prevPrec);
+            },
+        }
+    }
+
+    pub fn skipUnitExpr(lex: *Prelexed) SkipError!void {
+        const tok = lex.next();
+        return switch (tok.kind.expand()) {
+            .Ident,
+            .@"$",
+            .@"'",
+            .@"\"",
+            .Type,
+            .Float,
+            ._,
+            .DecInteger,
+            .BinInteger,
+            .OctInteger,
+            .HexInteger,
+            .true,
+            .false,
+            .null,
+            .idk,
+            .die,
+            => {},
+
+            .@"(", .@"{", .@".{" => {
+                lex.eatUntilClosingDelimeter();
+            },
+            .@"[" => {
+                lex.eatUntilClosingDelimeter();
+                try lex.skipExprPrec(1);
+            },
+            .@"?", .@"~", .@"-", .@"!", .@"&", .@"#", .@"^" => lex.skipExprPrec(1),
+            .@"enum", .@"union", .@"struct" => {
+                if (lex.eatMatch(.@"(")) {
+                    lex.eatUntilClosingDelimeter();
+                }
+
+                if (lex.eatMatch(.@"align")) {
+                    _ = try lex.expect(.@"(");
+                    lex.eatUntilClosingDelimeter();
+                }
+
+                _ = try lex.expect(.@"{");
+                lex.eatUntilClosingDelimeter();
+            },
+            .@"fn" => {
+                _ = try lex.expect(.@"(");
+                lex.eatUntilClosingDelimeter();
+
+                _ = try lex.expect(.@":");
+                try lex.skipExpr();
+                if (lex.peekNext().kind.canStartExpression()) {
+                    try lex.skipExpr();
+                }
+            },
+            .@"if", .@"$if" => {
+                try lex.skipExpr();
+                try lex.skipExpr();
+
+                if (lex.eatMatch(.@"else")) {
+                    try lex.skipExpr();
+                }
+            },
+            .@"while", .@"$while" => {
+                _ = try lex.skipLabel();
+                try lex.skipExpr();
+                try lex.skipExpr();
+            },
+            .loop, .@"$loop" => {
+                _ = try lex.skipLabel();
+                try lex.skipExpr();
+            },
+            .match, .@"$match" => {
+                try lex.skipExpr();
+                try lex.skipExpr();
+            },
+            .@"for" => {
+                while (true) {
+                    try lex.skipExpr();
+                    if (!lex.eatMatch(.@",")) break;
+                }
+                try lex.skipExpr();
+            },
+            .@"break", .@"continue" => _ = try lex.skipLabel(),
+            .@"return" => {
+                try lex.skipExpr();
+            },
+            .Directive => {
+                _ = try lex.expect(.@"(");
+                lex.eatUntilClosingDelimeter();
+            },
+            .@"." => {
+                _ = try lex.expect(.Ident);
+
+                if (lex.eatMatch(.@"(")) {
+                    lex.eatUntilClosingDelimeter();
+                }
+            },
+            else => return error.SyntaxError,
+        };
+    }
 };
 
 pub fn init(source: [:0]const u8, cursor: u32) Lexer {
     return Lexer{ .source = source, .cursor = cursor };
-}
-
-pub fn peek(source: [:0]const u8, cursor: u32) Token {
-    var lexer = init(source, cursor);
-    return lexer.next();
-}
-
-pub fn peekStr(source: [:0]const u8, cursor: u32) []const u8 {
-    return peek(source, cursor).view(source);
 }
 
 fn isKeyword(name: []const u8) bool {
@@ -452,17 +775,6 @@ pub fn resolveKeyword(prefix: u8, kw: []const u8) ?Lexeme {
     }
 
     return null;
-}
-
-pub fn peekNext(self: Lexer) Token {
-    var s = self;
-    return s.next();
-}
-
-pub fn slit(self: *Lexer, comptime tok: Lexeme) Token {
-    const vl = self.next();
-    if (vl.kind != tok) utils.panic("{s} != {s}", .{ @tagName(vl.kind), @tagName(tok) });
-    return vl;
 }
 
 pub fn isIdentByte(ident: u8) bool {
@@ -584,7 +896,10 @@ pub fn next(self: *Lexer) Token {
                 else => {
                     if (resolveKeyword(@truncate(ident_hash.final()), self.source[pos..self.cursor])) |k| break :state k;
                     switch (self.source[pos]) {
-                        '$' => |c| break :state @enumFromInt(c),
+                        '$' => |c| {
+                            pos += 1;
+                            break :state @enumFromInt(c);
+                        },
                         else => break :state .Ident,
                     }
                 },
@@ -791,295 +1106,4 @@ pub fn next(self: *Lexer) Token {
     };
 
     return Token.init(pos, self.cursor, kind);
-}
-
-pub fn expect(self: *Lexer, kind: Lexeme) !Token {
-    const res = self.peekNext();
-    if (res.kind != kind) return error.SyntaxError;
-    self.cursor = res.end;
-    return res;
-}
-
-pub fn eatUntilSameLevelToken(self: *@This(), kinds: []const Lexeme) Lexeme {
-    var depth: usize = 0;
-    while (true) {
-        const tok = self.next();
-
-        if (depth == 0) {
-            for (kinds) |kind| {
-                if (tok.kind == kind) {
-                    return tok.kind;
-                }
-            }
-        }
-
-        switch (tok.kind) {
-            .Eof => return tok.kind,
-            .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
-                depth += 1;
-            },
-            .@"}", .@")", .@"]" => {
-                if (depth == 0) return tok.kind;
-                depth -= 1;
-            },
-            else => {},
-        }
-    }
-}
-
-pub fn eatUntilClosingDelimeter(self: *@This()) void {
-    var depth: usize = 0;
-    while (true) {
-        const tok = self.next();
-        switch (tok.kind) {
-            .Eof => break,
-            .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
-                depth += 1;
-            },
-            .@"}", .@")", .@"]" => {
-                if (depth == 0) break;
-                depth -= 1;
-            },
-            else => {},
-        }
-    }
-}
-
-pub fn list(self: *Lexer, comptime sep: Lexeme, comptime end: Lexeme) *struct {
-    lexer: Lexer,
-
-    pub fn nextExt(slf: *@This()) enum { has_next, end, trailing_end } {
-        const tok = slf.lexer.peekNext();
-        switch (tok.kind) {
-            sep => {
-                slf.lexer.cursor = tok.end;
-                const ptok = slf.lexer.peekNext();
-                if (ptok.kind == end) {
-                    slf.lexer.cursor = ptok.end;
-                    return .trailing_end;
-                }
-
-                return .has_next;
-            },
-            end => {
-                slf.lexer.cursor = tok.end;
-                return .end;
-            },
-            .Eof => return .end,
-            else => return .has_next,
-        }
-    }
-
-    pub fn next(slf: *@This()) bool {
-        return slf.nextExt() == .has_next;
-    }
-
-    pub fn recover(slf: *@This()) bool {
-        var depth: usize = 0;
-        while (true) {
-            const tok = slf.lexer.next();
-            switch (tok.kind) {
-                sep => {
-                    if (depth > 0) {
-                        continue;
-                    }
-
-                    const ptok = slf.lexer.peekNext();
-                    if (ptok.kind == end) {
-                        slf.lexer.cursor = ptok.end;
-                        return true;
-                    }
-
-                    return false;
-                },
-                .Eof => return true,
-                .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
-                    depth += 1;
-                },
-                .@"}", .@")", .@"]" => {
-                    if (depth == 0) return true;
-                    depth -= 1;
-                },
-                else => {},
-            }
-        }
-    }
-} {
-    return @ptrCast(self);
-}
-
-pub fn eatIdent(self: *Lexer) ?struct { Token, bool } {
-    const tok = self.next();
-    return .{ tok, switch (tok.kind) {
-        .Ident => false,
-        .@"$" => true,
-        else => return null,
-    } };
-}
-
-pub fn eatMatchOrRevert(self: *Lexer, kind: Lexeme) bool {
-    const tok = self.peekNext();
-    if (tok.kind != kind) {
-        return false;
-    }
-    self.cursor = tok.end;
-    return true;
-}
-
-pub fn eatMatch(self: *Lexer, kind: Lexeme) bool {
-    const tok = self.next();
-    if (tok.kind != kind) {
-        self.cursor = tok.pos;
-        return false;
-    }
-    return true;
-}
-
-pub const SkipError = error{SyntaxError};
-
-pub fn skipExprDropErr(lex: *Lexer) void {
-    lex.skipExpr() catch {};
-}
-
-pub fn skipExpr(lex: *Lexer) SkipError!void {
-    return lex.skipExprPrec(254);
-}
-
-pub fn skipLabel(lex: *Lexer) SkipError!void {
-    if (lex.eatMatch(.@":")) {
-        _ = try lex.expect(.Ident);
-    }
-}
-
-pub fn skipExprPrec(lex: *Lexer, prevPrec: u8) SkipError!void {
-    try lex.skipUnitExpr();
-
-    while (true) {
-        const top = lex.peekNext();
-
-        const prec = top.kind.precedence(false);
-        if (prec >= prevPrec) break;
-
-        lex.cursor = top.end;
-
-        try lex.skipSuffix(top, prec);
-    }
-}
-
-pub fn skipSuffix(lex: *Lexer, top: Lexer.Token, prevPrec: u8) SkipError!void {
-    switch (top.kind) {
-        .@"." => {
-            _ = try lex.expect(.Ident);
-
-            if (lex.eatMatch(.@"(")) {
-                lex.eatUntilClosingDelimeter();
-            }
-        },
-        .@".*", .@".?" => {},
-        .@".{", .@".[", .@"[", .@".(", .@"(" => {
-            lex.eatUntilClosingDelimeter();
-        },
-        else => {
-            try lex.skipExprPrec(prevPrec);
-        },
-    }
-}
-
-pub fn skipUnitExpr(lex: *Lexer) SkipError!void {
-    const tok = lex.next();
-    return switch (tok.kind.expand()) {
-        .Ident,
-        .@"$",
-        .@"'",
-        .@"\"",
-        .Type,
-        .Float,
-        ._,
-        .DecInteger,
-        .BinInteger,
-        .OctInteger,
-        .HexInteger,
-        .true,
-        .false,
-        .null,
-        .idk,
-        .die,
-        => {},
-
-        .@"(", .@"{", .@".{" => {
-            lex.eatUntilClosingDelimeter();
-        },
-        .@"[" => {
-            lex.eatUntilClosingDelimeter();
-            try lex.skipExprPrec(1);
-        },
-        .@"?", .@"~", .@"-", .@"!", .@"&", .@"#", .@"^" => lex.skipExprPrec(1),
-        .@"enum", .@"union", .@"struct" => {
-            if (lex.eatMatch(.@"(")) {
-                lex.eatUntilClosingDelimeter();
-            }
-
-            if (lex.eatMatch(.@"align")) {
-                _ = try lex.expect(.@"(");
-                lex.eatUntilClosingDelimeter();
-            }
-
-            _ = try lex.expect(.@"{");
-            lex.eatUntilClosingDelimeter();
-        },
-        .@"fn" => {
-            _ = try lex.expect(.@"(");
-            lex.eatUntilClosingDelimeter();
-
-            _ = try lex.expect(.@":");
-            try lex.skipExpr();
-            if (lex.peekNext().kind.canStartExpression()) {
-                try lex.skipExpr();
-            }
-        },
-        .@"if", .@"$if" => {
-            try lex.skipExpr();
-            try lex.skipExpr();
-
-            if (lex.eatMatch(.@"else")) {
-                try lex.skipExpr();
-            }
-        },
-        .@"while", .@"$while" => {
-            _ = try lex.skipLabel();
-            try lex.skipExpr();
-            try lex.skipExpr();
-        },
-        .loop, .@"$loop" => {
-            _ = try lex.skipLabel();
-            try lex.skipExpr();
-        },
-        .match, .@"$match" => {
-            try lex.skipExpr();
-            try lex.skipExpr();
-        },
-        .@"for" => {
-            while (true) {
-                try lex.skipExpr();
-                if (!lex.eatMatch(.@",")) break;
-            }
-            try lex.skipExpr();
-        },
-        .@"break", .@"continue" => _ = try lex.skipLabel(),
-        .@"return" => {
-            try lex.skipExpr();
-        },
-        .Directive => {
-            _ = try lex.expect(.@"(");
-            lex.eatUntilClosingDelimeter();
-        },
-        .@"." => {
-            _ = try lex.expect(.Ident);
-
-            if (lex.eatMatch(.@"(")) {
-                lex.eatUntilClosingDelimeter();
-            }
-        },
-        else => return error.SyntaxError,
-    };
 }

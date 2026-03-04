@@ -644,7 +644,7 @@ const Loader = struct {
                 file.path,
                 file.source,
                 &types,
-                opts.pos,
+                opts.tokens[opts.pos.raw()].pos,
                 "can't stat used file: {}: {}",
                 .{ path, @errorName(err) },
             );

@@ -1,5 +1,5 @@
 const hb = @import("hb");
-const Lexer = hb.frontend.Lexer;
+const Lexer = hb.frontend.Lexer.Prelexed;
 const std = @import("std");
 const utils = hb.utils;
 
@@ -20,8 +20,10 @@ pub fn fmt(
     error_out: ?*std.Io.Writer,
     error_colors: std.Io.tty.Config,
 ) Error!void {
+    const lexed = Lexer.prelex(source, utils.Arena.scrath(null).arena);
+
     var self = Fmt{
-        .lex = .init(source, 0),
+        .lex = .{ .source = source, .tokens = lexed, .cursor = .start },
         .out = out,
     };
 
@@ -51,7 +53,7 @@ pub fn run(self: *Fmt) Error!void {
 
     var first = true;
     while (iter.next()) {
-        if (self.stickyFollows() and self.lex.cursor != 0) {
+        if (self.stickyFollows() and self.lex.cursor != .start) {
             try self.out.writeByte(';');
         }
         if (!first) try self.preserveNewlines(1);
@@ -61,8 +63,10 @@ pub fn run(self: *Fmt) Error!void {
 }
 
 pub fn preserveNewlines(self: *Fmt, min: usize) !void {
+    if (self.lex.cursor == .start) return;
+    const prev_pos = self.lex.get(self.lex.cursor.prev()).end;
     const next_pos = self.lex.peekNext().pos;
-    const relevant = self.lex.source[self.lex.cursor..next_pos];
+    const relevant = self.lex.source[prev_pos..next_pos];
     const nline_count = @max(@min(std.mem.count(u8, relevant, "\n"), 2), min);
     try self.out.splatByteAll('\n', nline_count);
 }
@@ -91,6 +95,11 @@ pub fn expr(self: *Fmt) Error!void {
 
 pub fn exprPrec(self: *Fmt, prevPrec: u8) Error!void {
     const tok = self.lex.next();
+
+    if (tok.kind == .@"$") {
+        try self.out.writeByte('$');
+    }
+
     try self.out.writeAll(tok.view(self.lex.source));
     switch (tok.kind.expand()) {
         .Ident,
@@ -232,20 +241,20 @@ pub fn exprPrec(self: *Fmt, prevPrec: u8) Error!void {
             try self.list(.expr, false, .@",", .@")");
         },
         else => {
-            self.error_pos = self.lex.cursor;
+            self.error_pos = self.lex.pos();
             return error.SyntaxError;
         },
     }
 
     while (true) {
-        const expr_end = self.lex.cursor;
+        const expr_end = self.lex.get(self.lex.cursor.prev()).end;
         const top = self.lex.peekNext();
 
         const prec = top.kind.precedence(self.in_if_or_while);
 
         if (prec >= prevPrec) break;
 
-        self.lex.cursor = top.end;
+        self.lex.cursor = top.idx.next();
 
         const nline_count = std.mem.count(u8, self.lex.source[expr_end..top.pos], "\n");
         if (nline_count != 0) {

@@ -2,7 +2,7 @@ const std = @import("std");
 const hb = @import("hb");
 const utils = hb.utils;
 const graph = hb.backend.graph;
-const Lexer = hb.frontend.Lexer;
+const Lexer = hb.frontend.Lexer.Prelexed;
 const DeclIndex = hb.frontend.DeclIndex;
 const File = DeclIndex.File;
 const Loader = DeclIndex.Loader;
@@ -109,8 +109,8 @@ pub const Decls = union(enum) {
         return switch (self) {
             .sourced => |d| {
                 const field = d
-                    .lookupField(scope.file.get(types).source, name) orelse return null;
-                return utils.indexOfPtr(u32, d.fields.items(.offset), field);
+                    .lookupField(scope.file.get(types), name) orelse return null;
+                return utils.indexOfPtr(File.TokenIdx, d.fields.items(.offset), field);
             },
             .generated => |d| for (d.fields, 0..) |f, i| {
                 if (std.mem.eql(u8, f, name)) break i;
@@ -124,7 +124,7 @@ pub const Decls = union(enum) {
         };
     }
 
-    pub fn fieldPos(self: Decls, index: usize) ?u32 {
+    pub fn fieldPos(self: Decls, index: usize) ?File.TokenIdx {
         return switch (self) {
             .sourced => |s| s.fields.items(.offset)[index],
             .generated => null,
@@ -133,10 +133,8 @@ pub const Decls = union(enum) {
 
     pub fn fieldName(self: Decls, scope: Scope, types: *Types, index: usize) []const u8 {
         return switch (self) {
-            .sourced => |s| if (s.fields.len == 0) "" else Lexer.peekStr(
-                scope.file.get(types).source,
-                s.fields.items(.offset)[index],
-            ),
+            .sourced => |s| if (s.fields.len == 0) "" else scope.file
+                .get(types).tokenStr(s.fields.items(.offset)[index]),
             .generated => |g| g.fields[index],
         };
     }
@@ -884,14 +882,14 @@ pub const Captures = struct {
         };
     }
 
-    pub fn lookup(self: Captures, source: [:0]const u8, name: []const u8) ?struct { u32, Id, ?ComptimeValue } {
+    pub fn lookup(self: Captures, file: *const File, name: []const u8) ?struct { File.TokenIdx, Id, ?ComptimeValue } {
         // TODO: we can vectorize this
 
         const pref = DeclIndex.prefixOf(name);
         var value_index: usize = 0;
         for (self.prefixes, self.variables) |prefix, variable| {
-            if (prefix == pref and Lexer.compareIdent(source, variable.meta.offset, name)) {
-                return .{ variable.meta.offset, variable.ty, if (variable.meta.is_cmptime)
+            if (prefix == pref and std.mem.eql(u8, file.tokenStr(@enumFromInt(variable.meta.offset)), name)) {
+                return .{ @enumFromInt(variable.meta.offset), variable.ty, if (variable.meta.is_cmptime)
                     self.values[value_index]
                 else
                     null };
@@ -923,9 +921,13 @@ pub const Scope = extern struct {
         empty,
         _,
 
-        pub fn sourcePos(self: NamePos) ?u32 {
+        pub fn tok(token: File.TokenIdx) NamePos {
+            return @enumFromInt(@intFromEnum(token));
+        }
+
+        pub fn sourcePos(self: NamePos) ?File.TokenIdx {
             return switch (self) {
-                _ => |v| @intFromEnum(v),
+                _ => |v| @enumFromInt(@intFromEnum(v)),
                 else => null,
             };
         }
@@ -950,7 +952,7 @@ pub const Scope = extern struct {
                 return global.data.get(types);
             },
             _ => |v| {
-                var str = self.file.get(types).tokenStr(@intFromEnum(v));
+                var str = self.file.get(types).tokenStr(@enumFromInt(@intFromEnum(v)));
                 if (str[0] == '"') str = str[1 .. str.len - 1];
                 if (str[0] == '(') str = "";
                 return str;
@@ -1231,9 +1233,9 @@ pub const Struct = struct {
 
         var hard_align: ?Size = null;
         haling: {
-            if (decls.start == 0) break :haling;
+            if (decls.start == .start) break :haling;
 
-            var lex = Lexer.init(file.source, decls.start);
+            var lex = file.lex(decls.start);
             _ = lex.slit(.@"struct"); // maybe shift this after the keyword?
 
             if (lex.eatMatch(.@"align")) {
@@ -1245,9 +1247,9 @@ pub const Struct = struct {
             }
         }
 
-        for (@as([]u32, decls.fields.items(.offset)), 0..) |o, i| {
+        for (@as([]File.TokenIdx, decls.fields.items(.offset)), 0..) |o, i| {
             const slot = &layout.fields[i];
-            var lex = Lexer.init(file.source, o);
+            var lex = file.lex(o);
 
             _ = lex.slit(.Ident);
             _ = lex.slit(.@":");
@@ -1336,7 +1338,7 @@ pub const Enum = struct {
         };
         const layout = &self.layout.?;
 
-        var lex = Lexer.init(file.source, decls.start);
+        var lex = file.lex(decls.start);
 
         if (lex.eatMatch(.@"union")) {
             _ = lex.slit(.@"(");
@@ -1359,7 +1361,7 @@ pub const Enum = struct {
 
         var value: i64 = 0;
         for (decls.fields.items(.offset), layout.fields) |f, *slt| {
-            var flex = Lexer.init(file.source, f);
+            var flex = file.lex(f);
 
             _ = flex.slit(.Ident);
             if (flex.eatMatch(.@":=")) vl: {
@@ -1478,7 +1480,7 @@ pub const Union = struct {
         );
         _ = gen.bl.begin(.systemv, undefined);
 
-        var lex = Lexer.init(file.source, decls.start);
+        var lex = file.lex(decls.start);
         _ = lex.slit(.@"union");
         if (lex.eatMatch(.@"(")) tag: {
             const check_point = lex.cursor;
@@ -1500,7 +1502,7 @@ pub const Union = struct {
         }
 
         for (decls.fields.items(.offset), layout.fields) |off, *slot| {
-            var flex = Lexer.init(file.source, off);
+            var flex = file.lex(off);
 
             _ = flex.slit(.Ident);
             _ = gen.expect(&flex, .@":", "to start the field type declaration") catch {};
@@ -1558,7 +1560,7 @@ pub const Func = struct {
     args: []Id,
     ret: Id,
     // NOTE: start at the first argument
-    pos: u32,
+    pos: File.TokenIdx,
     compiled: std.EnumSet(Target) = .initEmpty(),
     linkage: Machine.Data.Linkage = .local,
     corrupted: bool = false,
@@ -1622,7 +1624,7 @@ pub const Func = struct {
         }
 
         var has_args = false;
-        var lex = Lexer.init(self.scope.file.get(types).source, self.pos);
+        var lex = self.scope.file.get(types).lex(self.pos);
         {
             var iter = lex.list(.@",", .@")");
 
@@ -1640,7 +1642,7 @@ pub const Func = struct {
 
             var param_idx: usize = 0;
             var arg_idx: usize = 0;
-            var olex = Lexer.init(self.scope.file.get(types).source, self.pos);
+            var olex = self.scope.file.get(types).lex(self.pos);
             var iter = olex.list(.@",", .@")");
 
             while (iter.next()) : (arg_idx += 1) {
@@ -1681,7 +1683,7 @@ pub const TemplateId = EntId(Template, "templates");
 pub const Template = struct {
     scope: Scope,
     captures: Captures,
-    pos: u32,
+    pos: File.TokenIdx,
 
     pub fn format_(self: *Template, types: *Types, writer: *std.Io.Writer) !void {
         if (self.scope.parent.data().downcast(AnyScope)) |p| {
@@ -1806,13 +1808,13 @@ pub fn init(
                     type_union.data().downcast(Types.AnyScope).?.pack(),
                     scope,
                 ).?;
-                const type_union_enum = gen.peval(0, value, Types.Id) catch unreachable;
+                const type_union_enum = gen.peval(.start, value, Types.Id) catch unreachable;
 
                 value = gen.lookupIdent(
                     type_union_enum.data().downcast(Types.AnyScope).?.pack(),
                     "Field",
                 ).?;
-                return (gen.peval(0, value, Types.Id) catch unreachable).data().Struct;
+                return (gen.peval(.start, value, Types.Id) catch unreachable).data().Struct;
             }
 
             pub fn fnty(types: *Types, args: []const Id, ret: Id) FuncTyId {
@@ -1825,10 +1827,10 @@ pub fn init(
         _ = gen.bl.begin(.systemv, undefined);
 
         var value = gen.lookupIdent(gen.scope, "Type").?;
-        const type_union = gen.peval(0, value, Types.Id) catch unreachable;
+        const type_union = gen.peval(.start, value, Types.Id) catch unreachable;
 
         value = gen.lookupIdent(gen.scope, "SrcLoc").?;
-        const source_loc = gen.peval(0, value, Types.Id) catch unreachable;
+        const source_loc = gen.peval(.start, value, Types.Id) catch unreachable;
 
         self.builtins = .{
             .type_union = type_union.data().Union,
@@ -1882,21 +1884,32 @@ pub fn deinit(self: *Types) void {
 
 pub fn reportSloc(self: *Types, slc: graph.Sloc, fmt: []const u8, args: anytype) void {
     if (slc == graph.Sloc.none) return;
-    self.report(@enumFromInt(slc.namespace), slc.index, fmt, args);
+    self.reportOffset(@enumFromInt(slc.namespace), .start, slc.index, fmt, args);
+}
+
+pub fn reportOffset(
+    self: *Types,
+    file: File.Id,
+    pos: File.TokenIdx,
+    offset: u32,
+    fmt: []const u8,
+    args: anytype,
+) void {
+    const fl = file.get(self);
+    Codegen.reportGeneric(fl.path, fl.source, self, fl.peek(pos).pos + offset, fmt, args);
+    self.errored += 1;
+
+    //std.debug.dumpCurrentStackTrace(@returnAddress());
 }
 
 pub fn report(
     self: *Types,
     file: File.Id,
-    pos: u32,
+    pos: File.TokenIdx,
     fmt: []const u8,
     args: anytype,
 ) void {
-    const fl = file.get(self);
-    Codegen.reportGeneric(fl.path, fl.source, self, pos, fmt, args);
-    self.errored += 1;
-
-    //std.debug.dumpCurrentStackTrace(@returnAddress());
+    return self.reportOffset(file, pos, 0, fmt, args);
 }
 
 pub fn allocator(self: *Types) std.mem.Allocator {
@@ -2005,7 +2018,9 @@ pub fn collectGlobalRelocs(
 ) void {
     self.collectRelocsRecur(.{
         .sloc = .{
-            .index = id.get(self).scope.name_pos.sourcePos() orelse 0,
+            .index = id.get(self).scope.file.get(self)
+                .peek(id.get(self).scope.name_pos.sourcePos() orelse .start)
+                .pos,
             .namespace = id.get(self).scope.file.index(),
         },
         .bytes = id.get(self).data.get(self),
