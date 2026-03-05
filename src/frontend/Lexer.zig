@@ -178,6 +178,7 @@ pub const Lexeme = enum(u16) {
     @"@decl_count_of",
     @"@ReturnType",
     @"@Builtins",
+    @"@simd",
 
     const data = @typeInfo(Lexeme).@"enum";
 

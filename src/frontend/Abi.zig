@@ -7,11 +7,8 @@ const Id = Types.Id;
 
 const Abi = @This();
 
-pub const ableos = Abi{ .cc = .ablecall };
-pub const systemv = Abi{ .cc = .systemv };
-pub const wasm = Abi{ .cc = .wasmcall };
-
 cc: graph.CallConv,
+simd: root.backend.Machine.SimdSpec,
 
 pub const Spec = ?[]graph.AbiParam;
 pub const max_elems = 2;
@@ -147,6 +144,10 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
                     .u32, .i64, .u64, .int, .uint, .type, .template => .int,
                     .f32, .f64 => .sse,
                 },
+                .Simd => |s| if (s.laneCount(ts) == 1) {
+                    try classify(.nany(s), ts, offset, catas, f32_count);
+                    return;
+                } else .sse,
                 .FuncTy => .int,
                 .Pointer => .int,
                 .Enum => |e| if (e.get(ts).decls.fieldCount() == 0)

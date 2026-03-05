@@ -48,6 +48,11 @@ const VTable = struct {
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
 
+pub const SimdSpec = struct {
+    max_width: u16 = 0,
+    allowed_types: std.EnumSet(graph.DataType),
+};
+
 pub const Check = struct {
     mach: Machine = .init(Check),
     gpa: std.mem.Allocator,
@@ -1449,6 +1454,38 @@ pub const SupportedTarget = enum {
             .@"x86_64-windows" => unreachable, // TODO
             .@"x86_64-linux" => .systemv,
             .@"wasm-freestanding" => .wasmcall,
+        };
+    }
+
+    pub fn toSimdSpec(triple: SupportedTarget) SimdSpec {
+        return switch (triple) {
+            .@"hbvm-ableos" => .{
+                .max_width = 0,
+                .allowed_types = .initEmpty(),
+            },
+            .@"x86_64-windows" => unreachable, // TODO
+            .@"x86_64-linux" => .{
+                .max_width = 16,
+                .allowed_types = .init(.{
+                    .i8 = true,
+                    .i16 = true,
+                    .i32 = true,
+                    .i64 = true,
+                    .f32 = true,
+                    .f64 = true,
+                }),
+            },
+            .@"wasm-freestanding" => .{
+                .max_width = 16,
+                .allowed_types = .init(.{
+                    .i8 = true,
+                    .i16 = true,
+                    .i32 = true,
+                    .i64 = true,
+                    .f32 = true,
+                    .f64 = true,
+                }),
+            },
         };
     }
 };

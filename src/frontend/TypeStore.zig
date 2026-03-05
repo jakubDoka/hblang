@@ -502,18 +502,29 @@ pub const generic = struct {
     }
 };
 
+pub const Simd = packed struct {
+    lane: Builtin,
+
+    pub fn laneCount(self: Simd, types: *Types) u16 {
+        const bl = (Abi.categorizeBuiltin(self.lane) catch return 1) orelse return 1;
+        if (!types.abi.simd.allowed_types.contains(bl)) return 1;
+        return types.abi.simd.max_width >> bl.sizePow();
+    }
+};
+
 pub const Data = union(enum(u8)) {
     Builtin: Builtin,
     Option: OptionId,
     Pointer: PointerId,
     Slice: SliceId,
     Array: ArrayId,
+    Simd: Simd,
     FuncTy: FuncTyId,
     Struct: StructId,
     Enum: EnumId,
     Union: UnionId,
 
-    pub const scope_start = 6;
+    pub const scope_start = 7;
     pub const index_start = 2;
 
     pub const pack = Id.Conv.pack;
@@ -526,6 +537,8 @@ pub const Data = union(enum(u8)) {
             .Pointer => 8,
             .Slice => 16,
             .Array => |a| a.get(types).elem.size(types) * a.get(types).len.s,
+            .Simd => |s| s.lane.size(types) * s.laneCount(types),
+
             inline .Option, .Struct, .Enum, .Union => |s| s.get(types)
                 .getLayout(types).spec.size,
         };
@@ -538,6 +551,7 @@ pub const Data = union(enum(u8)) {
             .Pointer => 8,
             .Slice => 8,
             .Array => |a| a.get(types).elem.alignment(types),
+            .Simd => |a| a.lane.alignment(types),
             inline .Option, .Struct, .Enum, .Union => |e| e.get(types)
                 .getLayout(types).spec.alignmentBytes(),
         };
@@ -628,6 +642,7 @@ pub const Id = enum(u32) {
         return switch (self.data()) {
             .Pointer => |p| p.get(types).ty,
             .Option => |o| o.get(types).inner,
+            .Simd => |s| .nany(s),
             inline .Slice, .Array => |a| a.get(types).elem,
             .Struct, .Enum, .Union, .FuncTy, .Builtin => null,
         };
@@ -661,8 +676,9 @@ pub const Id = enum(u32) {
                     break :b s.get(types).layout.?.fields.len;
                 break :b s.get(types).decls.fieldCount();
             },
-            inline else => |s| s.get(types).decls.fieldCount(),
+            .Simd => |s| s.laneCount(types),
             .FuncTy => |f| f.get(types).args.len,
+            inline else => |s| s.get(types).decls.fieldCount(),
         });
     }
 
@@ -695,6 +711,7 @@ pub const Id = enum(u32) {
                 try writer.writeByte(']');
                 try a.get(types).elem.format_(types, writer);
             },
+            .Simd => |s| try writer.print("@simd({s})", .{@tagName(s.lane)}),
             .FuncTy => |f| {
                 try writer.writeAll("fn(");
                 for (f.get(types).args, 0..) |arg, i| {
@@ -1078,6 +1095,7 @@ pub const Option = struct {
                 .never => return .empty,
                 else => return .not_computed,
             },
+            .Simd => return .not_computed,
             .Union => return .not_computed,
             .Enum => |e| return if (e.get(types).decls.fieldCount() == 0)
                 .empty
@@ -1750,7 +1768,7 @@ pub fn init(
             .emit_global_reloc_offsets = true,
         },
         .loader = loader,
-        .abi = .{ .cc = target.toCallConv() },
+        .abi = .{ .cc = target.toCallConv(), .simd = target.toSimdSpec() },
         .backend = backend,
         .target = @tagName(target),
         .tmp = undefined,
@@ -2040,6 +2058,7 @@ pub fn collectRelocsRecur(
         .Builtin => {},
         .Enum => {},
         .FuncTy => {},
+        .Simd => {},
         .Option => |o| {
             if (o.get(self).recurse(self, ctx.bytes[offset..])) |inner| {
                 self.collectRelocsRecur(ctx, inner, offset);
@@ -2239,6 +2258,7 @@ pub fn internValueLow(self: *Types, ty: Id, bytes: []u8, offset: u32) void {
     switch (ty.data()) {
         .Builtin => {},
         .FuncTy => {},
+        .Simd => {},
         .Slice => |s| {
             const ptr: *align(1) u64 = @ptrCast(bytes[offset..][Types.Slice.ptr_offset..][0..8]);
             const len: u64 = @bitCast(bytes[offset..][Types.Slice.len_offset..][0..8].*);
@@ -2341,6 +2361,9 @@ pub fn formatValueLow(self: *Types, ty: Id, bytes: []const u8, writer: *std.Io.W
             .template => try @as(TemplateId, @enumFromInt(@as(u32, @bitCast(bytes[0..4].*))))
                 .get(self).format_(self, writer),
             else => utils.panic("{}", .{b}),
+        },
+        .Simd => |s| {
+            try self.formatArray(.nany(s.lane), bytes, s.laneCount(self), writer);
         },
         .FuncTy => {
             const func: FuncId = @enumFromInt(@as(u32, @bitCast(bytes[0..4].*)));

@@ -766,6 +766,9 @@ pub fn evalTypeInfoEca(self: *Codegen, slc: graph.Sloc) !void {
         .Array => |a| {
             mem[0..16].* = std.mem.toBytes(a.get(self.types).*);
         },
+        .Simd => |s| {
+            mem[0..4].* = std.mem.toBytes(s);
+        },
         .FuncTy => |f| {
             const arg_slc = f.get(self.types).args;
 
@@ -870,6 +873,8 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
             try self.loadVmTy(slc, mem[0..4]),
             @intCast(@as(u64, @bitCast(mem[8..][0..8].*))),
         ),
+        // TODO: check
+        .Simd => .nany(Types.Simd{ .lane = (try self.loadVmTy(slc, mem[0..4])).data().Builtin }),
         .FuncTy => {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -2941,6 +2946,7 @@ pub fn directive(
                 },
             ));
         },
+        .simd => self.tyLit(tok.idx, Types.Simd{ .lane = (try self.typ(lex)).data().Builtin }),
         .as => {
             const ty = try self.typ(lex);
             try self.expectNext(iter);
@@ -3333,6 +3339,11 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                             return self.report(field.idx, "{} only has `len` field", .{res.value.ty});
                         }
                     },
+                    .Simd => return self.report(
+                        field.idx,
+                        "{} does not support field access (shoule it?)",
+                        .{res.value.ty},
+                    ),
                     .FuncTy => return self.report(field.idx, "{} doesn't have fields", .{res.value.ty}),
                     .Slice => |s| {
                         const ptr = res.value.normalized(top.idx, self).ptr;
@@ -3456,11 +3467,12 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             const can_be_indexed = switch (res.value.ty.data()) {
                 .Builtin, .FuncTy, .Enum, .Option, .Union => res.value.ty == .type,
                 .Pointer, .Slice, .Array => true,
-                .Struct => !is_slice,
+                .Struct, .Simd => !is_slice,
             };
 
             if (!can_be_indexed) {
-                return self.report(top.idx, "{} can not be indexed", .{res.value.ty});
+                const what = if (is_slice) "sliced" else "indexed";
+                return self.report(top.idx, "{} can not be {}", .{ res.value.ty, what });
             }
 
             if (is_slice) {
@@ -3567,7 +3579,8 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
                 res.set(.ptr(ty, slot));
             } else switch (res.value.ty.data()) {
-                .Builtin, .FuncTy, .Enum, .Option, .Union => {
+                .FuncTy, .Enum, .Option, .Union => unreachable,
+                .Builtin => {
                     std.debug.assert(res.value.ty == .type);
 
                     const ty = try self.peval(top.idx, res.value, Types.Id);
@@ -3702,11 +3715,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     ));
                 },
                 .Struct => |s| {
-                    const idx = index orelse return self.report(
-                        top.idx,
-                        "structs can not be sliced",
-                        .{},
-                    );
+                    const idx = index.?;
                     index.?.deinitKeep();
                     index = null;
 
@@ -3719,6 +3728,25 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     const field = layout.fields[@intCast(i)];
 
                     res.set(self.accessStructField(top.idx, res.value, field));
+                },
+                .Simd => |s| {
+                    const idx = index.?;
+                    index.?.deinitKeep();
+                    index = null;
+
+                    const i = try self.peval(top.idx, idx.value, i64);
+
+                    if (i < 0 or i >= s.laneCount(self.types)) {
+                        return self.report(top.idx, "index out of bounds", .{});
+                    }
+
+                    // TODO: specialize on memory load, its wastefull to load the whole vec and then extract the lane
+                    res.set(.value(.nany(s.lane), self.bl.addGetLane(
+                        slc,
+                        Abi.categorizeBuiltinUnwrapped(s.lane),
+                        res.value.load(top.idx, self),
+                        @intCast(i),
+                    )));
                 },
             }
 
@@ -4364,7 +4392,7 @@ pub fn tupl(self: *Codegen, pos: File.TokenIdx, lex: *Lexer, ty: Types.Id, ctx: 
     var i: usize = 0;
 
     switch (inner.data()) {
-        .Builtin, .Pointer, .Slice, .Array, .FuncTy, .Enum, .Option, .Union => {
+        .Builtin, .Pointer, .Slice, .Array, .FuncTy, .Enum, .Option, .Union, .Simd => {
             return self.report(pos, "cant infer the type of the tuple, use <ty>.(..)", .{});
         },
         .Struct => |s| {
@@ -4410,7 +4438,7 @@ pub fn ctor(self: *Codegen, pos: File.TokenIdx, ctx: Ctx, ty: Types.Id, lex: *Le
     var field_iter = lex.list(.@",", .@"}");
 
     switch (inner.data()) {
-        .Option, .Builtin, .FuncTy, .Pointer, .Array, .Slice, .Enum => return self.report(
+        .Option, .Builtin, .FuncTy, .Pointer, .Array, .Slice, .Enum, .Simd => return self.report(
             pos,
             "{} can not be initialized this way",
             .{ty},
@@ -5087,7 +5115,7 @@ pub fn endCall(
 
     const rcta = ret_cata orelse return error.Unreachable;
 
-    if ((Abi{ .cc = call.cc }).isRetByRef(rcta)) {
+    if ((Abi{ .cc = call.cc, .simd = undefined }).isRetByRef(rcta)) {
         std.debug.assert(@intFromPtr(slot) != 0xaaaaaaaaaaaaaaaa);
         return .ptr(ret, slot);
     }
@@ -5531,7 +5559,7 @@ pub fn validateType(self: *Codegen, slc: graph.Sloc, value: i64) !Types.Id {
     };
 
     switch (tag) {
-        .Builtin => _ = std.meta.intToEnum(Types.Builtin, repr.index) catch {
+        .Builtin, .Simd => _ = std.meta.intToEnum(Types.Builtin, repr.index) catch {
             return self.reportSloc(slc, "the type value is corrupted, (invlaid builtin)", .{});
         },
         inline else => |t| {

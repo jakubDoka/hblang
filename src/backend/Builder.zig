@@ -215,6 +215,10 @@ pub fn addBitIndexLoad(
     return red;
 }
 
+pub fn addGetLane(self: *Builder, sloc: graph.Sloc, ty: DataType, base: *BuildNode, idx: u8) *BuildNode {
+    return self.func.addNode(.GetLane, sloc, ty, &.{ null, base }, .{ .idx = idx });
+}
+
 pub fn addBitFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
     if (base.data_type == ty) {
         std.debug.assert(offset == 0);
@@ -225,14 +229,7 @@ pub fn addBitFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offse
         std.debug.assert(ty.isFloat());
 
         const idx = offset >> ty.sizePow();
-
-        return self.func.addNode(
-            .GetLane,
-            sloc,
-            ty,
-            &.{ null, base },
-            .{ .idx = @intCast(idx) },
-        );
+        return self.addGetLane(sloc, ty, base, @intCast(idx));
     } else {
         std.debug.assert(base.data_type.isInt());
         std.debug.assert(ty.isInt());
