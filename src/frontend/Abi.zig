@@ -134,7 +134,9 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
         pub fn classify(t: Id, ts: *Types, offset: u64, catas: []?Cata, f32_count: *usize) Error!void {
             if (offset & (t.alignment(ts) - 1) != 0) return error.ByRef;
 
-            if (t == .f32) f32_count.* += 1;
+            if (t == .f32) {
+                f32_count.* += 1;
+            }
 
             var class: Cata = switch (t.data()) {
                 .Builtin => |b| switch (b) {

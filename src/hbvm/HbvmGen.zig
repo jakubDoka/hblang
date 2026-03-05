@@ -172,6 +172,19 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
         }
     }
 
+    if (node.kind == .GetLane) {
+        std.debug.assert(node.data_type == .f32);
+        std.debug.assert(inps[1].?.data_type == .f64);
+        std.debug.assert(node.extra(.GetLane).idx < 2);
+
+        const shift_amount = node.extra(.GetLane).idx * node.data_type.size() * 8;
+        const shift_imm = func.addIntImm(node.sloc, .i64, shift_amount);
+        const op_cast = func.addUnOp(node.sloc, .cast, .i64, inps[1].?);
+        const shift = func.addBinOp(node.sloc, .ushr, .i64, op_cast, shift_imm);
+        const red = func.addUnOp(node.sloc, .ired, .i32, shift);
+        return func.addUnOp(node.sloc, .cast, .f32, red);
+    }
+
     return null;
 }
 
