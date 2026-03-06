@@ -9,6 +9,7 @@
     return
     unreachable)
   (func $struct_capture_eca_mismatch_1.cp_=1__=0_ (type 1) (result i32)
+    (local i32)
     global.get 0
     i64.const 8
     i64.sub

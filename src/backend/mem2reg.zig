@@ -439,7 +439,9 @@ pub fn Mixin(comptime Backend: type) type {
                 };
                 var dt: enum { unknown, float, int } = .unknown;
                 for (store_load_nodes.items) |use| {
-                    const next_dt: @TypeOf(dt) = if (use.data_type.isInt()) .int else .float;
+                    const acc_ty = use.accessTy();
+
+                    const next_dt: @TypeOf(dt) = if (acc_ty.isInt()) .int else .float;
                     switch (dt) {
                         .unknown => dt = next_dt,
                         else => if (dt != next_dt) {
@@ -450,20 +452,20 @@ pub fn Mixin(comptime Backend: type) type {
                     _, const offs = use.base().knownOffset();
                     // don't touch this and leave the static analysis report the soob
                     //
-                    if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
+                    if (offs < 0 or @as(u64, @intCast(offs)) + acc_ty.size() >
                         // TODO: we ignore elems > 8 for now but we will want mem2reg to work on
                         // vectors eventually
-                        o.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
+                        o.inputs()[1].?.extra(.LocalAlloc).size or acc_ty.size() > 8)
                     {
                         continue :outer;
                     }
 
                     const idx = alloc_offset_count + for (offsets.items, 0..) |off, j| {
-                        if (off.offset >= offs + use.data_type.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
+                        if (off.offset >= offs + acc_ty.size() or offs >= off.offset + (@as(u64, 1) << off.size)) {
                             continue;
                         }
 
-                        if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
+                        if (off.offset != offs or (@as(u64, 1) << off.size) != acc_ty.size()) {
                             continue :outer;
                         }
 
@@ -471,7 +473,7 @@ pub fn Mixin(comptime Backend: type) type {
                     } else b: {
                         try offsets.append(tmp.arena.allocator(), .{
                             .offset = @intCast(offs),
-                            .size = @intCast(std.math.log2_int(u64, use.data_type.size())),
+                            .size = @intCast(std.math.log2_int(u64, acc_ty.size())),
                         });
                         break :b offsets.items.len - 1;
                     };

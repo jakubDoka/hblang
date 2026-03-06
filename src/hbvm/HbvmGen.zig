@@ -453,7 +453,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.ld, .{ self.getReg(no), self.getReg(inps[0]), off, size });
             },
             .St => |extra| {
-                const size: u16 = @intCast(no.data_type.size());
+                const size: u16 = @intCast(inps[1].data_type.size());
                 const off = extra.offset;
                 self.emit(.st, .{ self.getReg(inps[1]), self.getReg(inps[0]), off, size });
             },
@@ -464,7 +464,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.ld, .{ self.getReg(no), .stack_addr, off, size });
             },
             .StackSt => |extra| {
-                const size: u16 = @intCast(no.data_type.size());
+                const size: u16 = @intCast(inps[0].data_type.size());
                 const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc)
                     .getOffset(self.ctx.stack_layout))) + extra.offset;
                 self.emit(.st, .{ self.getReg(inps[0]), .stack_addr, off, size });

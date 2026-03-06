@@ -1,4 +1,4 @@
-(CInt ?c (:value 0)) : (Zero (:data_type .i64) c)
+(CInt ?c (:value 0)) : (Zero c)
 
 (UnOp _ (:op .cast) oper) : oper
 

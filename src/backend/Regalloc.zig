@@ -811,6 +811,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         var iter = std.mem.reverseIterator(bb.base.outputs());
         while (iter.next()) |in| {
             const instr: *Node = in.get();
+
             if (!LiveRange.isNoDef(instr, lrg_table)) {
                 const instr_lrg = lrg_table[instr.id];
                 const value = tmp_liveins.fetchSwapRemove(instr_lrg.id());
@@ -840,6 +841,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 for (tmp_liveins.keySlice()) |id| {
                     const concu_lrg = &lrgs[id];
                     std.debug.assert(concu_lrg != instr_lrg);
+
+                    if (concu_lrg.def.isReadonly()) continue;
 
                     if (!concu_lrg.mask.setIntersects(instr_lrg.mask)) continue;
 
@@ -1355,6 +1358,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
                 for (instr.outputs()) |us| {
                     @memset(loop_switches, false);
+
+                    if (instr.isReadonly()) continue;
 
                     const use = us.get();
                     if (!use.hasUseFor(us.pos(), instr)) continue;

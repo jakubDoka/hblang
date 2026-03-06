@@ -98,8 +98,8 @@
             global.get 0
             i64.add
             call $main.Chars.next
-            local.set 1
-            local.get 1
+            local.set 2
+            local.get 2
             local.get 3
             i32.shr_u
             i32.const 255
@@ -111,8 +111,8 @@
               global.get 0
               i64.add
               call $main.Chars.next
-              local.set 2
-              local.get 2
+              local.set 1
+              local.get 1
               local.get 3
               i32.shr_u
               i32.const 255
@@ -120,10 +120,10 @@
               i32.eqz
               br_if 0 (;@5;)
               block  ;; label = @6
-                local.get 1
+                local.get 2
                 i32.const 255
                 i32.and
-                local.get 2
+                local.get 1
                 i32.const 255
                 i32.and
                 i32.ne
@@ -158,8 +158,8 @@
                   global.get 0
                   i64.add
                   call $main.Chars.next
-                  local.set 1
-                  local.get 1
+                  local.set 2
+                  local.get 2
                   local.get 3
                   i32.shr_u
                   i32.const 255
@@ -171,8 +171,8 @@
                     global.get 0
                     i64.add
                     call $main.Chain_=main.Chars__=main.Chars_.next
-                    local.set 2
-                    local.get 2
+                    local.set 1
+                    local.get 1
                     local.get 3
                     i32.shr_u
                     i32.const 255
@@ -180,10 +180,10 @@
                     i32.eqz
                     br_if 0 (;@8;)
                     block  ;; label = @9
-                      local.get 2
+                      local.get 1
                       i32.const 255
                       i32.and
-                      local.get 1
+                      local.get 2
                       i32.const 255
                       i32.and
                       i32.ne

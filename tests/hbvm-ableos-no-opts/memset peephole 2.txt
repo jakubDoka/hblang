@@ -1,9 +1,9 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
+         cp $3, $0
          cp $1, $0
          cp $2, $0
-         cp $3, $0
         jal $31, $0, :memset peephole 2.memset
          cp $1, $0
      addi64 $254, $254, 8

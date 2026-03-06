@@ -71,6 +71,8 @@ pub const Check = struct {
     pub const i_know_the_api = {};
 
     pub fn emitFunc(self: *@This(), func: *Func, opts: EmitOptions) void {
+        if (opts.linkage == .imported) return;
+
         optimizeRelease(@This(), self, func);
         func.static_anal.run(opts.optimizations.opts.error_collector);
     }

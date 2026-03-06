@@ -1137,6 +1137,14 @@ pub fn Func(comptime Backend: type) type {
                 }
             };
 
+            pub fn accessTy(node: *Node) DataType {
+                return switch (node.kind) {
+                    .Store => node.value().?.data_type,
+                    .Load => node.data_type,
+                    else => unreachable,
+                };
+            }
+
             pub fn isNextInMemThread(node: *Node) bool {
                 return node.kind == .Store or
                     node.kind == .Call or
@@ -1206,7 +1214,7 @@ pub fn Func(comptime Backend: type) type {
             pub fn loadDatatype(self: *Node) DataType {
                 if (@hasDecl(Backend, "loadDatatype"))
                     return Backend.loadDatatype(self);
-                return self.data_type;
+                return self.accessTy();
             }
 
             pub fn isKillable(self: *Node) bool {
@@ -1439,7 +1447,7 @@ pub fn Func(comptime Backend: type) type {
                     if (self.inputs()[4].?.kind != .CInt) return null else true)
                     self.inputs()[4].?.extra(.CInt).value
                 else
-                    self.data_type.size();
+                    self.accessTy().size();
                 const bas, var off = knownOffset(self.base());
                 off += self.getStaticOffset();
                 return .{ siz, off, bas };

@@ -253,7 +253,7 @@ pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType
     const mem = self.memory();
     const true_base, _ = addr.knownOffset();
     const ctrl = if (true_base.kind == .Local or true_base.kind == .GlobalAddr) null else self.control();
-    const store = self.func.addNode(.Store, sloc, ty, &.{ ctrl, mem, addr, value }, .{});
+    const store = self.func.addNode(.Store, sloc, .top, &.{ ctrl, mem, addr, value }, .{});
     self.func.setInputNoIntern(self.scope orelse return, 1, store);
 }
 

@@ -11,13 +11,13 @@
 
 (Store ?c m bs @ LocalAlloc:l dis = {bs.knownOffset()}
   (BinOp _ (:op op & .iadd | .isub | .bor | .band | .bxor)
-    (Load _ (&m) (&bs)) (CInt (:value value & {Backend.clampI32(value)})))) :
-  (ConstOpStackStore (:dis {@intCast(dis)}) (:op) (:imm {@intCast(value)}) c m l)
+    (Load _ (&m) (&bs)) (CInt (:data_type) (:value value & {Backend.clampI32(value)})))) :
+  (ConstOpStackStore (:ty data_type) (:dis {@intCast(dis)}) (:op) (:imm {@intCast(value)}) c m l)
 
 (Store ?c m bs @ base dis = {bs.knownOffset()}
   (BinOp _ (:op op & .iadd | .isub | .bor | .band | .bxor)
-    (Load _ (&m) (&bs)) (CInt (:value value & {Backend.clampI32(value)})))) :
-  (ConstOpStore (:dis {@intCast(dis)}) (:op) (:imm {@intCast(value)}) c m base)
+    (Load _ (&m) (&bs)) (CInt (:data_type) (:value value & {Backend.clampI32(value)})))) :
+  (ConstOpStore (:ty data_type) (:dis {@intCast(dis)}) (:op) (:imm {@intCast(value)}) c m base)
 
 (Store ?c m bs @ (Local _ LocalAlloc:l) dis = {bs.knownOffset()}
   (BinOp _ (:op op & .iadd | .isub | .bor | .band | .bxor)
@@ -27,26 +27,26 @@
   (BinOp _ (:op op & .iadd | .isub | .bor | .band | .bxor)
     (Load _ (&m) (&bs)) r)) : (OpStore (:dis {@intCast(dis)}) (:op) c m base r)
 
-(Store ?c (:data_type dt && {dt.isInt()}) m bs @ (Local _ LocalAlloc:l)
+(Store ?c m bs @ (Local _ LocalAlloc:l)
   dis = {bs.knownOffset()}
-  (CInt (:value value & {Backend.clampI32(value)}))) :
-  (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) c m l)
+  (CInt (:data_type dt && {dt.isInt()}) (:value value & {Backend.clampI32(value)}))) :
+  (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) (:ty dt) c m l)
 
-(Store ?c (:data_type dt && {dt.isInt()}) m bs @ LocalAlloc:l
+(Store ?c  m bs @ LocalAlloc:l
   dis = {bs.knownOffset()}
-  (CInt (:value value & {Backend.clampI32(value)}))) :
-  (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) c m l)
+  (CInt (:data_type dt && {dt.isInt()}) (:value value & {Backend.clampI32(value)}))) :
+  (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) (:ty dt) c m l)
 
-(Store ?c (:data_type dt && {dt.isInt()}) m bs @ (GlobalAddr (:id) _ s)
+(Store ?c m bs @ (GlobalAddr (:id) _ s)
   dis = {bs.knownOffset()}
-  (CInt (:value value & {Backend.clampI32(value)}))) :
+  (CInt (:data_type dt && {dt.isInt()}) (:value value & {Backend.clampI32(value)}))) :
   (ConstGlobalStore (:dis {@intCast(dis)}) (:imm {@intCast(value)})
-    (:id) c m {null} s)
+    (:id) (:ty dt) c m {null} s)
 && {res.input_ordered_len -= 1;}
 
-(Store ?c (:data_type dt && {dt.isInt()}) m bs @ base dis = {bs.knownOffset()}
-  (CInt (:value value & {Backend.clampI32(value)}))) :
-  (ConstStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) c m base)
+(Store ?c m bs @ base dis = {bs.knownOffset()}
+  (CInt (:data_type dt && {dt.isInt()}) (:value value & {Backend.clampI32(value)}))) :
+  (ConstStore (:ty dt) (:dis {@intCast(dis)}) (:imm {@intCast(value)}) c m base)
 
 (Store ?c m bs @ (GlobalAddr (:id) _ s) dis = {bs.knownOffset()} v) :
   (GlobalStore (:dis {@intCast(dis)}) (:id) c m {null} v s)

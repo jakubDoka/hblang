@@ -519,18 +519,18 @@ pub fn Mixin(comptime Backend: type) type {
                         for (mem_ops.items) |use| {
                             _, const offs = use.base().knownOffset();
 
-                            if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
-                                src_base.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
+                            if (offs < 0 or @as(u64, @intCast(offs)) + use.accessTy().size() >
+                                src_base.inputs()[1].?.extra(.LocalAlloc).size or use.accessTy().size() > 8)
                             {
                                 break :mimic_structure;
                             }
 
                             for (slots.items) |off| {
-                                if (off.offset >= offs + use.data_type.size() or offs >= off.offset + off.dt.size()) {
+                                if (off.offset >= offs + use.accessTy().size() or offs >= off.offset + off.dt.size()) {
                                     continue;
                                 }
 
-                                if (off.offset != offs or off.dt != use.data_type) {
+                                if (off.offset != offs or off.dt != use.accessTy()) {
                                     break :mimic_structure;
                                 }
 
@@ -538,7 +538,7 @@ pub fn Mixin(comptime Backend: type) type {
                             } else {
                                 try slots.append(tmp.arena.allocator(), .{
                                     .offset = @intCast(offs),
-                                    .dt = use.data_type,
+                                    .dt = use.accessTy(),
                                 });
                             }
                         }
@@ -756,16 +756,18 @@ pub fn Mixin(comptime Backend: type) type {
 
                     var advanced = false;
 
+                    const earlier_ty = earlier.value().?.data_type;
+
                     const earlier_base, const earlier_offset = earlier.base().knownOffset();
                     if (base == earlier_base and earlier.value() != null) {
                         if (base_offset == earlier_offset) {
-                            if (earlier.data_type == node.data_type) {
+                            if (earlier_ty == node.data_type) {
                                 if (i != 0) break;
                                 return earlier.value().?;
                             }
 
-                            if (earlier.data_type.meet(node.data_type) ==
-                                earlier.data_type)
+                            if (earlier_ty.meet(node.data_type) ==
+                                earlier_ty)
                             {
                                 if (i != 0) break;
                                 return self.addUnOp(
@@ -778,10 +780,10 @@ pub fn Mixin(comptime Backend: type) type {
                         }
 
                         if (base_offset == 0 and all_good and op_count < fuel + 1 and
-                            node.data_type.isInt() and earlier.data_type.isInt())
+                            node.data_type.isInt() and earlier_ty.isInt())
                         {
                             if (0 <= earlier_offset and earlier_offset +
-                                earlier.data_type.size() <= node.data_type.size())
+                                earlier_ty.size() <= node.data_type.size())
                             {
                                 components[collected] = earlier;
                                 collected += 1;

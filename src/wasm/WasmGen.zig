@@ -29,7 +29,7 @@ pub fn loadDatatype(node: *Func.Node) graph.DataType {
         .UnsignedLoad,
         .UnsignedStackLoad,
         => |extra| extra.src_ty,
-        else => node.data_type,
+        else => node.accessTy(),
     };
 }
 
@@ -181,13 +181,6 @@ pub fn isSwapped(node: *Func.Node) bool {
 pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     _ = self;
     const inps = node.inputs();
-
-    if (node.kind == .CInt) {
-        if (node.data_type.size() < 4) {
-            std.debug.assert(node.data_type.isInt());
-            return func.addIntImm(node.sloc, .i32, node.extra(.CInt).value);
-        }
-    }
 
     if (node.kind == .BinOp) {
         const op: graph.BinOp = node.extra(.BinOp).op;
@@ -1177,14 +1170,16 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .WStore => |extra| {
-            try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
-            self.emitMemArg(instr.data_type, extra.offset);
+            const dt = inps[2].data_type;
+            try self.ctx.buf.writer.writeByte(selectStoreOp(dt));
+            self.emitMemArg(dt, extra.offset);
         },
         .StackStore => |extra| {
             const offset = instr.base().extra(.LocalAlloc).getOffset(self.ctx.stack_layout) + extra.offset;
 
-            try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
-            self.emitMemArg(instr.data_type, offset);
+            const dt = inps[2].data_type;
+            try self.ctx.buf.writer.writeByte(selectStoreOp(dt));
+            self.emitMemArg(dt, offset);
         },
         .WLoad => |extra| {
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));

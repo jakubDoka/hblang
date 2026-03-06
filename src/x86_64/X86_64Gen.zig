@@ -261,6 +261,7 @@ pub const classes = enum {
         dis: i32,
         id: u32,
         imm: i32,
+        ty: graph.DataType,
 
         pub const data_dep_offset = 2;
     };
@@ -287,6 +288,7 @@ pub const classes = enum {
         base: graph.Store = .{},
         dis: i32,
         imm: i32,
+        ty: graph.DataType,
 
         pub const data_dep_offset = 2;
     };
@@ -294,6 +296,7 @@ pub const classes = enum {
         base: graph.Store = .{},
         dis: i32,
         imm: i32,
+        ty: graph.DataType,
     };
     pub const OffsetLoad = extern struct {
         base: graph.Load = .{},
@@ -330,6 +333,7 @@ pub const classes = enum {
     pub const ConstOpStackStore = extern struct {
         base: graph.Store = .{},
         op: graph.BinOp,
+        ty: graph.DataType,
         dis: i32,
         imm: i32,
 
@@ -338,6 +342,7 @@ pub const classes = enum {
     pub const ConstOpStore = extern struct {
         base: graph.Store = .{},
         op: graph.BinOp,
+        ty: graph.DataType,
         imm: i32,
         dis: i32,
     };
@@ -458,7 +463,8 @@ pub fn postporcessRepStosb(
         if (o.get() != store) break o.get();
     } else unreachable;
 
-    std.debug.assert(store.data_type == .i8);
+    std.debug.assert(store.data_type == .top);
+    std.debug.assert(store.value().?.data_type == .i8);
 
     func.setInputNoIntern(other_mem_succ, 1, final);
 
@@ -1136,8 +1142,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // mov [rip+dis+offset], $vl
                 const vl = extra.imm;
                 const dis: i31 = @intCast(extra.dis);
-                const imm_size: i16 = @intCast(@min(instr.data_type.size(), 4));
-                self.emitMemConstStore(instr.data_type, vl, .rip, null);
+                const imm_size: i16 = @intCast(@min(extra.ty.size(), 4));
+                self.emitMemConstStore(extra.ty, vl, .rip, null);
                 try self.mach.out.addGlobalReloc(
                     self.gpa,
                     extra.id,
@@ -1149,7 +1155,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .GlobalStore => |extra| {
                 // mov [rip+dis+offset], src
                 const src = self.getReg(inps[0]);
-                self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, .store);
+                self.emitMemStoreOrLoad(inps[0].data_type, src, .rip, null, .store);
                 const dis: i31 = @intCast(extra.dis);
                 try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", dis - 4, 4);
             },
@@ -1193,13 +1199,15 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 self.emitMemStoreOrLoad(instr.data_type, dst, bse, dis, .load);
             },
+            // TODO: this is stupid, I think
             inline .OffsetStore, .StackStore => |extra, t| {
                 // mov [dst+dis], vl
                 const dst = if (t == .OffsetStore) self.getReg(inps[0]) else .rsp;
                 const vl = if (t == .OffsetStore) self.getReg(inps[1]) else self.getReg(inps[0]);
                 const dis: i32 = if (t == .OffsetStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
+                const dt = if (t == .OffsetStore) inps[1].data_type else inps[0].data_type;
 
-                self.emitMemStoreOrLoad(instr.data_type, vl, dst, dis, .store);
+                self.emitMemStoreOrLoad(dt, vl, dst, dis, .store);
             },
             inline .ConstStore, .ConstStackStore => |extra, t| {
                 // mov [dst+dis], $vl
@@ -1207,7 +1215,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const vl = extra.imm;
                 const dis: i32 = if (t == .ConstStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
 
-                self.emitMemConstStore(instr.data_type, vl, dst, dis);
+                self.emitMemConstStore(extra.ty, vl, dst, dis);
             },
             .Call => |extra| {
                 const call = instr.extra(.Call);
@@ -1314,11 +1322,12 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const base = if (t == .OpStore) self.getReg(inps[0]) else .rsp;
                 const rhs = if (t == .OpStore) self.getReg(inps[1]) else self.getReg(inps[0]);
                 const dis = if (t == .OpStore) extra.dis else (extra.dis + self.stackBaseOf(instr, 2));
+                const dt = if (t == .OpStore) inps[1].data_type else inps[0].data_type;
 
                 switch (op) {
                     .iadd, .isub, .bor, .disjoint_or, .band, .bxor => {
                         if (instr.data_type == .i16) self.emitByte(0x66);
-                        self.emitRexBinop(rhs, base, .rax, instr.data_type.size());
+                        self.emitRexBinop(rhs, base, .rax, dt.size());
                         const opcode: u8 = switch (op) {
                             .iadd => 0x01,
                             .band => 0x21,
@@ -1343,7 +1352,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 switch (op) {
                     .iadd, .isub, .bor, .disjoint_or, .band, .bxor => {
                         if (instr.data_type == .i16) self.emitByte(0x66);
-                        self.emitRexNoReg(base, .rax, instr.data_type.size());
+                        self.emitRexNoReg(base, .rax, extra.ty.size());
                         const sub_opcode: u8 = switch (op) {
                             .iadd => 0b000,
                             .band => 0b100,
@@ -1353,10 +1362,10 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                             else => unreachable,
                         };
 
-                        switch (instr.data_type) {
+                        switch (extra.ty) {
                             .i32, .i64, .i16 => self.emitByte(if (crhs == null) 0x81 else 0x83),
                             .i8 => self.emitByte(0x80),
-                            else => utils.panic("{f}", .{instr.data_type}),
+                            else => utils.panic("{f}", .{extra.ty}),
                         }
 
                         self.emitIndirectAddr(@enumFromInt(sub_opcode), base, .no_index, 1, dis);
@@ -1364,7 +1373,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         if (crhs) |c| {
                             self.emitImm(i8, c);
                         } else {
-                            switch (instr.data_type) {
+                            switch (extra.ty) {
                                 .i8 => self.emitImm(i8, @intCast(rhs)),
                                 .i16 => self.emitImm(i16, @intCast(rhs)),
                                 .i32, .i64 => self.emitImm(i32, @intCast(rhs)),
