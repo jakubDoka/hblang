@@ -318,6 +318,95 @@ pub const UnOp = enum(u8) {
     }
 };
 
+pub const DataType2 = enum(u8) {
+    bot,
+    i8,
+    i16,
+    i32,
+    i64,
+    f32,
+    f64,
+    top,
+    _,
+
+    pub const Tag = enum(u6) {
+        bot,
+        i8,
+        i16,
+        i32,
+        i64,
+        f32,
+        f64,
+        top,
+
+        pub fn sizePow(self: Tag) u3 {
+            return switch (self) {
+                .top, .bot => unreachable,
+                .i8 => 0,
+                .i16 => 1,
+                .i32, .f32 => 2,
+                .i64, .f64 => 3,
+            };
+        }
+
+        pub fn size(self: Tag) u8 {
+            return @as(u8, 1) << self.sizePow();
+        }
+    };
+
+    pub const Size = enum(u2) {
+        inferred = std.math.maxInt(u2),
+        _,
+
+        pub const max_elem_unit = 8;
+
+        pub fn sizePow(self: Size, tag: Tag) u3 {
+            return switch (self) {
+                .inferred => tag.sizePow(),
+                _ => @intFromEnum(self) + 3,
+            };
+        }
+
+        pub fn get(self: Size, tag: Tag) u8 {
+            return @as(u8, 1) << self.sizePow(tag);
+        }
+    };
+
+    pub const Repr = packed struct(u8) {
+        tag: Tag,
+        size: Size,
+
+        pub fn laneCount(self: Repr) u16 {
+            return @as(u16, 1) << (self.size.sizePow(self.tag) - self.tag.sizePow());
+        }
+    };
+
+    pub fn vec(tag: Tag, lane_cont: u16) DataType2 {
+        std.debug.assert(std.math.isPowerOfTwo(lane_cont));
+        std.debug.assert(tag.size() * lane_cont >= 16);
+        return @enumFromInt(@as(u8, @bitCast(Repr{
+            .tag = tag,
+            .size = @enumFromInt((@ctz(lane_cont) + tag.sizePow()) - 3),
+        })));
+    }
+
+    pub fn repr(self: DataType2) Repr {
+        return @bitCast(@intFromEnum(self));
+    }
+
+    pub fn laneCount(self: DataType2) u16 {
+        return self.repr().laneCount();
+    }
+
+    comptime {
+        for (std.meta.fields(DataType2), std.meta.fields(Tag)) |a, b| {
+            if (!std.mem.eql(u8, a.name, b.name)) {
+                @compileError("mismatched builtin '" ++ a.name ++ "' and '" ++ b.name ++ "'");
+            }
+        }
+    }
+};
+
 pub const DataType = enum(u8) {
     bot,
     i8,

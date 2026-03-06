@@ -247,6 +247,9 @@ pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType
 
     if (value.data_type == .bot) return;
     if (value.data_type.size() == 0) utils.panic("{f}", .{value.data_type});
+
+    std.debug.assert(ty == value.data_type);
+
     const mem = self.memory();
     const true_base, _ = addr.knownOffset();
     const ctrl = if (true_base.kind == .Local or true_base.kind == .GlobalAddr) null else self.control();

@@ -1976,7 +1976,7 @@ main := fn(): uint {
 #### directives 7 (@kind_of)
 ```hb
 expectations := .{
-    return_value: 6,
+    return_value: 7,
 }
 
 main := fn(): uint {

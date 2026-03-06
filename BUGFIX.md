@@ -722,7 +722,7 @@ var := ""
 foo := fn(arg: @Any()): uint {
     var = "foo"
     ty := @TypeOf(arg)
-    $if @kind_of(ty) == 6 {
+    $if @kind_of(ty) == 7 {
         i := 0
         $while i < @len_of(ty) {
             _ = foo(arg[i])

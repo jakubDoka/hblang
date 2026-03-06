@@ -4,6 +4,7 @@ Type := union(enum) {
 	.pointer: Pointer;
 	.slice: Slice;
 	.array: Array;
+	.simd: type;
 	.fnty: FuncTy;
 	.@struct: Struct;
 	.@enum: Enum;
