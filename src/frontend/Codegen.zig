@@ -307,10 +307,9 @@ pub const Node = union(enum) {
 };
 
 pub const Error = error{Report};
-pub const UnreachableErr = error{Unreachable} || Error;
 
-pub const UnitError = error{SyntaxError} || UnreachableErr;
-pub const SuffixError = error{SyntaxError} || UnreachableErr;
+pub const UnitError = error{SyntaxError} || Error;
+pub const SuffixError = error{SyntaxError} || Error;
 
 pub fn init(
     slot: *Codegen,
@@ -1517,9 +1516,9 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             );
             break :nl .ptr(ty, slot);
         },
-        .die => {
+        .die => b: {
             self.bl.addTrap(slc, 0);
-            return error.Unreachable;
+            break :b .never;
         },
         .@"\"" => lit: {
             var tmp = utils.Arena.scrath(null);
@@ -1777,7 +1776,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 }
             }
 
-            if (!reached_end) return error.Unreachable;
+            if (!reached_end) return .never;
 
             return .voidv;
         },
@@ -1883,7 +1882,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             breaker.end(&self.bl);
 
-            if (self.bl.isUnreachable()) return error.Unreachable;
+            if (self.bl.isUnreachable()) return .never;
 
             return .voidv;
         },
@@ -1913,7 +1912,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 if (pvl_lit == pat_value) {
                     const unreached = self.branchExpr(lex);
                     lex.eatUntilClosingDelimeter();
-                    if (unreached) return error.Unreachable;
+                    if (unreached) return .never;
                     return .voidv;
                 } else {
                     try lex.skipExpr();
@@ -1922,7 +1921,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             if (else_branch) |pos| {
                 var elex = lex.sub(pos);
-                if (self.branchExpr(&elex)) return error.Unreachable;
+                if (self.branchExpr(&elex)) return .never;
                 return .voidv;
             }
 
@@ -1941,12 +1940,12 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                     lex.skipExprDropErr();
                 }
 
-                if (unreached) return error.Unreachable;
+                if (unreached) return .never;
             } else {
                 lex.skipExprDropErr();
 
                 if (lex.eatMatch(.@"else")) {
-                    if (self.branchExpr(lex)) return error.Unreachable;
+                    if (self.branchExpr(lex)) return .never;
                 }
             }
 
@@ -1980,7 +1979,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             if_bl.end(&self.bl, tk);
 
-            if (self.bl.isUnreachable()) return error.Unreachable;
+            if (self.bl.isUnreachable()) return .never;
 
             return .voidv;
         },
@@ -2054,7 +2053,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             loop.state.runtime.bl.end(&self.bl);
 
             if (self.bl.isUnreachable()) {
-                return error.Unreachable;
+                return .never;
             }
 
             return .voidv;
@@ -2090,7 +2089,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             loop.state.runtime.bl.end(&self.bl);
 
             if (self.bl.isUnreachable()) {
-                return error.Unreachable;
+                return .never;
             }
 
             return .voidv;
@@ -2289,7 +2288,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             const cx = Ctx{ .ty = self.ret_ty, .loc = self.ret_ref };
 
             var ret: Value = if (lex.peekNext().kind.canStartExpression())
-                try self.exprAllowUnreachable(cx, lex)
+                try self.expr(cx, lex)
             else
                 .voidv;
 
@@ -2322,12 +2321,9 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 for (buf[0..returns.len]) |v| v.unlockTmp();
 
                 self.bl.addReturn(buf[0..returns.len]);
-            } else {
-                return self.report(tok.idx, "`return` can not be used" ++
-                    " since `{}` is uninhabited", .{self.ret_ty});
             }
 
-            return error.Unreachable;
+            return .never;
         },
         .true => .value(.bool, self.bl.addIntImm(slc, .i8, 1)),
         .false => .value(.bool, self.bl.addIntImm(slc, .i8, 0)),
@@ -2371,7 +2367,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             ));
         },
         .@"(" => par: {
-            const inner = try self.exprAllowUnreachable(ctx, lex);
+            const inner = try self.expr(ctx, lex);
             _ = try self.expect(lex, .@")", "to close the parenthesis");
             break :par inner;
         },
@@ -2590,7 +2586,7 @@ pub fn loopControl(self: *Codegen, lex: *Lexer, kind: BBuilder.Loop.Control, lab
         self.report(lex.cursor, "loop control does not match any parent loop", .{}) catch {};
     }
 
-    return error.Unreachable;
+    return .never;
 }
 
 pub fn eatLabel(self: *Codegen, lex: *Lexer) ![]const u8 {
@@ -2716,7 +2712,7 @@ pub fn directive(
             }
 
             self.report(pos, "{}", .{message.written()}) catch {};
-            return error.Unreachable;
+            return .never;
         },
         .use => {
             _ = lex.slit(.@"\"");
@@ -3879,27 +3875,25 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                 res.load(self),
             );
 
-            var alt = LLValue.init(
-                lex.cursor,
-                self.exprPrecAllowUnreachable(.{
-                    .ty = .bool,
-                    .in_if_or_while = ctx.in_if_or_while,
-                }, lex, prevPrec) catch |err| switch (err) {
-                    error.Unreachable => {
-                        if_bl.end(&self.bl, if_bl.beginElse(&self.bl));
-
-                        res.set(.value(.bool, self.bl.addIntImm(
-                            slc,
-                            .i8,
-                            0,
-                        )));
-
-                        break :and_;
-                    },
-                    error.Report => self.emitUninitValue(top.idx, .bool),
-                },
-            );
+            var alt = LLValue.init(lex.cursor, self.exprPrec(.{
+                .ty = .bool,
+                .in_if_or_while = ctx.in_if_or_while,
+            }, lex, prevPrec) catch |err| switch (err) {
+                error.Report => self.emitUninitValue(top.idx, .bool),
+            });
             defer alt.deinit(self);
+
+            if (self.bl.isUnreachable()) {
+                if_bl.end(&self.bl, if_bl.beginElse(&self.bl));
+
+                res.set(.value(.bool, self.bl.addIntImm(
+                    slc,
+                    .i8,
+                    0,
+                )));
+
+                break :and_;
+            }
 
             alt.set(.value(.bool, alt.load(self)));
 
@@ -3925,7 +3919,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     res.set(.value(.bool, self.bl.addIntImm(self.sloc(top.idx), .i8, 1)));
                     lex.skipExprPrec(prevPrec) catch {};
                 } else {
-                    res.set(try self.exprPrecAllowUnreachable(ctx, lex, prevPrec));
+                    res.set(try self.exprPrec(ctx, lex, prevPrec));
                 }
             } else {
                 if (res.value.ty.data() != .Option) {
@@ -3940,7 +3934,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
                     res.set(try self.emitOptionUnwrap(top.idx, value));
                     lex.skipExprPrec(prevPrec) catch {};
                 } else {
-                    res.set(try self.exprPrecAllowUnreachable(ctx, lex, prevPrec));
+                    res.set(try self.exprPrec(ctx, lex, prevPrec));
                 }
             }
         },
@@ -3982,26 +3976,27 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
             var alt = LLValue.init(
                 lex.cursor,
-                self.exprPrecAllowUnreachable(
+                self.exprPrec(
                     .{ .ty = res_ty },
                     lex,
                     prevPrec,
                 ) catch |err| switch (err) {
-                    error.Unreachable => {
-                        if_bl.end(&self.bl, tk);
-
-                        if (is_unwrap) {
-                            res.set(unwrapped.value);
-                        } else {
-                            res.set(.value(.bool, self.bl.addIntImm(slc, .i8, 1)));
-                        }
-
-                        break :or_;
-                    },
                     error.Report => self.emitUninitValue(tok.idx, .bool),
                 },
             );
             defer alt.deinit(self);
+
+            if (self.bl.isUnreachable()) {
+                if_bl.end(&self.bl, tk);
+
+                if (is_unwrap) {
+                    res.set(unwrapped.value);
+                } else {
+                    res.set(.value(.bool, self.bl.addIntImm(slc, .i8, 1)));
+                }
+
+                break :or_;
+            }
 
             if (is_unwrap) b: {
                 if (alt.value.ty == res.value.ty) {
@@ -4566,7 +4561,7 @@ pub fn ctor(self: *Codegen, pos: File.TokenIdx, ctx: Ctx, ty: Types.Id, lex: *Le
     return res;
 }
 
-pub fn emitOptionUnwrap(self: *Codegen, pos: File.TokenIdx, res: Value) error{Unreachable}!Value {
+pub fn emitOptionUnwrap(self: *Codegen, pos: File.TokenIdx, res: Value) Error!Value {
     const ty = res.ty.data().Option.get(self.types).inner;
 
     if (res.ty.data().Option.get(self.types).getLayout(self.types).compact) {
@@ -4578,7 +4573,7 @@ pub fn emitOptionUnwrap(self: *Codegen, pos: File.TokenIdx, res: Value) error{Un
     return switch (res.normalized(pos, self)) {
         .empty => {
             self.bl.addTrap(self.sloc(pos), graph.infinite_loop_trap);
-            return error.Unreachable;
+            return .never;
         },
         .value => |v| if (self.types.abi.tryCategorizeReg(ty, self.types)) |r|
             .value(ty, self.bl.addUnOp(self.sloc(pos), .ired, r, v))
@@ -4634,32 +4629,19 @@ pub fn emitOptionCheck(self: *Codegen, pos: File.TokenIdx, op: OptionCheckOp, lh
     };
 }
 
-pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) error{Report}!Value {
-    return self.exprPrecAllowUnreachable(ctx, lex, prevPrec) catch |err| switch (err) {
-        error.Unreachable => return self.report(lex.cursor, "terminating expression not allowed", .{}),
-        error.Report => return error.Report,
-    };
-}
-
 pub fn branchExpr(self: *Codegen, lex: *Lexer) bool {
     const pos = lex.cursor;
-    var value = self.exprAllowUnreachable(.{ .ty = .void }, lex) catch |err| {
-        return err == error.Unreachable;
-    };
+    var value = self.expr(.{ .ty = .void }, lex) catch return false;
+    if (self.bl.isUnreachable() or value.ty == .never) return true;
     self.typeCheck(pos, .{}, &value, .void) catch {};
     return false;
 }
 
-pub fn exprAllowUnreachable(self: *Codegen, ctx: Ctx, lex: *Lexer) UnreachableErr!Value {
-    return self.exprPrecAllowUnreachable(ctx, lex, 254);
-}
-
-pub fn exprPrecAllowUnreachable(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) UnreachableErr!Value {
+pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value {
     const tok = lex.next();
 
     var res: LLValue = .init(tok.idx, self.unitExpr(tok, ctx, lex) catch |err| switch (err) {
         error.SyntaxError => return error.Report,
-        error.Unreachable => return error.Unreachable,
         error.Report => .never,
     });
     defer res.deinitKeep();
@@ -4684,7 +4666,6 @@ pub fn exprPrecAllowUnreachable(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec:
             tok, top, prec, ctx, &ass_lhs, is_ass_op,
         }, lex, &res) catch |err| switch (err) {
             error.SyntaxError => return error.Report,
-            error.Unreachable => return error.Unreachable,
             error.Report => {
                 res.set(.never);
             },
@@ -5113,7 +5094,7 @@ pub fn endCall(
     var bf: [2]*BNode = undefined;
     const vls = call.end(&self.bl, self.sloc(pos), ret_cata, &bf);
 
-    const rcta = ret_cata orelse return error.Unreachable;
+    const rcta = ret_cata orelse return .never;
 
     if ((Abi{ .cc = call.cc, .simd = undefined }).isRetByRef(rcta)) {
         std.debug.assert(@intFromPtr(slot) != 0xaaaaaaaaaaaaaaaa);
