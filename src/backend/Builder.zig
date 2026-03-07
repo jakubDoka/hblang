@@ -488,7 +488,7 @@ pub fn mergeScopes(
         if (lh == rh) continue;
         const thn = getScopeValueMulty(func, lhs, i);
         const els = getScopeValueMulty(func, rhs, i);
-        const phi = func.addNode(.Phi, thn.sloc, thn.data_type.meet(els.data_type), &.{ new_ctrl, thn, els }, .{});
+        const phi = func.addNode(.Phi, thn.sloc, thn.data_type.unify(els.data_type), &.{ new_ctrl, thn, els }, .{});
         func.setInputNoIntern(rhs, i, phi);
     }
 
@@ -970,7 +970,7 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
         self.func.connectOrd(mem, inps[1].?);
         for (inps[3..ret.input_ordered_len], values) |curr, next| {
             self.func.connectOrd(next, curr.?);
-            curr.?.data_type = next.data_type.meet(curr.?.data_type);
+            curr.?.data_type = next.data_type.unify(curr.?.data_type);
         }
     } else {
         const ctl = self.func.addNode(.Region, mem.sloc, .top, &.{ctrl}, .{});

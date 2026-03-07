@@ -766,9 +766,7 @@ pub fn Mixin(comptime Backend: type) type {
                                 return earlier.value().?;
                             }
 
-                            if (earlier_ty.meet(node.data_type) ==
-                                earlier_ty)
-                            {
+                            if (node.data_type.isSubOf(earlier_ty)) {
                                 if (i != 0) break;
                                 return self.addUnOp(
                                     earlier.sloc,

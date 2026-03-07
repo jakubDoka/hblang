@@ -222,7 +222,7 @@ pub fn Mixin(comptime Backend: type) type {
                                         for (inps[1..], s.items, 0..) |*n, *sc, j| {
                                             const next = Local.resolve(self, sc, i);
                                             n.* = next;
-                                            res_ty = res_ty.meet(next.data_type);
+                                            res_ty = if (res_ty == .top) next.data_type else res_ty.unify(next.data_type);
                                             all_same = inps[1..][j -| 1] == next and all_same;
                                         }
                                     }

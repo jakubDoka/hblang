@@ -86,5 +86,4 @@
   (CInt c (:value {op.eval(src, dst, oper)}))
 
 (UnOp _ (:op .uext | .sext) (:data_type dst)
-  (_:oper (:data_type src & {dst.meet(src)}))) : oper
-
+  (_:oper (:data_type src && {dst.isSubOf(src)}))) : oper

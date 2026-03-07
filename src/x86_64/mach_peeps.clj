@@ -134,9 +134,6 @@
 (UnOp ?c (:op .fneg) (:data_type .f64) a) :
   (BinOp c (:op .fsub) (F64 c (:imm {0.0})) a)
 
-(UnOp _ (:op .uext | .sext) (:data_type)
-  (_:inp (:data_type dt & {data_type.meet(dt)}))) : inp
-
 (CInt ?c (:data_type .f64) (:value value)) : (F64 (:imm {@bitCast(value)}) c)
 (CInt ?c (:data_type .f32) (:value value)) :
   (F32 (:imm {@bitCast(@as(u32, @intCast(value)))}) c)

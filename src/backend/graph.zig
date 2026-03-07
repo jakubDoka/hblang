@@ -447,16 +447,22 @@ pub const DataType = enum(u8) {
         };
     }
 
-    pub fn meet(self: DataType, other: DataType) DataType {
-        if (self == .top) return other;
-        if (other == .top) return self;
+    pub fn isSubOf(self: DataType, other: DataType) bool {
+        if (other == self) return true;
+        if (self.isInt() and other.isInt()) {
+            return @intFromEnum(self) <= @intFromEnum(other);
+        }
+        return false;
+    }
+
+    pub fn unify(self: DataType, other: DataType) DataType {
         if (self == other) return self;
 
         if (self.isInt() and other.isInt()) {
             return @enumFromInt(@max(@intFromEnum(self), @intFromEnum(other)));
         }
 
-        return .bot;
+        utils.panic("{f} {f}", .{ self, other });
     }
 
     pub fn format(self: DataType, writer: *std.Io.Writer) !void {
@@ -2480,7 +2486,7 @@ pub fn Func(comptime Backend: type) type {
             return self.addNode(
                 .Phi,
                 sloc,
-                lhs.data_type.meet(rhs.data_type),
+                lhs.data_type.unify(rhs.data_type),
                 &.{ ctrl, lhs, rhs },
                 .{},
             );
@@ -2568,17 +2574,9 @@ pub fn Func(comptime Backend: type) type {
             inputs: []const ?*Node,
             extra: ClassFor(kind),
         ) *Node {
-            var typ = ty;
-            if (kind == .Phi) {
-                for (inputs) |i| {
-                    if (i) |j| {
-                        if (j.kind == .Mem or j.isStore()) typ = .top;
-                    }
-                }
-            }
             var bytes: [Node.size_map[@intFromEnum(kind)] / 8]u64 = @splat(0);
             @as(*ClassFor(kind), @ptrCast(&bytes)).* = extra;
-            const node = self.addNodeUntyped(kind, typ, inputs, &bytes);
+            const node = self.addNodeUntyped(kind, ty, inputs, &bytes);
             node.sloc = sloc;
 
             return node;
