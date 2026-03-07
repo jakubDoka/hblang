@@ -58,6 +58,11 @@ builtins: struct {
 handlers: std.EnumArray(Handler, FuncId) = .initFill(.invalid),
 handler_signatures: std.EnumArray(Handler, FuncTyId),
 ct_backend: HbvmGen,
+stats: struct {
+    stub_funcs: usize = 0,
+    lookup_count: usize = 0,
+    partial_eval_locals: usize = 0,
+} = .{},
 //metrics: Metrics = .{},
 
 const ComptimeGlobalIndex = std.HashMapUnmanaged(
@@ -844,7 +849,7 @@ pub const Builtin = enum(u32) {
 };
 
 pub const Captures = struct {
-    /// first byte in the name for each var
+    /// short hash of the name
     prefixes: []const u8,
     variables: []const Variable,
     /// packed values for each comptime variable, index is comptuted when

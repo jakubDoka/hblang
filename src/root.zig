@@ -435,10 +435,8 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
             }
             try diags.print("  arena   : {}\n", .{types.arena.consumed()});
 
-            if (false) { // TODO
-                inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
-                    try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
-                }
+            inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
+                try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
             }
 
             var runtime_functions: usize = 0;

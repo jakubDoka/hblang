@@ -396,6 +396,8 @@ pub fn lookupIdentLow(
     //var lmt = self.types.metrics.begin(.lookup_ident);
     //defer lmt.end();
 
+    self.types.stats.lookup_count += 1;
+
     const scope_meta = scope.data().scope(self.types);
     const file = scope_meta.file.get(self.types);
 
@@ -648,6 +650,8 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
         .ret = undefined,
         .pos = undefined,
     });
+
+    self.types.stats.stub_funcs += 1;
 
     self.emitToBackend(reserved, &self.types.ct_backend.mach, comptime_gen_mode);
 
@@ -5602,6 +5606,8 @@ pub fn partialEval(self: *Codegen, vl: *BNode) error{Report}!*BNode {
             };
         },
         .Local => {
+            self.types.stats.partial_eval_locals += 1;
+
             const allc = value.inputs()[1].?;
 
             std.debug.assert(allc.outputs().len <= 2);
