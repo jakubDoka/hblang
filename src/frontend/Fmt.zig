@@ -16,11 +16,15 @@ const Error = std.Io.Writer.Error || error{SyntaxError};
 pub fn fmt(
     path: []const u8,
     source: [:0]const u8,
+    clobber: ?*utils.Arena,
     out: *std.Io.Writer,
     error_out: ?*std.Io.Writer,
     error_colors: std.Io.tty.Config,
 ) Error!void {
-    const lexed = Lexer.prelex(source, utils.Arena.scrath(null).arena);
+    var tmp = utils.Arena.scrath(clobber);
+    defer tmp.deinit();
+
+    const lexed = Lexer.prelex(source, tmp.arena);
 
     var self = Fmt{
         .lex = .{ .source = source, .tokens = lexed, .cursor = .start },

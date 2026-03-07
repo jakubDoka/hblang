@@ -6896,13 +6896,19 @@ pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void
     utils.Arena.tryInitScratch(1024 * 1024);
 
     var scratch = utils.Arena.init(1024 * 1024 * 64);
+    defer scratch.deinit();
 
-    try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .debug, &scratch);
-    try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .release, &scratch);
-    try runTestForTarget(name, code, gpa, .@"x86_64-linux", .debug, &scratch);
-    try runTestForTarget(name, code, gpa, .@"x86_64-linux", .release, &scratch);
-    try runTestForTarget(name, code, gpa, .@"wasm-freestanding", .debug, &scratch);
-    try runTestForTarget(name, code, gpa, .@"wasm-freestanding", .release, &scratch);
+    try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .debug, true, &scratch);
+    try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .debug, false, &scratch);
+    try runTestForTarget(name, code, gpa, .@"hbvm-ableos", .release, false, &scratch);
+
+    try runTestForTarget(name, code, gpa, .@"x86_64-linux", .debug, true, &scratch);
+    try runTestForTarget(name, code, gpa, .@"x86_64-linux", .debug, false, &scratch);
+    try runTestForTarget(name, code, gpa, .@"x86_64-linux", .release, false, &scratch);
+
+    try runTestForTarget(name, code, gpa, .@"wasm-freestanding", .debug, true, &scratch);
+    try runTestForTarget(name, code, gpa, .@"wasm-freestanding", .debug, false, &scratch);
+    try runTestForTarget(name, code, gpa, .@"wasm-freestanding", .release, false, &scratch);
 }
 
 pub fn runTestForTarget(
@@ -6911,8 +6917,16 @@ pub fn runTestForTarget(
     gpa: std.mem.Allocator,
     target: Target,
     opts: Machine.OptOptions.Mode,
-    scratch: *utils.Arena,
+    static_anal_only: bool,
+    scratcha: *utils.Arena,
 ) !void {
+    var check = scratcha.checkpoint();
+    defer {
+        check.deinit();
+    }
+
+    const scratch = check.arena;
+
     var writer = std.fs.File.stderr().writer(&.{});
     const wint = &writer.interface;
 
@@ -6924,7 +6938,7 @@ pub fn runTestForTarget(
 
     if (exp.should_error) kl.loader.diagnostics = dwint;
 
-    const backend = target.toMachine(exp.should_error, scratch, gpa);
+    const backend = target.toMachine(exp.should_error or static_anal_only, scratch, gpa);
     defer backend.deinit();
 
     var types = Types.init(asts, &kl.loader, target, backend, scratch.*, gpa);
@@ -6953,6 +6967,8 @@ pub fn runTestForTarget(
     }
 
     try std.testing.expect(types.errored == 0);
+
+    if (static_anal_only) return;
 
     if (std.mem.indexOf(u8, name, "infinite") != null) {
         return;
@@ -7194,6 +7210,7 @@ pub fn parseExample(
             try hb.frontend.Fmt.fmt(
                 fr.path,
                 fr.source,
+                scratch,
                 &buf.writer,
                 output,
                 kl.loader.colors,

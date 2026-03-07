@@ -324,6 +324,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
                 try frontend.Fmt.fmt(
                     opts.root_file,
                     source,
+                    null,
                     o,
                     opts.diagnostics,
                     opts.error_colors,

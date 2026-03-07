@@ -1872,6 +1872,8 @@ pub fn init(
 }
 
 pub fn deinit(self: *Types) void {
+    // NOTE: this is only really needed when running the tests
+    @memset(self.ct_backend.mach.out.code.items, 0);
     self.ct_backend.mach.out.code = .empty;
 
     inline for (std.meta.fields(Types)) |f| {
