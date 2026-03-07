@@ -565,7 +565,7 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
 
         self.types.ct_backend.mach.emitData(.{
             .id = @intFromEnum(global_id),
-            .value = .{ .uninit = global.ty.size(self.types) },
+            .value = .{ .uninit = @intCast(global.ty.size(self.types)) },
             .readonly = false,
             .thread_local = false,
             .uuid = @splat(0),
@@ -590,7 +590,7 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
 
         self.types.ct_backend.mach.emitData(.{
             .id = @intFromEnum(global_id),
-            .value = .{ .uninit = global.ty.size(self.types) },
+            .value = .{ .uninit = @intCast(global.ty.size(self.types)) },
             .readonly = false,
             .thread_local = true,
             .uuid = @splat(0),
@@ -628,7 +628,8 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
 
         self.types.ct_backend.mach.emitData(.{
             .id = @intFromEnum(global_id),
-            .value = .{ .init = std.mem.asBytes(&cnst)[0..value.ty.size(self.types)] },
+            .value = .{ .init = std.mem
+                .asBytes(&cnst)[0..@intCast(value.ty.size(self.types))] },
             .readonly = global.readonly,
             .thread_local = false,
             .uuid = @splat(0),
@@ -657,7 +658,7 @@ pub fn evalGlobal(self: *Codegen, lex: *Lexer, ty: ?Types.Id, global_id: Types.G
 
     self.types.ct_backend.mach.emitData(.{
         .id = @intFromEnum(global_id),
-        .value = .{ .uninit = value.ty.size(self.types) },
+        .value = .{ .uninit = @intCast(value.ty.size(self.types)) },
         .readonly = global.readonly,
         .thread_local = false,
         .uuid = @splat(0),
@@ -727,14 +728,14 @@ pub fn runVm(self: *Codegen, slc: graph.Sloc, func: Types.FuncId) void {
                 .Type => self.evalTypeEca(slc, scope) catch return,
                 .type_info => self.evalTypeInfoEca(slc) catch return,
                 .alloc_global => {
-                    const len = regs.get(.arg(1 + Types.Slice.len_offset / 8));
-                    const ptr = regs.get(.arg(1 + Types.Slice.ptr_offset / 8));
+                    const len: usize = @intCast(regs.get(.arg(1 + Types.Slice.len_offset / 8)));
+                    const ptr: usize = @intCast(regs.get(.arg(1 + Types.Slice.ptr_offset / 8)));
                     const elem: Types.Id = @enumFromInt(regs.get(.arg(3)));
 
                     const spill, const mem = self.addSliceGlobal(elem, len, @ptrCast(regs.values[1..3]));
                     spill.get(self.types).readonly = false; // TODO: make this configurable
 
-                    @memcpy(mem, vm_ctx.memory[@intCast(ptr)..][0..mem.len]);
+                    @memcpy(mem, vm_ctx.memory[ptr..][0..mem.len]);
                 },
             }
         },
@@ -752,8 +753,9 @@ pub fn evalTypeInfoEca(self: *Codegen, slc: graph.Sloc) !void {
     const tag_layout = tyun.get(self.types).getLayout(self.types).tagLayout().?;
     const size = Types.Id.nany(tyun).size(self.types);
 
-    var mem = self.types.ct_backend.mach.out.code.items[slot..][0..@intCast(size)];
-    mem[tag_layout.offset..][0] = @intFromEnum(ty.data());
+    var mem = self.types.ct_backend.mach.out.code
+        .items[@intCast(slot)..][0..@intCast(size)];
+    mem[@intCast(tag_layout.offset)..][0] = @intFromEnum(ty.data());
 
     switch (ty.data()) {
         .Builtin => {},
@@ -789,12 +791,16 @@ pub fn evalTypeInfoEca(self: *Codegen, slc: graph.Sloc) !void {
             _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
 
             for (0..layout.fields.len) |i| {
-                const base = i * Types.Id.nany(struct_field).size(self.types);
+                const base: usize = @intCast(i * Types.Id.nany(struct_field).size(self.types));
                 const field = layout.fields[i];
 
                 const field_name = s.get(self.types).fieldName(self.types, i);
 
-                _, const name_mem = self.addSliceGlobal(.u8, field_name.len, fields_mem[base..][0..16]);
+                _, const name_mem = self.addSliceGlobal(
+                    .u8,
+                    field_name.len,
+                    fields_mem[base..][0..16],
+                );
                 @memcpy(name_mem, field_name);
 
                 fields_mem[base..][16..][0..4].* = std.mem.toBytes(field.ty);
@@ -813,7 +819,7 @@ pub fn evalTypeInfoEca(self: *Codegen, slc: graph.Sloc) !void {
             _, const fields_mem = self.addSliceGlobal(.nany(enum_field), layout.fields.len, mem[8..][0..16]);
 
             for (0..layout.fields.len) |i| {
-                const base = i * Types.Id.nany(enum_field).size(self.types);
+                const base: usize = @intCast(i * Types.Id.nany(enum_field).size(self.types));
                 const field = layout.fields[i];
 
                 const field_name = e.get(self.types).fieldName(self.types, i);
@@ -838,7 +844,7 @@ pub fn evalTypeInfoEca(self: *Codegen, slc: graph.Sloc) !void {
             _, const fields_mem = self.addSliceGlobal(.nany(struct_field), layout.fields.len, mem[8..][0..16]);
 
             for (0..layout.fields.len) |i| {
-                const base = i * Types.Id.nany(struct_field).size(self.types);
+                const base: usize = @intCast(i * Types.Id.nany(struct_field).size(self.types));
                 const field = layout.fields[i];
 
                 const field_name = u.get(self.types).fieldName(self.types, i);
@@ -862,11 +868,12 @@ pub fn evalTypeEca(self: *Codegen, slc: graph.Sloc, scope: Types.Scope) !void {
     const slot = regs.get(.stack_addr);
     const tag_layout = tyun.get(self.types).getLayout(self.types).tagLayout().?;
 
-    var mem = self.types.ct_backend.mach.out.code.items[slot..][0..@intCast(size)];
+    var mem = self.types.ct_backend.mach.out.code
+        .items[@intCast(slot)..][0..@intCast(size)];
 
     const value: Types.Id = d: switch (@as(
         std.meta.Tag(Types.Data),
-        @enumFromInt(mem[tag_layout.offset..][0]),
+        @enumFromInt(mem[@intCast(tag_layout.offset)..][0]),
     )) {
         .Builtin => .never,
         .Pointer => self.types.pointerTo(try self.loadVmTy(slc, mem[0..4])),
@@ -1093,7 +1100,7 @@ pub fn emitGenericStore(self: *Codegen, pos: File.TokenIdx, dest: *BNode, value:
     switch (value.normalized(pos, self)) {
         .empty => {},
         .value => |v| {
-            self.emitArbitraryStore(pos, dest, v, value.ty.size(self.types));
+            self.emitArbitraryStore(pos, dest, v, @intCast(value.ty.size(self.types)));
         },
         .ptr => |p| {
             self.bl.addFixedMemCpy(
@@ -1198,7 +1205,7 @@ pub fn emitFunc(self: *Codegen, fnid: Types.FuncId) error{Failed}!void {
                     name.idx,
                     self.bl.addFieldOffset(slc, stack_slot, splits[0].Reg.size()),
                     sigbl.addParam(&self.bl, slc, splits[1], ty.raw()),
-                    ty.size(self.types) - splits[0].Reg.size(),
+                    @intCast(ty.size(self.types) - splits[0].Reg.size()),
                 );
 
                 break :b .ptr(ty, stack_slot);
@@ -1615,7 +1622,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 .empty => break :spill oper,
                 .value => |v| {
                     const slot = self.emitLoc(tok.idx, oper.ty, ctx);
-                    self.emitArbitraryStore(tok.idx, slot, v, oper.ty.size(self.types));
+                    self.emitArbitraryStore(tok.idx, slot, v, @intCast(oper.ty.size(self.types)));
                     break :spill .ptr(oper.ty, slot);
                 },
                 .ptr => |p| {
@@ -2971,14 +2978,12 @@ pub fn directive(
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            comptime if (hb.x86_64.X86_64Gen.syscall != hb.hbvm.HbvmGen.eca) unreachable;
-
             const ret = try self.expectDestType(.syscall, pos, ctx.ty);
             var call = self.bl.addCall(
                 tmp.arena,
                 self.sloc(pos),
                 if (d == .syscall) .syscall else .ablecall,
-                .{ .special = hb.x86_64.X86_64Gen.syscall },
+                .{ .special = Machine.max_func },
             );
 
             var buf = Abi.Buf{};
@@ -5112,7 +5117,7 @@ pub fn endCall(
             pos,
             self.bl.addFieldOffset(self.sloc(pos), slot, 8),
             vls[1],
-            ret.size(self.types) - 8,
+            @intCast(ret.size(self.types) - 8),
         );
         return .ptr(ret, slot);
     }
@@ -5181,7 +5186,7 @@ pub fn emitArbitraryLoad(
     pos: File.TokenIdx,
     ptr: *BNode,
     dt: graph.DataType,
-    size: usize,
+    size: u64,
 ) *BNode {
     // TODO: this will be incorrect on ARM
 
@@ -5423,7 +5428,7 @@ pub fn peval(self: *Codegen, pos: File.TokenIdx, value: Value, comptime T: type)
     };
 
     if (mismatch) {
-        if (value.ty == .never) return self.silentReport();
+        //if (value.ty == .never) return self.silentReport();
         return self.report(pos, "expected " ++ name ++ ", got {}", .{value.ty});
     }
 
@@ -5622,7 +5627,7 @@ pub fn partialEval(self: *Codegen, vl: *BNode) error{Report}!*BNode {
 
             self.types.ct_backend.emitData(.{
                 .id = @intFromEnum(storage),
-                .value = .{ .uninit = ty.size(self.types) },
+                .value = .{ .uninit = @intCast(ty.size(self.types)) },
                 .readonly = true,
                 .thread_local = false,
                 .uuid = @splat(0),
@@ -6069,7 +6074,8 @@ pub fn partialEvalCall(
                 const inner: Types.GlobalId = @enumFromInt(glob.extra(.GlobalAddr).id);
 
                 const src = inner.get(self.types).data.get(self.types);
-                const dst = self.types.ct_backend.mach.out.code.items[stack_cursor.* + stack_size ..][0..src.len];
+                const dst = self.types.ct_backend.mach.out.code
+                    .items[@intCast(stack_cursor.* + stack_size)..][0..src.len];
                 @memcpy(dst, src);
             },
         }
@@ -6116,7 +6122,7 @@ pub fn createComptimeSpill(self: *Codegen, ty: Types.Id) Types.GlobalId {
 
     self.types.ct_backend.emitData(.{
         .id = @intFromEnum(global),
-        .value = .{ .uninit = ty.size(self.types) },
+        .value = .{ .uninit = @intCast(ty.size(self.types)) },
         .readonly = true,
         .thread_local = false,
         .uuid = @splat(0),
@@ -6751,7 +6757,7 @@ pub fn highlightCode(
     var last: usize = 0;
     var token = lexer.next();
     while (token.kind != .Eof) : (token = lexer.next()) {
-        const mods = Class.fromLexeme(token.kind).?;
+        const mods = hb.frontend.Fmt.Class.fromLexeme(token.kind).?;
         for (mods.toTtyColor()) |color| {
             try colors.setColor(writer, color);
         }
@@ -6797,87 +6803,6 @@ pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config
     try writer.writeAll("^");
     colors.setColor(writer, .reset) catch return error.WriteFailed;
 }
-
-pub const Class = enum(u8) {
-    blank,
-    comment,
-    keyword,
-    identifier,
-    directive,
-    number,
-    string,
-    op,
-    assign,
-    paren,
-    bracket,
-    colon,
-    comma,
-    dot,
-    ctor,
-
-    pub fn toTtyColor(self: Class) []const std.io.tty.Color {
-        return switch (self) {
-            .blank => unreachable,
-            .comment => &.{.dim},
-            .keyword => &.{ .bright_white, .bold },
-            .identifier => &.{},
-            .directive => &.{ .bright_white, .bold },
-            .number => &.{.cyan},
-            .string => &.{.green},
-            .op => &.{.dim},
-            .assign => &.{.dim},
-            .paren => &.{.dim},
-            .bracket => &.{.dim},
-            .colon => &.{.dim},
-            .comma => &.{.dim},
-            .dot => &.{.dim},
-            .ctor => &.{.dim},
-        };
-    }
-
-    pub fn fromLexeme(leme: Lexer.Lexeme) ?Class {
-        return switch (leme) {
-            inline else => |t| {
-                if (comptime @tagName(t)[0] == '@')
-                    return .directive;
-                if (comptime std.mem.startsWith(u8, @tagName(t), "ty_"))
-                    return .identifier;
-                if (comptime std.mem.endsWith(u8, @tagName(t), "="))
-                    return .assign;
-                if (comptime std.ascii.isLower(@tagName(t)[0]) or
-                    @tagName(t)[0] == '$')
-                    return .keyword;
-                if (comptime std.mem.indexOfAny(
-                    u8,
-                    @tagName(t),
-                    "!^*/%+-<>&|.,~?",
-                ) != null)
-                    return .op;
-
-                comptime unreachable;
-            },
-            .true,
-            .false,
-            .BinInteger,
-            .OctInteger,
-            .DecInteger,
-            .HexInteger,
-            .Float,
-            => .number,
-            .@"<=", .@"==", .@">=" => .op,
-            .Ident, .@"$", ._ => .identifier,
-            .Comment => .comment,
-            .@".(", .@".[", .@".{" => .ctor,
-            .@"[", .@"]" => .bracket,
-            .@"(", .@")", .@"{", .@"}" => .paren,
-            .@"\"", .@"`", .@"'" => .string,
-            .@":", .@";", .@"#", .@"\\", .@"," => .comma,
-            .@"." => .dot,
-            .@"unterminated string" => .comment,
-            .Eof => null,
-        };
-    }
-};
 
 pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void {
     utils.Arena.tryInitScratch(1024 * 1024);

@@ -1161,7 +1161,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn assertAlive(node: *Node) void {
                 if (node.isDead()) {
-                    if (is_debug) {
+                    if (is_debug and !utils.freestanding) {
                         print("{s}\n", .{node.killed_at.displayed});
                         std.debug.dumpStackTrace(node.killed_at.trace);
                     }
@@ -2672,9 +2672,10 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (self.output_len != 0) {
-                for (self.outputs()) |o| {
-                    print("{f}\n", .{o});
-                }
+                if (!utils.freestanding)
+                    for (self.outputs()) |o| {
+                        print("{f}\n", .{o});
+                    };
                 utils.panic("{f}\n", .{self});
             }
 
@@ -3177,6 +3178,7 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn fmtScheduledLog(self: *Self) void {
+            if (utils.freestanding) return;
             var writer = std.fs.File.stderr().writer(&.{});
             self.fmtScheduled(&writer.interface, .escape_codes);
         }

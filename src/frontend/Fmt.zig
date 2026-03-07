@@ -13,6 +13,156 @@ out: *std.Io.Writer,
 const Fmt = @This();
 const Error = std.Io.Writer.Error || error{SyntaxError};
 
+pub fn needsSpace(c: u8) bool {
+    return (c >= 'a' and c <= 'z') or
+        (c >= 'A' and c <= 'Z') or
+        (c >= '0' and c <= '9') or
+        (c >= 127);
+}
+
+pub const Class = enum(u8) {
+    blank,
+    comment,
+    keyword,
+    identifier,
+    directive,
+    number,
+    string,
+    op,
+    assign,
+    paren,
+    bracket,
+    colon,
+    comma,
+    dot,
+    ctor,
+
+    pub fn toTtyColor(self: Class) []const std.io.tty.Color {
+        return switch (self) {
+            .blank => unreachable,
+            .comment => &.{.dim},
+            .keyword => &.{ .bright_white, .bold },
+            .identifier => &.{},
+            .directive => &.{ .bright_white, .bold },
+            .number => &.{.cyan},
+            .string => &.{.green},
+            .op => &.{.dim},
+            .assign => &.{.dim},
+            .paren => &.{.dim},
+            .bracket => &.{.dim},
+            .colon => &.{.dim},
+            .comma => &.{.dim},
+            .dot => &.{.dim},
+            .ctor => &.{.dim},
+        };
+    }
+
+    pub fn fromLexeme(leme: Lexer.Lexeme) ?Class {
+        return switch (leme) {
+            inline else => |t| {
+                if (comptime @tagName(t)[0] == '@')
+                    return .directive;
+                if (comptime std.mem.startsWith(u8, @tagName(t), "ty_"))
+                    return .identifier;
+                if (comptime std.mem.endsWith(u8, @tagName(t), "="))
+                    return .assign;
+                if (comptime std.ascii.isLower(@tagName(t)[0]) or
+                    @tagName(t)[0] == '$')
+                    return .keyword;
+                if (comptime std.mem.indexOfAny(
+                    u8,
+                    @tagName(t),
+                    "!^*/%+-<>&|.,~?",
+                ) != null)
+                    return .op;
+
+                comptime unreachable;
+            },
+            .true,
+            .false,
+            .BinInteger,
+            .OctInteger,
+            .DecInteger,
+            .HexInteger,
+            .Float,
+            => .number,
+            .@"<=", .@"==", .@">=" => .op,
+            .Ident, .@"$", ._ => .identifier,
+            .Comment => .comment,
+            .@".(", .@".[", .@".{" => .ctor,
+            .@"[", .@"]" => .bracket,
+            .@"(", .@")", .@"{", .@"}" => .paren,
+            .@"\"", .@"`", .@"'" => .string,
+            .@":", .@";", .@"#", .@"\\", .@"," => .comma,
+            .@"." => .dot,
+            .@"unterminated string" => .comment,
+            .Eof => null,
+        };
+    }
+};
+
+pub fn minify(source: [:0]u8) usize {
+    var writer = source.ptr;
+    var reader = source;
+    var prevNeedsWhitespace = false;
+    var prevNeedsNewline = false;
+
+    while (true) {
+        var lexer = hb.frontend.Lexer.init(reader, 0);
+        const token = lexer.next();
+
+        switch (token.kind) {
+            .Eof => break,
+            else => {},
+        }
+
+        const cpyLen = token.end - token.pos;
+
+        var prefix: ?u8 = null;
+        if (prevNeedsWhitespace and needsSpace(reader[token.pos])) {
+            prefix = ' ';
+            std.debug.assert(token.pos != 0);
+        }
+
+        prevNeedsWhitespace = needsSpace(reader[token.end - 1]);
+
+        const inbetweenNewlines =
+            std.mem.count(u8, reader[0..token.pos], "\n") +
+            if (token.kind.precedence(false) != 255) @as(usize, 1) else 0;
+
+        const extraPrefixNewlines =
+            if (inbetweenNewlines > 1)
+                @as(usize, 1) + @intFromBool(token.kind.precedence(false) == 255)
+            else
+                @intFromBool(prevNeedsNewline);
+
+        if (token.kind == .Comment and reader[token.end - 1] != '/') {
+            prevNeedsNewline = true;
+            prevNeedsWhitespace = false;
+        } else {
+            prevNeedsNewline = false;
+        }
+
+        const sstr = reader[token.pos..token.end];
+        reader = reader[token.end..];
+
+        if (extraPrefixNewlines != 0) {
+            for (0..extraPrefixNewlines) |_| {
+                writer[0] = '\n';
+                writer += 1;
+            }
+        } else if (prefix) |p| {
+            writer[0] = p;
+            writer += 1;
+        }
+
+        std.mem.copyForwards(u8, writer[0..cpyLen], sstr);
+        writer += cpyLen;
+    }
+
+    return @intCast(writer - source.ptr);
+}
+
 pub fn fmt(
     path: []const u8,
     source: [:0]const u8,

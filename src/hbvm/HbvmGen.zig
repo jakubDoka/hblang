@@ -796,7 +796,7 @@ pub fn doInterrupt(
 ) Mach.RunError!void {
     switch (vm.regs.get(.arg(0))) {
         100 => {
-            const stru: [2]u64 = @bitCast(ctx.memory[vm.regs.get(.arg(1))..][0..16].*);
+            const stru: [2]u64 = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(1)))..][0..16].*);
             std.debug.assert(stru[0] == 1);
             std.debug.assert(stru[1] == 2);
             vm.regs.set(.ret(0), 3);

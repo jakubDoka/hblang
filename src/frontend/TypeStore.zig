@@ -173,10 +173,10 @@ pub const ComptimeValue = extern union {
     else
         []const u8 {
         if (ty.size(types) <= @sizeOf(ComptimeValue)) {
-            return std.mem.asBytes(self)[0..ty.size(types)];
+            return std.mem.asBytes(self)[0..@intCast(ty.size(types))];
         } else {
             return self.spilled.id.get(types).data
-                .get(types)[self.spilled.off..][0..ty.size(types)];
+                .get(types)[self.spilled.off..][0..@intCast(ty.size(types))];
         }
     }
 
@@ -1467,8 +1467,8 @@ pub const Union = struct {
         const tag_size = Id.nany(tag.id).size(types);
         var value: i64 = 0;
         @memcpy(
-            std.mem.asBytes(&value)[0..tag_size],
-            bytes[tag.offset..][0..tag_size],
+            std.mem.asBytes(&value)[0..@intCast(tag_size)],
+            bytes[@intCast(tag.offset)..][0..@intCast(tag_size)],
         );
 
         const idx = std.mem.indexOfScalar(i64, tag.id.get(types)
@@ -1849,7 +1849,7 @@ pub fn init(
         gen.init(&self, .nany(builtins.getScope(&self)), .never, tmp.allocator());
         _ = gen.bl.begin(.systemv, undefined);
 
-        var value = gen.lookupIdent(gen.scope, "Type").?;
+        var value = gen.lookupIdent(gen.scope, "Type") orelse @panic("wuh");
         const type_union = gen.peval(.start, value, Types.Id) catch unreachable;
 
         value = gen.lookupIdent(gen.scope, "SrcLoc").?;
@@ -2102,7 +2102,7 @@ pub fn collectRelocsRecur(
         },
         .Array => |a| {
             const elem_size = a.get(self).elem.size(self);
-            for (0..a.get(self).len.s) |i| {
+            for (0..@intCast(a.get(self).len.s)) |i| {
                 const elem_offset = offset + elem_size * i;
                 self.collectRelocsRecur(
                     ctx,
@@ -2141,7 +2141,7 @@ pub fn collectPointer(
     allow_null: bool,
 ) !?Machine.DataOptions.Reloc {
     // TODO: if this becomes a bottleneck, optimize it
-    const value: u64 = @bitCast(bytes[offset..][0..8].*);
+    const value: u64 = @bitCast(bytes[@intCast(offset)..][0..8].*);
 
     if (allow_null and value == 0) return .{
         .target = @intCast(size | 0x80000000),
@@ -2325,7 +2325,7 @@ pub fn internValueLow(self: *Types, ty: Id, bytes: []u8, offset: u32) void {
             const elem = a.get(self).elem;
             const len = a.get(self).len.s;
 
-            for (0..len) |i| {
+            for (0..@intCast(len)) |i| {
                 self.internValueLow(elem, bytes, @intCast(offset + i * elem.size(self)));
             }
         },
@@ -2380,28 +2380,28 @@ pub fn formatValueLow(self: *Types, ty: Id, bytes: []const u8, writer: *std.Io.W
             const ptr: u64 = @bitCast(bytes[Types.Slice.ptr_offset..][0..8].*);
             const len: u64 = @bitCast(bytes[Types.Slice.len_offset..][0..8].*);
 
-            const nested_bytes = vm_mem[ptr..][0 .. len * s.get(self).elem.size(self)];
+            const nested_bytes = vm_mem[@intCast(ptr)..][0..@intCast(len * s.get(self).elem.size(self))];
 
             if (s.get(self).elem == .u8) {
                 try writer.print("\"{s}\"", .{nested_bytes});
             } else {
                 try writer.writeByte('&');
-                try self.formatArray(s.get(self).elem, nested_bytes, len, writer);
+                try self.formatArray(s.get(self).elem, nested_bytes, @intCast(len), writer);
             }
         },
         .Pointer => |p| {
             const ptr: u64 = @bitCast(bytes[0..8].*);
-            const nested_bytes = vm_mem[ptr..][0..p.get(self).ty.size(self)];
+            const nested_bytes = vm_mem[@intCast(ptr)..][0..@intCast(p.get(self).ty.size(self))];
 
             try writer.writeByte('&');
             try self.formatValueLow(p.get(self).ty, nested_bytes, writer);
         },
         .Array => |a| {
-            try self.formatArray(a.get(self).elem, bytes, a.get(self).len.s, writer);
+            try self.formatArray(a.get(self).elem, bytes, @intCast(a.get(self).len.s), writer);
         },
         .Option => |o| {
             if (o.get(self).recurse(self, bytes)) |inner| {
-                try self.formatValueLow(inner, bytes[0..inner.size(self)], writer);
+                try self.formatValueLow(inner, bytes[0..@intCast(inner.size(self))], writer);
             } else {
                 try writer.writeAll("null");
             }
@@ -2411,7 +2411,7 @@ pub fn formatValueLow(self: *Types, ty: Id, bytes: []const u8, writer: *std.Io.W
                 try writer.writeAll(".(");
                 for (s.get(self).getLayout(self).fields, 0..) |f, i| {
                     if (i != 0) try writer.writeAll(", ");
-                    try self.formatValueLow(f.ty, bytes[f.offset..][0..f.ty.size(self)], writer);
+                    try self.formatValueLow(f.ty, bytes[@intCast(f.offset)..][0..@intCast(f.ty.size(self))], writer);
                 }
                 try writer.writeAll(")");
             } else {
@@ -2419,7 +2419,7 @@ pub fn formatValueLow(self: *Types, ty: Id, bytes: []const u8, writer: *std.Io.W
                 for (s.get(self).getLayout(self).fields, 0..) |f, i| {
                     if (i != 0) try writer.writeAll(", ");
                     try writer.print("{s}: ", .{s.get(self).fieldName(self, i)});
-                    try self.formatValueLow(f.ty, bytes[f.offset..][0..f.ty.size(self)], writer);
+                    try self.formatValueLow(f.ty, bytes[@intCast(f.offset)..][0..@intCast(f.ty.size(self))], writer);
                 }
                 try writer.writeAll("}");
             }
@@ -2434,7 +2434,7 @@ pub fn formatValueLow(self: *Types, ty: Id, bytes: []const u8, writer: *std.Io.W
         .Union => |u| {
             if (u.get(self).recurse(self, bytes) catch unreachable) |tag| {
                 try writer.print(".{{{s}: ", .{tag.name});
-                try self.formatValueLow(tag.ty, bytes[0..tag.ty.size(self)], writer);
+                try self.formatValueLow(tag.ty, bytes[0..@intCast(tag.ty.size(self))], writer);
                 try writer.writeByte('}');
             }
         },
@@ -2445,7 +2445,11 @@ pub fn formatArray(self: *Types, ty: Id, bytes: []const u8, len: usize, writer: 
     try writer.writeAll(".[");
     for (0..len) |i| {
         if (i != 0) try writer.writeAll(", ");
-        try self.formatValueLow(ty, bytes[i * ty.size(self) ..][0..ty.size(self)], writer);
+        try self.formatValueLow(
+            ty,
+            bytes[@intCast(i * ty.size(self))..][0..@intCast(ty.size(self))],
+            writer,
+        );
     }
     try writer.writeByte(']');
 }
@@ -2453,8 +2457,10 @@ pub fn formatArray(self: *Types, ty: Id, bytes: []const u8, len: usize, writer: 
 pub fn loadVmSlice(self: *Types, comptime T: type, slot: *[16]u8, scratch: *utils.Arena) []T {
     const vm_mem = self.ct_backend.mach.out.code.items;
 
-    const ptr: u64 = @bitCast(slot[0..][Types.Slice.ptr_offset..][0..8].*);
-    const len: u64 = @bitCast(slot[0..][Types.Slice.len_offset..][0..8].*);
+    const ptr_: u64 = @bitCast(slot[0..][Types.Slice.ptr_offset..][0..8].*);
+    const len_: u64 = @bitCast(slot[0..][Types.Slice.len_offset..][0..8].*);
+    const ptr: usize = @intCast(ptr_);
+    const len: usize = @intCast(len_);
     // TODO: make the memory in the vm aligned
     const args: []align(1) T = @ptrCast(vm_mem[ptr..][0 .. len * @sizeOf(T)]);
 
