@@ -318,7 +318,7 @@ pub const UnOp = enum(u8) {
     }
 };
 
-pub const DataType2 = enum(u8) {
+pub const DataType = enum(u8) {
     bot,
     i8,
     i16,
@@ -330,7 +330,7 @@ pub const DataType2 = enum(u8) {
     _,
 
     comptime {
-        for (std.meta.fields(DataType2), std.meta.fields(Tag)) |a, b| {
+        for (std.meta.fields(DataType), std.meta.fields(Tag)) |a, b| {
             if (!std.mem.eql(u8, a.name, b.name)) {
                 @compileError("mismatched builtin '" ++ a.name ++ "' and '" ++ b.name ++ "'");
             }
@@ -363,7 +363,7 @@ pub const DataType2 = enum(u8) {
     };
 
     pub const Size = enum(u2) {
-        inferred,
+        scalar,
         v128,
         v256,
         v512,
@@ -372,7 +372,7 @@ pub const DataType2 = enum(u8) {
 
         pub fn sizePow(self: Size, tag: Tag) u3 {
             return switch (self) {
-                .inferred => tag.sizePow(),
+                .scalar => tag.sizePow(),
                 else => @intFromEnum(self) + 3,
             };
         }
@@ -391,69 +391,12 @@ pub const DataType2 = enum(u8) {
         }
     };
 
-    pub fn vec(tag: Tag, sz: Size) DataType2 {
-        return @enumFromInt(@as(u8, @bitCast(Repr{ .tag = tag, .size = sz })));
-    }
-
-    pub fn repr(self: DataType2) Repr {
-        return @bitCast(@intFromEnum(self));
-    }
-
-    pub fn laneCount(self: DataType2) u16 {
-        return self.repr().laneCount();
-    }
-
-    pub fn size(self: DataType2) u16 {
-        return self.repr().size.get(self.repr().tag);
-    }
-};
-
-pub const DataType = enum(u8) {
-    bot,
-    i8,
-    i16,
-    i32,
-    i64,
-    f32,
-    f64,
-    v128,
-    v254,
-    v512,
-    top,
-
-    pub fn memUnitForAlign(alignment: u64, float: bool) DataType {
-        if (float) return @enumFromInt(@intFromEnum(DataType.f32) +
-            @min(std.math.log2_int(u64, alignment), 3) - 2);
-        return @enumFromInt(@intFromEnum(DataType.i8) +
-            @min(std.math.log2_int(u64, alignment), 3));
-    }
-
-    pub fn halv(self: DataType) DataType {
-        std.debug.assert(self != .i8);
-        std.debug.assert(self != .f32);
-        return @enumFromInt(@intFromEnum(self) - 1);
-    }
-
-    pub fn isSse(self: DataType) bool {
-        return switch (self) {
-            .v128, .v254, .v512 => true,
-            else => false,
-        };
-    }
-
-    pub fn isInt(self: DataType) bool {
-        return switch (self) {
-            .i8, .i16, .i32, .i64 => true,
-            else => false,
-        };
-    }
-
-    pub fn isSubOf(self: DataType, other: DataType) bool {
-        if (other == self) return true;
-        if (self.isInt() and other.isInt()) {
-            return @intFromEnum(self) <= @intFromEnum(other);
+    pub fn format(self: DataType, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        const rpr = self.repr();
+        try writer.writeAll(@tagName(rpr.tag));
+        if (rpr.size != .scalar) {
+            try writer.print("x{}", .{self.laneCount()});
         }
-        return false;
     }
 
     pub fn unify(self: DataType, other: DataType) DataType {
@@ -466,8 +409,34 @@ pub const DataType = enum(u8) {
         utils.panic("{f} {f}", .{ self, other });
     }
 
-    pub fn format(self: DataType, writer: *std.Io.Writer) !void {
-        try writer.print("{s}", .{@tagName(self)});
+    pub fn fromTag(tag: Tag) DataType {
+        return vec(tag, .scalar);
+    }
+
+    pub fn vec(tag: Tag, sz: Size) DataType {
+        return @enumFromInt(@as(u8, @bitCast(Repr{ .tag = tag, .size = sz })));
+    }
+
+    pub fn repr(self: DataType) Repr {
+        return @bitCast(@intFromEnum(self));
+    }
+
+    pub fn laneCount(self: DataType) u16 {
+        return self.repr().laneCount();
+    }
+
+    pub fn size(self: DataType) u16 {
+        return self.repr().size.get(self.repr().tag);
+    }
+
+    pub fn mask(self: DataType) i64 {
+        return switch (self) {
+            _, .top, .bot => unreachable,
+            .i8 => 0xFF,
+            .i16 => 0xFFFF,
+            .i32, .f32 => 0xFFFFFFFF,
+            .i64, .f64 => -1,
+        };
     }
 
     pub fn isFloat(self: DataType) bool {
@@ -477,36 +446,46 @@ pub const DataType = enum(u8) {
         };
     }
 
+    pub fn sizePow(self: DataType) u3 {
+        return self.repr().size.sizePow(self.repr().tag);
+    }
+
     pub fn isXmm(self: DataType) bool {
         return self.isSse() or self.isFloat();
     }
 
-    pub fn sizePow(self: DataType) u3 {
+    pub fn isSse(self: DataType) bool {
         return switch (self) {
-            .top, .bot => unreachable,
-            .i8 => 0,
-            .i16 => 1,
-            .i32, .f32 => 2,
-            .i64, .f64 => 3,
-            .v128 => 4,
-            .v254 => 5,
-            .v512 => 6,
+            _ => true,
+            else => false,
         };
     }
 
-    pub fn size(self: DataType) u8 {
-        return @as(u8, 1) << self.sizePow();
+    pub fn isInt(self: DataType) bool {
+        return switch (self) {
+            .i8, .i16, .i32, .i64 => true,
+            else => false,
+        };
     }
 
-    pub fn mask(self: DataType) i64 {
-        return switch (self) {
-            .top, .bot => unreachable,
-            .i8 => 0xFF,
-            .i16 => 0xFFFF,
-            .i32, .f32 => 0xFFFFFFFF,
-            .i64, .f64 => -1,
-            .v128, .v254, .v512 => unreachable,
-        };
+    pub fn halv(self: DataType) DataType {
+        std.debug.assert(self != .i8);
+        std.debug.assert(self != .f32);
+        std.debug.assert(!self.isSse());
+        return @enumFromInt(@intFromEnum(self) - 1);
+    }
+
+    pub fn isSubOf(self: DataType, other: DataType) bool {
+        if (other == self) return true;
+        if (self.isInt() and other.isInt()) {
+            return @intFromEnum(self) <= @intFromEnum(other);
+        }
+        return false;
+    }
+
+    pub fn memUnitForAlign(alignment: u64) DataType {
+        return @enumFromInt(@intFromEnum(DataType.i8) +
+            @min(std.math.log2_int(u64, alignment), 3));
     }
 };
 
@@ -1171,6 +1150,8 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn normalizedDisjointValues(self: *Node, func: *Self) [2]*Node {
+                if (true) unreachable;
+
                 std.debug.assert(self.extra(.BinOp).op == .disjoint_or);
 
                 var outs: [2]struct { *Node, u8 } = undefined;

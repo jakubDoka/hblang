@@ -91,11 +91,19 @@ pub const Category = union(enum) {
     }
 };
 
-pub fn categorizeBuiltinUnwrapped(b: Types.Builtin) graph.DataType {
-    return (categorizeBuiltin(b) catch unreachable).?;
+pub fn categorizeBuiltin(b: Types.Builtin) !?graph.DataType {
+    return .fromTag((try categorizeBuiltinTag(b)) orelse return null);
 }
 
-pub fn categorizeBuiltin(b: Types.Builtin) !?graph.DataType {
+pub fn categorizeBuiltinUnwrappedTag(b: Types.Builtin) graph.DataType.Tag {
+    return (categorizeBuiltinTag(b) catch unreachable).?;
+}
+
+pub fn categorizeBuiltinUnwrapped(b: Types.Builtin) graph.DataType {
+    return .fromTag(categorizeBuiltinUnwrappedTag(b));
+}
+
+pub fn categorizeBuiltinTag(b: Types.Builtin) !?graph.DataType.Tag {
     return switch (b) {
         .any => unreachable,
         .never => return error.Impossible,
@@ -131,7 +139,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
         const Ctx = struct {
             ts: *Types,
             f32_count: usize = 0,
-            last_simd: graph.DataType = .bot,
+            last_simd: graph.DataType.Tag = .bot,
             catas: []?Cata,
         };
 
@@ -142,7 +150,7 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
                 ctx.f32_count += 1;
             }
 
-            if (t.data() == .Simd) ctx.last_simd = categorizeBuiltinUnwrapped(t.data().Simd.lane);
+            if (t.data() == .Simd) ctx.last_simd = categorizeBuiltinUnwrappedTag(t.data().Simd.lane);
 
             var class: Cata = switch (t.data()) {
                 .Builtin => |b| switch (b) {
@@ -242,9 +250,8 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
             cls: []const ?Cata,
             i: *usize,
             size: u64,
-            last_simd: graph.DataType,
+            last_simd: graph.DataType.Tag,
         ) graph.DataType {
-            _ = last_simd; // autofix
             if (i.* >= cls.len) unreachable;
 
             switch (cls[i.*].?) {
@@ -268,9 +275,9 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
                             4 => .f32,
                             else => .f64,
                         },
-                        2 => .v128,
-                        4 => .v254,
-                        8 => .v512,
+                        2 => .vec(last_simd, .v128),
+                        4 => .vec(last_simd, .v256),
+                        8 => .vec(last_simd, .v512),
                         else => unreachable,
                     };
                 },

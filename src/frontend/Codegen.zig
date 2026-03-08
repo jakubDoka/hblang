@@ -426,7 +426,7 @@ pub fn lookupIdentLow(
                 return .value(.nany(scope_cursor.Enum), self.bl.addIntImm(
                     // TODO: this is incorrect we need to select the file of the enum
                     file.sloc(scope_meta.file, en.decls.fieldPos(field) orelse en.scope.name_pos.sourcePos() orelse .start),
-                    .memUnitForAlign(en.getLayout(self.types).spec.alignmentBytes(), false),
+                    .memUnitForAlign(en.getLayout(self.types).spec.alignmentBytes()),
                     en.getLayout(self.types).fields[field],
                 ));
             }
