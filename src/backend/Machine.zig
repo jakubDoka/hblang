@@ -580,6 +580,7 @@ pub const Data = struct {
 
     pub fn deduplicate(self: *Data) void {
         errdefer unreachable;
+
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 

@@ -1849,7 +1849,7 @@ pub fn init(
         gen.init(&self, .nany(builtins.getScope(&self)), .never, tmp.allocator());
         _ = gen.bl.begin(.systemv, undefined);
 
-        var value = gen.lookupIdent(gen.scope, "Type") orelse @panic("wuh");
+        var value = gen.lookupIdent(gen.scope, "Type").?;
         const type_union = gen.peval(.start, value, Types.Id) catch unreachable;
 
         value = gen.lookupIdent(gen.scope, "SrcLoc").?;

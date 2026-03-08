@@ -329,6 +329,14 @@ pub const DataType2 = enum(u8) {
     top,
     _,
 
+    comptime {
+        for (std.meta.fields(DataType2), std.meta.fields(Tag)) |a, b| {
+            if (!std.mem.eql(u8, a.name, b.name)) {
+                @compileError("mismatched builtin '" ++ a.name ++ "' and '" ++ b.name ++ "'");
+            }
+        }
+    }
+
     pub const Tag = enum(u6) {
         bot,
         i8,
@@ -355,15 +363,17 @@ pub const DataType2 = enum(u8) {
     };
 
     pub const Size = enum(u2) {
-        inferred = std.math.maxInt(u2),
-        _,
+        inferred,
+        v128,
+        v256,
+        v512,
 
         pub const max_elem_unit = 8;
 
         pub fn sizePow(self: Size, tag: Tag) u3 {
             return switch (self) {
                 .inferred => tag.sizePow(),
-                _ => @intFromEnum(self) + 3,
+                else => @intFromEnum(self) + 3,
             };
         }
 
@@ -381,13 +391,8 @@ pub const DataType2 = enum(u8) {
         }
     };
 
-    pub fn vec(tag: Tag, lane_cont: u16) DataType2 {
-        std.debug.assert(std.math.isPowerOfTwo(lane_cont));
-        std.debug.assert(tag.size() * lane_cont >= 16);
-        return @enumFromInt(@as(u8, @bitCast(Repr{
-            .tag = tag,
-            .size = @enumFromInt((@ctz(lane_cont) + tag.sizePow()) - 3),
-        })));
+    pub fn vec(tag: Tag, sz: Size) DataType2 {
+        return @enumFromInt(@as(u8, @bitCast(Repr{ .tag = tag, .size = sz })));
     }
 
     pub fn repr(self: DataType2) Repr {
@@ -398,12 +403,8 @@ pub const DataType2 = enum(u8) {
         return self.repr().laneCount();
     }
 
-    comptime {
-        for (std.meta.fields(DataType2), std.meta.fields(Tag)) |a, b| {
-            if (!std.mem.eql(u8, a.name, b.name)) {
-                @compileError("mismatched builtin '" ++ a.name ++ "' and '" ++ b.name ++ "'");
-            }
-        }
+    pub fn size(self: DataType2) u16 {
+        return self.repr().size.get(self.repr().tag);
     }
 };
 

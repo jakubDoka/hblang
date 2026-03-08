@@ -128,12 +128,21 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
 
         const Error = error{ ByRef, Impossible };
 
-        pub fn classify(t: Id, ts: *Types, offset: u64, catas: []?Cata, f32_count: *usize) Error!void {
-            if (offset & (t.alignment(ts) - 1) != 0) return error.ByRef;
+        const Ctx = struct {
+            ts: *Types,
+            f32_count: usize = 0,
+            last_simd: graph.DataType = .bot,
+            catas: []?Cata,
+        };
+
+        pub fn classify(t: Id, offset: u64, ctx: *Ctx) Error!void {
+            if (offset & (t.alignment(ctx.ts) - 1) != 0) return error.ByRef;
 
             if (t == .f32) {
-                f32_count.* += 1;
+                ctx.f32_count += 1;
             }
+
+            if (t.data() == .Simd) ctx.last_simd = categorizeBuiltinUnwrapped(t.data().Simd.lane);
 
             var class: Cata = switch (t.data()) {
                 .Builtin => |b| switch (b) {
@@ -144,54 +153,53 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
                     .u32, .i64, .u64, .int, .uint, .type, .template => .int,
                     .f32, .f64 => .sse,
                 },
-                .Simd => |s| if (s.laneCount(ts) == 1) {
-                    try classify(.nany(s), ts, offset, catas, f32_count);
+                .Simd => |s| if (s.laneCount(ctx.ts) == 1) {
+                    try classify(.nany(s.lane), offset, ctx);
                     return;
                 } else .sse,
                 .FuncTy => .int,
                 .Pointer => .int,
-                .Enum => |e| if (e.get(ts).decls.fieldCount() == 0)
+                .Enum => |e| if (e.get(ctx.ts).decls.fieldCount() == 0)
                     return error.Impossible
                 else
                     .int,
                 .Option => |o| {
-                    classify(o.get(ts).inner, ts, offset, catas, f32_count) catch |err| switch (err) {
+                    classify(o.get(ctx.ts).inner, offset, ctx) catch |err| switch (err) {
                         error.Impossible => return,
                         else => |e| return e,
                     };
-                    const layout = o.get(ts).getLayout(ts);
+                    const layout = o.get(ctx.ts).getLayout(ctx.ts);
                     if (!layout.compact) {
                         try classify(
                             layout.inner.storage.ty(),
-                            ts,
+
                             offset + layout.inner.offset,
-                            catas,
-                            f32_count,
+                            ctx,
                         );
                     }
 
                     return;
                 },
                 .Slice => {
-                    try classify(.uint, ts, offset + 0, catas, f32_count);
-                    try classify(.uint, ts, offset + 8, catas, f32_count);
+                    try classify(.uint, offset + 0, ctx);
+                    try classify(.uint, offset + 8, ctx);
                     return;
                 },
                 .Struct => |s| {
-                    for (s.get(ts).getLayout(ts).fields) |f| {
-                        try classify(f.ty, ts, offset + f.offset, catas, f32_count);
+                    for (s.get(ctx.ts).getLayout(ctx.ts).fields) |f| {
+                        try classify(f.ty, offset + f.offset, ctx);
                     }
                     return;
                 },
                 .Union => |u| {
-                    if (u.get(ts).decls.fieldCount() == 0) return error.Impossible;
+                    if (u.get(ctx.ts).decls.fieldCount() == 0) return error.Impossible;
 
-                    const layout = u.get(ts).getLayout(ts);
+                    const layout = u.get(ctx.ts).getLayout(ctx.ts);
 
                     var impossible = true;
 
                     for (layout.fields) |f| {
-                        classify(f, ts, offset, catas, f32_count) catch |err| switch (err) {
+                        classify(f, offset, ctx) catch |err| switch (err) {
                             error.ByRef => return err,
                             error.Impossible => continue,
                         };
@@ -199,20 +207,19 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
                     }
 
                     if (layout.tagLayout()) |tl| {
-                        try classify(.nany(tl.id), ts, offset + tl.offset, catas, f32_count);
+                        try classify(.nany(tl.id), offset + tl.offset, ctx);
                     }
 
                     if (impossible) return error.Impossible;
                     return;
                 },
                 .Array => |a| {
-                    for (0..@intCast(a.get(ts).len.s)) |i| {
+                    for (0..@intCast(a.get(ctx.ts).len.s)) |i| {
                         try classify(
-                            a.get(ts).elem,
-                            ts,
-                            offset + a.get(ts).elem.size(ts) * i,
-                            catas,
-                            f32_count,
+                            a.get(ctx.ts).elem,
+
+                            offset + a.get(ctx.ts).elem.size(ctx.ts) * i,
+                            ctx,
                         );
                     }
                     return;
@@ -220,9 +227,9 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
             };
 
             const first = offset / 8;
-            const last = (offset + t.size(ts) + 7) / 8;
+            const last = (offset + t.size(ctx.ts) + 7) / 8;
 
-            for (catas[@intCast(first)..@intCast(last)]) |*cat| {
+            for (ctx.catas[@intCast(first)..@intCast(last)]) |*cat| {
                 if (cat.*) |old| cat.* = old.max(class) else cat.* = class;
 
                 if (class == .sse) {
@@ -235,7 +242,9 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
             cls: []const ?Cata,
             i: *usize,
             size: u64,
+            last_simd: graph.DataType,
         ) graph.DataType {
+            _ = last_simd; // autofix
             if (i.* >= cls.len) unreachable;
 
             switch (cls[i.*].?) {
@@ -260,8 +269,8 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
                             else => .f64,
                         },
                         2 => .v128,
-                        3, 4 => .v254,
-                        5, 6, 7, 8 => .v512,
+                        4 => .v254,
+                        8 => .v512,
                         else => unreachable,
                     };
                 },
@@ -279,8 +288,8 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
     var categories_mem: [max_eight_bytes]?Cata = @splat(null);
     const categories = categories_mem[0..@intCast(eight_bytes)];
 
-    var f32_count: usize = 0;
-    try Cata.classify(ty, types, 0, categories, &f32_count);
+    var ctx = Cata.Ctx{ .ts = types, .catas = categories };
+    try Cata.classify(ty, 0, &ctx);
 
     // NOTE: we do this after classify sinc classify catches impossible
     if (eight_bytes == 0) {
@@ -307,15 +316,15 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types, cc: graph.CallConv) 
     }
 
     var i: usize = 0;
-    bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types)) });
+    bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types), ctx.last_simd) });
     if (i * 8 < ty.size(types)) {
-        bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types) - i * 8) });
+        bufr.push(.{ .Reg = Cata.regComp(categories, &i, ty.size(types) - i * 8, ctx.last_simd) });
     }
 
     if (cc == .wasmcall or cc == .ablecall) {
-        if (f32_count > 2 or (f32_count != 0 and bufr.len != 1)) return error.ByRef;
+        if (ctx.f32_count > 2 or (ctx.f32_count != 0 and bufr.len != 1)) return error.ByRef;
 
-        if (f32_count == 2) {
+        if (ctx.f32_count == 2) {
             std.debug.assert(bufr.len == 1);
 
             bufr.len = 2;
