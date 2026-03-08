@@ -2259,18 +2259,18 @@ main := fn(): uint {
     vect := @as(^V, @bit_cast(data.ptr))[0..data.len / @len_of(V)]
 
     for v := vect {
-        v.* *= v.*
+        v.* *= v.* + v.*
     }
 
     $if @len_of(V) > 1 {
         for s := data[vect.len * @len_of(V)..] {
-            s.* *= s.*
+            s.* *= s.* + s.*
         }
     }
 
     data2 := dataset
     for v := data2[..] {
-        v.* *= v.*
+        v.* *= v.* + v.*
     }
 
     for i := 1.., a := data[..], b := data2[..] {

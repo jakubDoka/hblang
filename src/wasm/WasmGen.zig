@@ -73,7 +73,7 @@ pub const RegTag = enum(u3) {
     }
 
     pub fn toWasmType(self: RegTag) object.Type {
-        return @enumFromInt(@intFromEnum(self) + @intFromEnum(object.Type.f64));
+        return @enumFromInt(@intFromEnum(object.Type.v128) + @intFromEnum(self));
     }
 
     pub fn overlapps(self: RegTag, other: RegTag) usize {
@@ -1151,6 +1151,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                         inline @field(object.Type, @tagName(prefix) ++ "32"),
                         @field(object.Type, @tagName(prefix) ++ "64"),
                         => |t| opb(@field(object.Op, @tagName(t) ++ "_" ++ @tagName(name))),
+                        .v128 => opb(.prefix_fd),
                         else => utils.panic("{}", .{op_ty}),
                     };
                 }
@@ -1198,6 +1199,40 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .fle => utl.selectOp(oper_ty, .f, .le),
             };
             try self.ctx.buf.writer.writeByte(op_code);
+
+            switch (extra.op) {
+                .fadd => switch (instr.data_type) {
+                    .f32, .f64 => {},
+                    _ => {
+                        std.debug.assert(instr.data_type.repr().size == .v128);
+                        try self.ctx.buf.writer.writeUleb128(
+                            switch (instr.data_type.repr().tag) {
+                                .f32 => eopw(.f32x4_add),
+                                .f64 => eopw(.f64x2_add),
+                                else => unreachable,
+                            },
+                        );
+                    },
+                    else => unreachable,
+                },
+                .fmul => switch (instr.data_type) {
+                    .f32, .f64 => {},
+                    _ => {
+                        std.debug.assert(instr.data_type.repr().size == .v128);
+                        try self.ctx.buf.writer.writeUleb128(
+                            switch (instr.data_type.repr().tag) {
+                                .f32 => eopw(.f32x4_mul),
+                                .f64 => eopw(.f64x2_mul),
+                                else => unreachable,
+                            },
+                        );
+                    },
+                    else => unreachable,
+                },
+                else => {
+                    std.debug.assert(op_code != 0xfd);
+                },
+            }
 
             self.emitLocalStore(instr);
         },

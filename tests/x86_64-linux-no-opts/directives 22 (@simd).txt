@@ -7,13 +7,15 @@ main:
 	mov qword ptr [rsp+0x08], 0x02
 	lea rax, [rsp+0x10]
 	mov [rsp], rax
-	lea rdx, [rsp+0x30]
+	lea rcx, [rsp+0x30]
 	lea rax, [rsp+0x10]
-1:	cmp rax, rdx
+1:	cmp rax, rcx
 	jnb :0
-	movups xmm1, [rax]
-	mulps xmm1, xmm1
-	movups [rax], xmm1
+	movups xmm0, [rax]
+	movups xmm1, xmm0
+	addps xmm1, xmm0
+	mulps xmm0, xmm1
+	movups [rax], xmm0
 	add rax, 0x10
 	jmp :1
 0:	mov rdx, 0x0A
@@ -26,7 +28,9 @@ main:
 3:	cmp rcx, rax
 	jnb :2
 	movss xmm0, dword ptr [rcx]
-	mulss xmm0, xmm0
+	movss xmm1, xmm0
+	addss xmm1, xmm0
+	mulss xmm0, xmm1
 	movss [rcx], xmm0
 	add rcx, 0x04
 	jmp :3
@@ -39,7 +43,9 @@ main:
 5:	cmp rax, rcx
 	jnb :4
 	movss xmm0, dword ptr [rax]
-	mulss xmm0, xmm0
+	movss xmm1, xmm0
+	addss xmm1, xmm0
+	mulss xmm0, xmm1
 	movss [rax], xmm0
 	add rax, 0x04
 	jmp :5
