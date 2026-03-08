@@ -1,0 +1,58 @@
+main:
+	sub rsp, 0x50
+	lea rdi, [rsp]
+	mov rax, 0x28
+	mov rdx, rax
+	lea rsi, [0x0000000000000007] ; directives 22 (@simd).dataset
+	call :memcpy
+	lea rdx, [rsp+0x20]
+	lea rax, [rsp]
+1:	cmp rax, rdx
+	jnb :0
+	movups xmm1, [rax]
+	mulps xmm1, xmm1
+	movups [rax], xmm1
+	add rax, 0x10
+	jmp :1
+0:	lea rcx, [rsp+0x20]
+	add rcx, 0x08
+	lea rax, [rsp+0x20]
+3:	cmp rax, rcx
+	jnb :2
+	movss xmm0, dword ptr [rax]
+	mulss xmm0, xmm0
+	movss [rax], xmm0
+	add rax, 0x04
+	jmp :3
+2:	lea rdi, [rsp+0x28]
+	mov rdx, 0x28
+	lea rsi, [0x0000000000000007] ; directives 22 (@simd).dataset
+	call :memcpy
+	lea rcx, [rsp+0x50]
+	lea rax, [rsp+0x28]
+5:	cmp rax, rcx
+	jnb :4
+	movss xmm0, dword ptr [rax]
+	mulss xmm0, xmm0
+	movss [rax], xmm0
+	add rax, 0x04
+	jmp :5
+4:	mov rax, 0x01
+	lea rsi, [rsp+0x28]
+	lea rdx, [rsp+0x28]
+	lea rcx, [rsp]
+9:	cmp rcx, rsi
+	jnb :6
+	movss xmm1, dword ptr [rcx]
+	movss xmm0, dword ptr [rdx]
+	comiss xmm1, xmm0
+	jz :7
+	jmp :8
+7:	add rcx, 0x04
+	add rdx, 0x04
+	inc rax
+	jmp :9
+6:	xor rax, rax
+8:	add rsp, 0x50
+	ret
+memcpy:

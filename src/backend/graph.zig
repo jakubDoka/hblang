@@ -373,7 +373,7 @@ pub const DataType = enum(u8) {
         pub fn sizePow(self: Size, tag: Tag) u3 {
             return switch (self) {
                 .scalar => tag.sizePow(),
-                else => @intFromEnum(self) + 3,
+                else => @as(u3, @intFromEnum(self)) + 3,
             };
         }
 

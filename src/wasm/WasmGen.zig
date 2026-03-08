@@ -11,6 +11,7 @@ const matcher = @import("wasm.WasmGen");
 const WasmGen = @This();
 const Func = graph.Func(WasmGen);
 const opb = object.opb;
+const eopw = object.eopw;
 
 // NOTE: so that it does not show up in the grep
 const print = (std.debug).print;
@@ -50,7 +51,8 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
 
 pub const set_cap = 128;
 
-pub const RegTag = enum(u2) {
+pub const RegTag = enum(u3) {
+    v128,
     f64,
     f32,
     i64,
@@ -62,6 +64,10 @@ pub const RegTag = enum(u2) {
             .i64 => .i64,
             .f32 => .f32,
             .f64 => .f64,
+            _ => {
+                std.debug.assert(self.repr().size == .v128);
+                return .v128;
+            },
             else => utils.panic("{f}", .{self}),
         };
     }
@@ -277,6 +283,10 @@ pub fn dataTypeToWasmType(ty: graph.DataType) object.Type {
         .i64 => .i64,
         .f32 => .f32,
         .f64 => .f64,
+        _ => {
+            std.debug.assert(ty.repr().size == .v128);
+            return .v128;
+        },
         else => unreachable,
     };
 }
@@ -609,6 +619,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         .i64 = .initEmpty(.i64),
         .f32 = .initEmpty(.f32),
         .f64 = .initEmpty(.f64),
+        .v128 = .initEmpty(.v128),
     });
     var new_allocs = std.EnumArray(RegTag, []u16).initUndefined();
     for (&new_allocs.values) |*v| v.* = tmp.arena.alloc(u16, set_cap);
@@ -875,28 +886,52 @@ pub fn selectSignedLoadOp(dest_ty: graph.DataType, src_ty: graph.DataType) u8 {
     };
 }
 
-pub fn selectStoreOp(ty: graph.DataType) u8 {
-    return switch (ty) {
+pub fn writeStoreOp(ty: graph.DataType, writer: *std.Io.Writer) !void {
+    const op = switch (ty) {
         .i32 => opb(.i32_store),
         .i64 => opb(.i64_store),
         .f32 => opb(.f32_store),
         .f64 => opb(.f64_store),
         .i8 => opb(.i32_store8),
         .i16 => opb(.i32_store16),
+        _ => opb(.prefix_fd),
         else => unreachable,
     };
+
+    try writer.writeByte(op);
+
+    switch (ty) {
+        .i8, .i16, .i32, .i64, .f32, .f64 => {},
+        _ => {
+            std.debug.assert(ty.repr().size == .v128);
+            try writer.writeUleb128(eopw(.v128_store));
+        },
+        else => unreachable,
+    }
 }
 
-pub fn selectLoadOp(ty: graph.DataType) u8 {
-    return switch (ty) {
+pub fn writeLoadOp(ty: graph.DataType, writer: *std.Io.Writer) !void {
+    const op = switch (ty) {
         .i32 => opb(.i32_load),
         .i64 => opb(.i64_load),
         .f32 => opb(.f32_load),
         .f64 => opb(.f64_load),
         .i8 => opb(.i32_load8_u),
         .i16 => opb(.i32_load16_u),
+        _ => opb(.prefix_fd),
         else => unreachable,
     };
+
+    try writer.writeByte(op);
+
+    switch (ty) {
+        .i8, .i16, .i32, .i64, .f32, .f64 => {},
+        _ => {
+            std.debug.assert(ty.repr().size == .v128);
+            try writer.writeUleb128(eopw(.v128_load));
+        },
+        else => unreachable,
+    }
 }
 
 pub fn emitMemArg(self: *WasmGen, ty: graph.DataType, offset: i64) void {
@@ -1110,9 +1145,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .BinOp => |extra| {
-            // self.emitLocalLoad(inps[0]);
-            // self.emitLocalLoad(inps[1]);
-
             const utl = enum {
                 fn selectOp(op_ty: object.Type, prefix: anytype, name: anytype) u8 {
                     return switch (op_ty) {
@@ -1171,18 +1203,18 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         },
         .WStore => |extra| {
             const dt = inps[2].data_type;
-            try self.ctx.buf.writer.writeByte(selectStoreOp(dt));
+            try writeStoreOp(dt, &self.ctx.buf.writer);
             self.emitMemArg(dt, extra.offset);
         },
         .StackStore => |extra| {
             const offset = instr.base().extra(.LocalAlloc).getOffset(self.ctx.stack_layout) + extra.offset;
 
             const dt = inps[2].data_type;
-            try self.ctx.buf.writer.writeByte(selectStoreOp(dt));
+            try writeStoreOp(dt, &self.ctx.buf.writer);
             self.emitMemArg(dt, offset);
         },
         .WLoad => |extra| {
-            try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
+            try writeLoadOp(instr.data_type, &self.ctx.buf.writer);
             self.emitMemArg(instr.data_type, extra.offset);
 
             self.emitLocalStore(instr);
@@ -1202,7 +1234,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .StackLoad => |extra| {
             const offset = instr.base().extra(.LocalAlloc).getOffset(self.ctx.stack_layout) + extra.offset;
 
-            try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
+            try writeLoadOp(instr.data_type, &self.ctx.buf.writer);
             self.emitMemArg(instr.data_type, offset);
 
             self.emitLocalStore(instr);

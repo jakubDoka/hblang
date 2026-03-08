@@ -741,7 +741,7 @@ pub fn Mixin(comptime Backend: type) type {
                 const fuel: usize = 4;
                 var components: [fuel]*Node = undefined;
                 var collected: usize = 0;
-                std.debug.assert(node.data_type.size() <= 8);
+                //std.debug.assert(node.data_type.size() <= 8);
                 for (0..fuel) |i| {
                     var climb_fuel: usize = if (i == 0) 2 else 1;
                     while (climb_fuel > 0 and (earlier.kind == .Store and

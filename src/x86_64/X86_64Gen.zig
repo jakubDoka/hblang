@@ -1537,7 +1537,15 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         switch (instr.data_type) {
                             .f32 => self.emitByte(0xF3),
                             .f64 => self.emitByte(0xF2),
-                            else => unreachable,
+                            _ => switch (instr.data_type.repr().size) {
+                                .v128 => switch (instr.data_type.repr().tag) {
+                                    .f32 => {},
+                                    .f64 => self.emitByte(0x66),
+                                    else => unreachable,
+                                },
+                                else => unreachable,
+                            },
+                            else => utils.panic("{f}\n", .{instr.data_type}),
                         }
                         self.emitRexBinop(dst, rhs, .rax, size);
 
@@ -1924,6 +1932,12 @@ pub fn emitMemStoreOrLoad(
         .i16 => self.emitByte(0x66),
         .f32 => self.emitByte(0xf3),
         .f64 => self.emitByte(0xf2),
+        _ => switch (dt.repr().size) {
+            .scalar => unreachable,
+            .v128 => {},
+            .v256 => unreachable, // TODO
+            .v512 => unreachable, // TODO
+        },
         else => std.debug.assert(!dt.isSse()),
     }
     self.emitRex(reg, bse, .no_index, dt.size());
@@ -1931,6 +1945,12 @@ pub fn emitMemStoreOrLoad(
         .i16, .i64, .i32 => &.{if (kind == .store) 0x89 else 0x8b},
         .i8 => &.{if (kind == .store) 0x88 else 0x8a},
         .f32, .f64 => &.{ 0x0f, if (kind == .store) 0x11 else 0x10 },
+        _ => switch (dt.repr().size) {
+            .scalar => unreachable,
+            .v128 => &.{ 0x0f, if (kind == .store) 0x11 else 0x10 },
+            .v256 => unreachable, // TODO
+            .v512 => unreachable, // TODO
+        },
         else => utils.panic("{f}", .{dt}),
     });
     self.emitIndirectAddr(reg, bse, .no_index, 1, dis);

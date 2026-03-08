@@ -653,6 +653,16 @@ pub const Id = enum(u32) {
         };
     }
 
+    pub fn isSimd(
+        self: Id,
+        comptime pred: enum { isInteger, isUnsigned, isSigned, isFloat },
+    ) bool {
+        return switch (self.data()) {
+            .Simd => |s| @field(Builtin, @tagName(pred))(s.lane),
+            else => false,
+        };
+    }
+
     pub fn isBuiltin(
         self: Id,
         comptime pred: enum { isInteger, isUnsigned, isSigned, isFloat },

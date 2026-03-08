@@ -4229,7 +4229,7 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
             res.set(Value.value(result, self.bl.addBinOp(
                 slc,
                 op,
-                Abi.categorizeBuiltinUnwrapped(result.data().Builtin),
+                self.types.abi.categorizeAssumeReg(result, self.types),
                 res.load(self),
                 rhs.load(self),
             )));
@@ -6153,9 +6153,10 @@ pub fn lexemeToBinOp(self: *Codegen, pos: File.TokenIdx, lx: Lexer.Lexeme, ty: T
 
 pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) !?graph.BinOp {
     const unsigned = ty.isBuiltin(.isUnsigned) or ty == .bool or ty == .type or
-        ty.data() == .Pointer or ty.data() == .Enum;
-    const float = ty.isBuiltin(.isFloat);
-    if (!unsigned and !ty.isBuiltin(.isSigned) and !float) return null;
+        ty.data() == .Pointer or ty.data() == .Enum or ty.isSimd(.isUnsigned);
+    const signed = ty.isBuiltin(.isSigned) or ty.isSimd(.isSigned);
+    const float = ty.isBuiltin(.isFloat) or ty.isSimd(.isFloat);
+    if (!unsigned and !signed and !float) return null;
     return switch (self) {
         .@"+" => if (float) .fadd else .iadd,
         .@"-" => if (float) .fsub else .isub,

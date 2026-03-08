@@ -2247,17 +2247,37 @@ main := fn(): uint {
 ```
 
 #### directives 22 (@simd)
-```!hb
-expectations := .{
-    return_value: 8,
-}
-
-opaque: @simd(u32, 4) = .[1, 1, 1, 1]
+```hb
+dataset := f32.[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 main := fn(): uint {
-    value := opaque
-    value += value
-    return value[0] + value[1] + value[2] + value[3]
+    // the simd vector type does not accept the length, instead you have
+    // to query the length and adjust accordingly
+    V := @simd(f32)
+
+    data := dataset
+    vect := @as(^V, @bit_cast(data.ptr))[0..data.len / @len_of(V)]
+
+    for v := vect {
+        v.* *= v.*
+    }
+
+    $if @len_of(V) > 1 {
+        for s := data[vect.len * @len_of(V)..] {
+            s.* *= s.*
+        }
+    }
+
+    data2 := dataset
+    for v := data2[..] {
+        v.* *= v.*
+    }
+
+    for i := 1.., a := data[..], b := data2[..] {
+        if a.* != b.* return i
+    }
+
+    return 0
 }
 ```
 
@@ -2965,27 +2985,6 @@ main := fn(): uint {
 }
 ```
 
-#### simd 1
-```!hb
-main := fn(): uint {
-    // the simd vector type does not accept the length, instead you have
-    // to query the length and adjust accordingly
-    V := @simd(f32)
-
-    data := f32.[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    vect := @as(^V, @bit_cast(data.ptr))[0..data.len / @len_of(V)]
-
-    for v := vect {
-        v.* *= v.*
-    }
-
-    $if @len_of(V) > 1 {
-        for s := data[vect.len * @len_of(V)..] {
-            s.* *= s.*
-        }
-    }
-}
-```
 
 ## progress
 
