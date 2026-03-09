@@ -215,6 +215,11 @@ pub fn addBitIndexLoad(
     return red;
 }
 
+pub fn addSplat(self: *Builder, sloc: graph.Sloc, ty: DataType, value: *BuildNode) *BuildNode {
+    if (ty.laneCount() == 1) return value;
+    return self.func.addNode(.Splat, sloc, ty, &.{ null, value }, .{});
+}
+
 pub fn addGetLane(self: *Builder, sloc: graph.Sloc, ty: DataType, base: *BuildNode, idx: u8) *BuildNode {
     return self.func.addNode(.GetLane, sloc, ty, &.{ null, base }, .{ .idx = idx });
 }

@@ -1710,16 +1710,19 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
                 return self.report(tok.idx, "expected integer, got {}", .{oper.ty});
             }
 
-            if (tok.kind == .@"-" and !oper.ty.isBuiltin(.isFloat) and
-                !oper.ty.isBuiltin(.isInteger))
+            if (tok.kind == .@"-" and
+                !oper.ty.isBuiltin(.isFloat) and
+                !oper.ty.isSimd(.isFloat) and
+                !oper.ty.isBuiltin(.isInteger) and
+                !oper.ty.isSimd(.isInteger))
             {
                 return self.report(tok.idx, "expected float or integer, got {}", .{oper.ty});
             }
 
             break :neg .value(oper.ty, self.bl.addUnOp(
                 slc,
-                if (tok.kind == .@"~") .bnot else if (oper.ty.isBuiltin(.isFloat)) .fneg else .ineg,
-                Abi.categorizeBuiltinUnwrapped(oper.ty.data().Builtin),
+                if (tok.kind == .@"~") .bnot else if (oper.ty.isBuiltin(.isFloat) or oper.ty.isSimd(.isFloat)) .fneg else .ineg,
+                self.types.abi.categorizeAssumeReg(oper.ty, self.types),
                 oper.load(tok.idx.next(), self),
             ));
         },
@@ -2954,6 +2957,18 @@ pub fn directive(
             ));
         },
         .simd => self.tyLit(tok.idx, Types.Simd{ .lane = (try self.typ(lex)).data().Builtin }),
+        .splat => {
+            const ty = try self.expectDestType(.splat, tok.idx, ctx.ty);
+
+            if (ty.data() != .Simd) return self.report(tok.idx, "{} is not a @simd type", .{ty});
+
+            const value = try self.expr(.{ .ty = .nany(ty.data().Simd.lane) }, lex);
+            break :d .value(ty, self.bl.addSplat(
+                self.sloc(tok.idx),
+                self.types.abi.categorizeAssumeReg(ty, self.types),
+                value.load(tok.idx, self),
+            ));
+        },
         .as => {
             const ty = try self.typ(lex);
             try self.expectNext(iter);

@@ -2259,18 +2259,21 @@ main := fn(): uint {
     vect := @as(^V, @bit_cast(data.ptr))[0..data.len / @len_of(V)]
 
     for v := vect {
-        v.* *= v.* + v.*
+        v.* *= v.* + v.* + @splat(1) - v.* / @splat(2)
+        v.* = -v.*
     }
 
     $if @len_of(V) > 1 {
         for s := data[vect.len * @len_of(V)..] {
-            s.* *= s.* + s.*
+            s.* *= s.* + s.* + 1 - s.* / 2
+            s.* = -s.*
         }
     }
 
     data2 := dataset
     for v := data2[..] {
-        v.* *= v.* + v.*
+        v.* *= v.* + v.* + 1 - v.* / 2
+        v.* = -v.*
     }
 
     for i := 1.., a := data[..], b := data2[..] {
@@ -3096,17 +3099,17 @@ main := fn(): uint {
   - [x] `@as(<ty>, <expr>): <ty>`
   - [x] `@int_cast(<int>): <infered-int>`
   - [x] `@size_of(<ty>): uint`
-    - [x] comptime interrupt
+    - [ ] comptime interrupt
   - [x] `@align_of(<ty>): uint`
-    - [x] comptime interrupt
+    - [ ] comptime interrupt
   - [x] `@bit_cast(<expr>): <infered-ty>`
   - [x] `@ecall(...<expr>): <infered-ty>`
   - [x] `@embed(<string>): [len]u8`
   - [x] ? `@inline(<func>, ...<args>): <func>.ret`
   - [x] `@len_of(<ty>): uint`
-    - [x] comptime interrupt
+    - [ ] comptime interrupt
   - [x] `@kind_of(<ty>): u8`
-    - [x] comptime interrupt
+    - [ ] comptime interrupt
   - [x] `@filed_name(<ty>, i)`
     - [ ] comptime interrupt
   - [x] `@Any(<fn(type): void/type>..): type`
@@ -3114,14 +3117,14 @@ main := fn(): uint {
   - [x] `@error(...<expr>): never`
   - [x] `@compiles(<expr>): bool`
   - [x] `@ChildOf(<ty>): type`
-    - [x] comptime interrupt
+    - [ ] comptime interrupt
   - [x] `@target("<pat>"): bool`
   - [x] `@is_comptime(): bool`
   - [x] `@int_to_float(<int>): <float>`
   - [x] `@float_to_int(<float>): int`
   - [x] `@float_cast(<float>): <float>`
   - [x] `@name_of(<ty>): []u8`
-    - [x] comptime interrupt
+    - [ ] comptime interrupt
   - [x] `@import("<name>")`
   - [x] `@export("<name>", <fn>)`
   - [x] `@frame_pointer(): uint`
@@ -3129,6 +3132,8 @@ main := fn(): uint {
   - [ ] ? `@recall(..<args>): never`
   - [x] `@has_decl(<ty>, "<name>")`
     - [ ] comptime interrupt
+  - [ ] `@simd(<ty>): type`
+  - [ ] `@splat(<value>): @simd(<ty>)`
 - [ ] optimizations
   - [ ] assumptions
   - [ ] memory

@@ -803,6 +803,7 @@ pub fn inPlaceSlot(node: *Func.Node) ?usize {
             .fneg, .fcst, .sext, .uext, .cast, .itf, .fti => return null,
         },
         .GetLane => 0,
+        .Splat => 0,
         else => null,
     };
 }
@@ -1060,14 +1061,20 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             },
             .Poison => {},
             inline .F32, .F64 => |extra| {
-                const idx = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "index");
-                const sym = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "s");
+                const dst = self.getReg(instr);
+                if (extra.imm == 0.0) {
+                    self.emitRex(dst, dst, .rax, 0);
+                    self.emitBytes(&.{ 0x66, 0x0F, 0xEF, Reg.Mod.direct.rm(dst, dst) });
+                } else {
+                    const idx = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "index");
+                    const sym = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "s");
 
-                const ty = @field(graph.DataType, @typeName(@TypeOf(extra.imm)));
-                self.emitMemStoreOrLoad(ty, self.getReg(instr), .rip, null, .load);
-                const res = try idx.getOrPut(self.gpa, extra.imm);
-                const dis: i31 = @intCast(@intFromPtr(res.key_ptr) - @intFromPtr(idx.entries.bytes));
-                try self.mach.out.addReloc(self.gpa, sym, .@"4", dis - 4, 4);
+                    const ty = @field(graph.DataType, @typeName(@TypeOf(extra.imm)));
+                    self.emitMemStoreOrLoad(ty, dst, .rip, null, .load);
+                    const res = try idx.getOrPut(self.gpa, extra.imm);
+                    const dis: i31 = @intCast(@intFromPtr(res.key_ptr) - @intFromPtr(idx.entries.bytes));
+                    try self.mach.out.addReloc(self.gpa, sym, .@"4", dis - 4, 4);
+                }
             },
             .MemCpy => {
                 // call id
@@ -1130,10 +1137,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitByte(if (instr.data_type == .f32) 0xf3 else 0xf2);
                         self.emitRex(lhs, .rsp, .rax, instr.data_type.size());
                         self.emitBytes(&.{ 0x0f, if (lhs_stack) 0x11 else 0x10 });
-                    } else {
-                        std.debug.assert(instr.data_type.isInt());
+                    } else if (instr.data_type.isInt()) {
                         self.emitRex(lhs, .rsp, .rax, instr.data_type.size());
                         self.emitByte(if (lhs_stack) 0x89 else 0x8b);
+                    } else if (instr.data_type.repr().size == .v128) {
+                        switch (instr.data_type.repr().tag) {
+                            .f32 => {},
+                            .f64 => self.emitByte(0x66),
+                            else => self.emitByte(0xf3),
+                        }
+                        self.emitRex(lhs, .rsp, .rax, instr.data_type.size());
+                        self.emitBytes(&.{ 0x0f, if (lhs_stack) 0x11 else 0x10 });
                     }
 
                     const offset = self.stackOffset(rhs, tag);
@@ -1819,6 +1833,30 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitByte(extra.idx | extra.idx << 2 |
                     extra.idx << 4 | extra.idx << 6);
             },
+            .Splat => {
+                std.debug.assert(instr.data_type.laneCount() != 1);
+
+                const dst = self.getReg(instr);
+                const src = self.getReg(inps[0]);
+
+                std.debug.assert(dst == src);
+
+                if (instr.data_type.repr().tag == .f64) self.emitByte(0xF2);
+
+                self.emitRex(dst, src, .no_index, instr.data_type.size());
+                self.emitBytes(&.{0x0F});
+                self.emitByte(switch (instr.data_type.repr().tag) {
+                    .i8 => unreachable, // TODO
+                    .i16 => unreachable, // TODO
+                    .i32 => 0x70,
+                    .i64 => 0x6C,
+                    .f32 => 0xC6,
+                    .f64 => 0x12,
+                    else => unreachable,
+                });
+                self.emitByte(Reg.Mod.direct.rm(dst, src));
+                if (instr.data_type.repr().tag == .f32) self.emitByte(0x00);
+            },
             .Arg, .Ret, .Mem, .Never, .Jmp, .Return => {},
             else => {
                 utils.panic("{f}", .{instr});
@@ -2273,7 +2311,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                         &ops,
                     );
                     if (!zydis.ZYAN_SUCCESS(status)) {
-                        utils.panic("{any}", .{bytes[uaddr..][0..5]});
+                        utils.panic("{x}", .{bytes[uaddr..][0..5]});
                     }
 
                     var buf: [256]u8 = undefined;

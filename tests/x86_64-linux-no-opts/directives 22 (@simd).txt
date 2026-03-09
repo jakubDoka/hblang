@@ -1,20 +1,30 @@
 main:
 	sub rsp, 0x60
-	mov rdx, 0x28
 	lea rsi, [0x0000000000000007] ; directives 22 (@simd).dataset
+	mov rdx, 0x28
 	lea rdi, [rsp+0x10]
 	call :memcpy
 	mov qword ptr [rsp+0x08], 0x02
 	lea rax, [rsp+0x10]
 	mov [rsp], rax
+	movss xmm7, dword ptr [0x0000000000000008] ; f32s
 	lea rcx, [rsp+0x30]
+	shufps xmm7, xmm7, 0x00
+	movss xmm6, dword ptr [0x0000000000000008] ; f32s
+	shufps xmm6, xmm6, 0x00
 	lea rax, [rsp+0x10]
 1:	cmp rax, rcx
 	jnb :0
-	movups xmm0, [rax]
-	movups xmm1, xmm0
-	addps xmm1, xmm0
-	mulps xmm0, xmm1
+	movups xmm1, [rax]
+	movups xmm0, xmm1
+	addps xmm0, xmm1
+	addps xmm0, xmm6
+	movups xmm2, xmm1
+	divps xmm2, xmm7
+	subps xmm0, xmm2
+	mulps xmm1, xmm0
+	pxor xmm0, xmm0
+	subps xmm0, xmm1
 	movups [rax], xmm0
 	add rax, 0x10
 	jmp :1
@@ -27,25 +37,41 @@ main:
 	lea rax, [rcx+rdx*4]
 3:	cmp rcx, rax
 	jnb :2
-	movss xmm0, dword ptr [rcx]
-	movss xmm1, xmm0
-	addss xmm1, xmm0
-	mulss xmm0, xmm1
+	movss xmm1, dword ptr [rcx]
+	movss xmm0, xmm1
+	addss xmm0, xmm1
+	movss xmm2, dword ptr [0x0000000000000008] ; f32s
+	addss xmm0, xmm2
+	movss xmm6, xmm1
+	movss xmm2, dword ptr [0x0000000000000008] ; f32s
+	divss xmm6, xmm2
+	subss xmm0, xmm6
+	mulss xmm1, xmm0
+	pxor xmm0, xmm0
+	subss xmm0, xmm1
 	movss [rcx], xmm0
 	add rcx, 0x04
 	jmp :3
 2:	lea rdi, [rsp+0x38]
-	mov rdx, 0x28
 	lea rsi, [0x0000000000000007] ; directives 22 (@simd).dataset
+	mov rdx, 0x28
 	call :memcpy
 	lea rcx, [rsp+0x60]
 	lea rax, [rsp+0x38]
 5:	cmp rax, rcx
 	jnb :4
-	movss xmm0, dword ptr [rax]
-	movss xmm1, xmm0
-	addss xmm1, xmm0
-	mulss xmm0, xmm1
+	movss xmm1, dword ptr [rax]
+	movss xmm0, xmm1
+	addss xmm0, xmm1
+	movss xmm2, dword ptr [0x0000000000000008] ; f32s
+	addss xmm0, xmm2
+	movss xmm6, xmm1
+	movss xmm2, dword ptr [0x0000000000000008] ; f32s
+	divss xmm6, xmm2
+	subss xmm0, xmm6
+	mulss xmm1, xmm0
+	pxor xmm0, xmm0
+	subss xmm0, xmm1
 	movss [rax], xmm0
 	add rax, 0x04
 	jmp :5

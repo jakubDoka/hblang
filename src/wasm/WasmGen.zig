@@ -1010,7 +1010,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         },
         .UnOp => |extra| up: {
             //self.emitLocalLoad(inps[0]);
-            const op_ty = dataTypeToWasmType(inps[0].data_type);
+            const op_ty = inps[0].data_type;
             const op_code: u8 = switch (extra.op) {
                 .sext => switch (inps[0].data_type) {
                     .i8 => switch (instr.data_type) {
@@ -1105,18 +1105,19 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .fcst => switch (instr.data_type) {
                     .f32 => opb(.f32_demote_f64),
                     .f64 => opb(.f32_promote_f64),
-                    else => utils.panic("{}", .{op_ty}),
+                    else => utils.panic("{f}", .{op_ty}),
                 },
                 .not => switch (op_ty) {
                     .i32 => opb(.i32_eqz),
                     .i64 => opb(.i64_eqz),
-                    else => utils.panic("{}", .{op_ty}),
+                    else => utils.panic("{f}", .{op_ty}),
                 },
                 .ineg, .bnot => unreachable,
                 .fneg => switch (op_ty) {
                     .f32 => opb(.f32_neg),
                     .f64 => opb(.f64_neg),
-                    else => utils.panic("{}", .{op_ty}),
+                    _ => opb(.prefix_fd),
+                    else => utils.panic("{f}", .{op_ty}),
                 },
                 .cast => switch (op_ty) {
                     .i32 => switch (instr.data_type) {
@@ -1137,10 +1138,21 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                         .i64 => opb(.i64_reinterpret_f64),
                         else => utils.panic("{f}", .{instr.data_type}),
                     },
-                    else => utils.panic("{}", .{op_ty}),
+                    else => utils.panic("{f}", .{op_ty}),
                 },
             };
             try self.ctx.buf.writer.writeByte(op_code);
+
+            if (op_code == 0xFD) {
+                try self.ctx.buf.writer.writeUleb128(switch (extra.op) {
+                    inline .fneg => switch (op_ty.repr().tag) {
+                        .f32 => eopw(.f32x4_neg),
+                        .f64 => eopw(.f64x2_neg),
+                        else => unreachable,
+                    },
+                    else => unreachable,
+                });
+            }
 
             self.emitLocalStore(instr);
         },
@@ -1200,40 +1212,31 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             };
             try self.ctx.buf.writer.writeByte(op_code);
 
-            switch (extra.op) {
-                .fadd => switch (instr.data_type) {
-                    .f32, .f64 => {},
-                    _ => {
-                        std.debug.assert(instr.data_type.repr().size == .v128);
-                        try self.ctx.buf.writer.writeUleb128(
-                            switch (instr.data_type.repr().tag) {
-                                .f32 => eopw(.f32x4_add),
-                                .f64 => eopw(.f64x2_add),
-                                else => unreachable,
-                            },
-                        );
+            if (op_code == 0xFD) {
+                try self.ctx.buf.writer.writeUleb128(switch (extra.op) {
+                    inline .fadd, .fsub, .fmul, .fdiv => |t| switch (instr.data_type.repr().tag) {
+                        .f32 => eopw(@field(object.EOp, "f32x4_" ++ @tagName(t)[1..])),
+                        .f64 => eopw(@field(object.EOp, "f64x2_" ++ @tagName(t)[1..])),
+                        else => unreachable,
                     },
                     else => unreachable,
-                },
-                .fmul => switch (instr.data_type) {
-                    .f32, .f64 => {},
-                    _ => {
-                        std.debug.assert(instr.data_type.repr().size == .v128);
-                        try self.ctx.buf.writer.writeUleb128(
-                            switch (instr.data_type.repr().tag) {
-                                .f32 => eopw(.f32x4_mul),
-                                .f64 => eopw(.f64x2_mul),
-                                else => unreachable,
-                            },
-                        );
-                    },
-                    else => unreachable,
-                },
-                else => {
-                    std.debug.assert(op_code != 0xfd);
-                },
+                });
             }
 
+            self.emitLocalStore(instr);
+        },
+        .Splat => {
+            std.debug.assert(instr.data_type.laneCount() != 1);
+            try self.ctx.buf.writer.writeByte(opb(.prefix_fd));
+            try self.ctx.buf.writer.writeUleb128(switch (instr.data_type.repr().tag) {
+                .i8 => eopw(.i8x16_splat),
+                .i16 => eopw(.i16x8_splat),
+                .i32 => eopw(.i32x4_splat),
+                .i64 => eopw(.i64x2_splat),
+                .f32 => eopw(.f32x4_splat),
+                .f64 => eopw(.f64x2_splat),
+                else => unreachable,
+            });
             self.emitLocalStore(instr);
         },
         .WStore => |extra| {
@@ -1394,15 +1397,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         },
         .Jmp => {
             const region = instr.outputs()[0];
-            //for (region.get().outputs()) |out| {
-            //    if (out.get().isDataPhi()) {
-            //        try self.ctx.buf.writer.writeByte(opb(.local_get));
-            //        try self.ctx.buf.writer.writeUleb128(self.regOf(out.get().inputs()[1 + region.pos()]));
-            //        try self.ctx.buf.writer.writeByte(opb(.local_set));
-            //        try self.ctx.buf.writer.writeUleb128(self.regOf(out.get()));
-            //    }
-            //}
-
             const pred = instr.inputs()[0].?;
 
             if (region.get().kind == .Loop and region.pos() == 1) {

@@ -774,6 +774,7 @@ pub const builtin = enum {
     pub const GetLane = extern struct {
         idx: u8,
     };
+    pub const Splat = extern struct {};
 };
 
 pub const LocalKind = enum(u2) { variable, argument, parameter };

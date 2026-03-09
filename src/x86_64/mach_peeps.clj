@@ -129,9 +129,18 @@
   (CInt (:value dis & {Backend.clampI32(dis)}))
 ) : (StackLea (:dis {@intCast(dis)}) c l)
 
+(Splat _ (:data_type {hb.backend.graph.DataType.vec(.f32, .v128)})
+       (F32:n _ (:imm {0.0}))) : n
+(Splat _ (:data_type {hb.backend.graph.DataType.vec(.f64, .v128)})
+       (F64:n _ (:imm {0.0}))) : n
+
 (UnOp ?c (:op .fneg) (:data_type .f32) a) :
   (BinOp c (:op .fsub) (F32 c (:imm {0.0})) a)
 (UnOp ?c (:op .fneg) (:data_type .f64) a) :
+  (BinOp c (:op .fsub) (F64 c (:imm {0.0})) a)
+(UnOp ?c (:op .fneg) (:data_type {hb.backend.graph.DataType.vec(.f32, .v128)}) a) :
+  (BinOp c (:op .fsub) (F32 c (:imm {0.0})) a)
+(UnOp ?c (:op .fneg) (:data_type {hb.backend.graph.DataType.vec(.f64, .v128)}) a) :
   (BinOp c (:op .fsub) (F64 c (:imm {0.0})) a)
 
 (CInt ?c (:data_type .f64) (:value value)) : (F64 (:imm {@bitCast(value)}) c)
