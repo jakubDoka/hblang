@@ -1549,12 +1549,11 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const lhs = self.getReg(inps[0]);
                 const rhs = self.getReg(inps[1]);
 
-                if (op_dt.repr().size == .v128 and op_dt.repr().tag == .i8) {
+                if (op_dt.repr().size == .v128 and op_dt.repr().tag == .i8 and op == .eq) {
 
                     // PCMPEQB lhs, rhs
                     self.emitByte(0x66);
-                    const rex_byte = Reg.rex(lhs, rhs, .rax, false);
-                    if (rex_byte != 0x40) self.emitByte(rex_byte);
+                    self.emitRex(lhs, rhs, .rax, 0);
                     self.emitBytes(&.{ 0x0f, 0x74, Reg.Mod.direct.rm(lhs, rhs) });
                 } else switch (op) {
                     .ushr, .ishl, .sshr => {
