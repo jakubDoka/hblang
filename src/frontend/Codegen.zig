@@ -2250,9 +2250,10 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
 
             var cond_bl = self.addIfAndBeginThen(slc, cond);
 
-            if (!self.branchExpr(lex)) {
-                loop.state.runtime.bl.joinContinues(&self.bl);
+            _ = self.branchExpr(lex);
+            loop.state.runtime.bl.joinContinues(&self.bl);
 
+            if (!self.bl.isUnreachable()) {
                 for (iters.items) |vidx| {
                     const slot: *Variable = &self.vars.items(.variable)[vidx];
 

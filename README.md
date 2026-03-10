@@ -3009,7 +3009,8 @@ main := fn(): uint {
         query: V = @splat(value)
         for i := 0.., v := vectorized {
             mask := @bitmask(v.* == query)
-            if mask != 0 return i * @len_of(V) + @count_trailing_zeros(mask)
+            if mask == 0 continue
+            return i * @len_of(V) + @count_trailing_zeros(mask)
         }
 
         $if @size_of(V) > 1 {

@@ -9,23 +9,23 @@ main.index_of_scalar[=u8]:
 	shl r8, 0x04
 	mov rax, rsi
 	add rax, r8
-3:	cmp rsi, rax
+2:	cmp rsi, rax
 	jnb :0
 	movups xmm0, [rsi]
 	pcmpeqb xmm0, xmm1
 	pmovmskb r9d, xmm0
 	cmp r9w, r11w
-	jz :1
-	mov byte ptr [rdi+0x08], 0x01
+	jnz :1
+	inc r10
+	add rsi, 0x10
+	jmp :2
+1:	mov byte ptr [rdi+0x08], 0x01
 	bsf ax, r9w
 	movzx rax, al
 	shl r10, 0x04
 	add r10, rax
 	mov [rdi], r10
 	jmp :6
-1:	inc r10
-	add rsi, 0x10
-	jmp :3
 0:	sub rdx, r8
 	mov rsi, rax
 	add rsi, rdx

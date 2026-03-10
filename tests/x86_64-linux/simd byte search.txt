@@ -16,21 +16,21 @@ main:
 	movd xmm1, ecx
 	pshufb xmm1, xmm0
 	lea rsi, [rsp]
-5:	cmp rsi, rdi
+4:	cmp rsi, rdi
 	jnb :2
 	movups xmm0, [rsi]
 	pcmpeqb xmm0, xmm1
 	pmovmskb edx, xmm0
 	cmp dx, r8w
-	jz :3
-	bsf dx, dx
+	jnz :3
+	inc rax
+	add rsi, 0x10
+	jmp :4
+3:	bsf dx, dx
 	movzx rdx, dl
 	shl rax, 0x04
 	add rax, rdx
 	jmp :8
-3:	inc rax
-	add rsi, 0x10
-	jmp :5
 2:	mov rax, 0x30
 8:	cmp rdi, r9
 	jnb :6
