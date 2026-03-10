@@ -48,9 +48,12 @@ const VTable = struct {
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
 
-pub const SimdSpec = struct {
+pub const TargetSpec = struct {
     max_width: u16 = 0,
     allowed_types: std.EnumSet(graph.DataType),
+    instrinsic_support: packed struct {
+        ctz: bool,
+    },
 };
 
 pub const Check = struct {
@@ -1460,11 +1463,14 @@ pub const SupportedTarget = enum {
         };
     }
 
-    pub fn toSimdSpec(triple: SupportedTarget) SimdSpec {
+    pub fn toSpec(triple: SupportedTarget) TargetSpec {
         return switch (triple) {
             .@"hbvm-ableos" => .{
                 .max_width = 0,
                 .allowed_types = .initEmpty(),
+                .instrinsic_support = .{
+                    .ctz = false,
+                },
             },
             .@"x86_64-windows" => unreachable, // TODO
             .@"x86_64-linux" => .{
@@ -1477,6 +1483,9 @@ pub const SupportedTarget = enum {
                     .f32 = true,
                     .f64 = true,
                 }),
+                .instrinsic_support = .{
+                    .ctz = true,
+                },
             },
             .@"wasm-freestanding" => .{
                 .max_width = 16,
@@ -1488,6 +1497,9 @@ pub const SupportedTarget = enum {
                     .f32 = true,
                     .f64 = true,
                 }),
+                .instrinsic_support = .{
+                    .ctz = true,
+                },
             },
         };
     }

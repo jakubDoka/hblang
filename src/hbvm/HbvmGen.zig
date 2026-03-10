@@ -170,6 +170,8 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
         if (op == .uext and inps[1].?.data_type == .i64) {
             return inps[1].?;
         }
+
+        if (op == .bitmask) return inps[1].?;
     }
 
     if (node.kind == .GetLane) {

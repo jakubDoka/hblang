@@ -2995,9 +2995,6 @@ expectations := .{
 }
 
 main := fn(): uint {
-    // TODO
-    $if @target("hbvm-ableos") return 45
-
     arr: [50]u8 = idk
     for a := arr[..] a.* = 0
     arr[45] = 1

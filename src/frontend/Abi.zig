@@ -8,9 +8,9 @@ const Id = Types.Id;
 const Abi = @This();
 
 cc: graph.CallConv,
-simd: root.backend.Machine.SimdSpec,
+spec: root.backend.Machine.TargetSpec,
 
-pub const Spec = ?[]graph.AbiParam;
+pub const Spec = ?[]const graph.AbiParam;
 pub const max_elems = 2;
 
 pub const Buf = struct {

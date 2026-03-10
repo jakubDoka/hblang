@@ -54,6 +54,7 @@ builtins: struct {
     union_field: StructId,
     struct_field: StructId,
     source_loc: StructId,
+    ctz: FuncId,
 },
 handlers: std.EnumArray(Handler, FuncId) = .initFill(.invalid),
 handler_signatures: std.EnumArray(Handler, FuncTyId),
@@ -512,8 +513,8 @@ pub const Simd = packed struct {
 
     pub fn laneCount(self: Simd, types: *Types) u16 {
         const bl = (Abi.categorizeBuiltin(self.lane) catch return 1) orelse return 1;
-        if (!types.abi.simd.allowed_types.contains(bl)) return 1;
-        return types.abi.simd.max_width >> bl.sizePow();
+        if (!types.abi.spec.allowed_types.contains(bl)) return 1;
+        return types.abi.spec.max_width >> bl.sizePow();
     }
 };
 
@@ -1787,7 +1788,7 @@ pub fn init(
             .emit_global_reloc_offsets = true,
         },
         .loader = loader,
-        .abi = .{ .cc = target.toCallConv(), .simd = target.toSimdSpec() },
+        .abi = .{ .cc = target.toCallConv(), .spec = target.toSpec() },
         .backend = backend,
         .target = @tagName(target),
         .tmp = undefined,
@@ -1869,12 +1870,16 @@ pub fn init(
         value = gen.lookupIdent(gen.scope, "SrcLoc").?;
         const source_loc = gen.peval(.start, value, Types.Id) catch unreachable;
 
+        value = gen.lookupIdent(gen.scope, "count_trailing_zeroes").?;
+        const ctz = gen.peval(.start, value, Types.FuncId) catch unreachable;
+
         self.builtins = .{
             .type_union = type_union.data().Union,
             .enum_field = fns.getField(&gen, type_union, "Enum"),
             .union_field = fns.getField(&gen, type_union, "Union"),
             .struct_field = fns.getField(&gen, type_union, "Struct"),
             .source_loc = source_loc.data().Struct,
+            .ctz = ctz,
         };
 
         const @"^u8" = self.pointerTo(.u8);

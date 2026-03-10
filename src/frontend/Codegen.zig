@@ -2994,12 +2994,32 @@ pub fn directive(
             if (!value.ty.isBuiltin(.isInteger) and value.ty != .bool) {
                 return self.report(tok.idx, "expected integer, got {}", .{value.ty});
             }
-            break :d .value(.u8, self.bl.addUnOp(
-                self.sloc(tok.idx),
-                .ctz,
-                .i8,
-                value.load(tok.idx, self),
-            ));
+
+            if (self.types.abi.spec.instrinsic_support.ctz) {
+                break :d .value(.u8, self.bl.addUnOp(
+                    self.sloc(tok.idx),
+                    .ctz,
+                    .i8,
+                    value.load(tok.idx, self),
+                ));
+            } else {
+                var tmp = utils.Arena.scrath(null);
+                defer tmp.deinit();
+
+                var call = self.bl.addCall(
+                    tmp.arena,
+                    self.sloc(tok.idx),
+                    self.types.abi.cc,
+                    .{ .sym = @intFromEnum(self.types.builtins.ctz) },
+                );
+
+                const size = self.bl.addIntImm(self.sloc(tok.idx), .i8, value.ty.size(self.types) * 8);
+
+                call.pushArg(&self.bl, self.sloc(tok.idx), .{ .Reg = .i64 }, value.load(tok.idx, self), 0);
+                call.pushArg(&self.bl, self.sloc(tok.idx), .{ .Reg = .i64 }, size, 0);
+
+                break :d try self.endCall(&call, tok.idx, &[_]graph.AbiParam{.{ .Reg = .i8 }}, .u8, undefined);
+            }
         },
         .as => {
             const ty = try self.typ(lex);
@@ -5153,7 +5173,7 @@ pub fn endCall(
     self: *Codegen,
     call: *BBuilder.Call,
     pos: File.TokenIdx,
-    ret_cata: ?[]graph.AbiParam,
+    ret_cata: ?[]const graph.AbiParam,
     ret: Types.Id,
     slot: *BNode,
 ) !Value {
@@ -5162,7 +5182,7 @@ pub fn endCall(
 
     const rcta = ret_cata orelse return .never;
 
-    if ((Abi{ .cc = call.cc, .simd = undefined }).isRetByRef(rcta)) {
+    if ((Abi{ .cc = call.cc, .spec = undefined }).isRetByRef(rcta)) {
         std.debug.assert(@intFromPtr(slot) != 0xaaaaaaaaaaaaaaaa);
         return .ptr(ret, slot);
     }
