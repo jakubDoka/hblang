@@ -5,63 +5,63 @@ intrusive linked list.List[=.Task].init:
 	ret
 intrusive linked list.List[=.Task].pop_front:
 	sub rsp, 0x08
-	mov rcx, rdi
-	xor rax, rax
-	mov rdx, rcx
-	mov rdx, [rdx]
-	cmp rdx, 0x00
+	mov rax, rdi
+	mov rcx, rax
+	mov rcx, [rcx]
+	cmp rcx, 0x00
 	jnz :0
+	xor rax, rax
 	jmp :1
-0:	mov rdx, rcx
-	mov rdi, [rdx]
-	mov rdx, [rdi+0x08]
-	cmp rdx, rax
+0:	mov rcx, rax
+	mov rdi, [rcx]
+	mov rcx, [rdi+0x08]
+	cmp rcx, 0x00
 	jz :2
-	mov rax, [rdi+0x08]
-	mov qword ptr [rax], 0x00
+	mov rcx, [rdi+0x08]
+	mov qword ptr [rcx], 0x00
 	jmp :3
-2:	mov rax, rcx
-	mov qword ptr [rax+0x08], 0x00
+2:	mov rcx, rax
+	mov qword ptr [rcx+0x08], 0x00
 3:	mov rdx, [rdi+0x08]
-	mov rax, rcx
-	mov [rax], rdx
+	mov rcx, rax
+	mov [rcx], rdx
 	mov qword ptr [rdi], 0x00
 	mov qword ptr [rdi+0x08], 0x00
-	mov rax, rcx
-	mov rax, [rax+0x10]
-	dec rax
-	mov [rcx+0x10], rax
+	mov rcx, rax
+	mov rcx, [rcx+0x10]
+	dec rcx
+	mov [rax+0x10], rcx
 	call :intrusive linked list.List[=.Task].item_of
 1:	add rsp, 0x08
 	ret
 intrusive linked list.List[=.Task].pop_back:
 	sub rsp, 0x08
-	mov rcx, rdi
-	xor rax, rax
-	mov rdx, rcx
-	mov rdx, [rdx+0x08]
-	cmp rdx, 0x00
+	mov rax, rdi
+	mov rcx, rax
+	mov rcx, [rcx+0x08]
+	cmp rcx, 0x00
 	jnz :0
+	xor rax, rax
 	jmp :1
-0:	mov rdx, rcx
-	mov rdi, [rdx+0x08]
-	mov rdx, [rdi]
-	cmp rdx, rax
+0:	mov rcx, rax
+	mov rdi, [rcx+0x08]
+	mov rcx, [rdi]
+	cmp rcx, 0x00
 	jz :2
-	mov rax, [rdi]
-	mov qword ptr [rax+0x08], 0x00
+	mov rcx, [rdi]
+	mov qword ptr [rcx+0x08], 0x00
 	jmp :3
-2:	mov rax, rcx
-	mov qword ptr [rax], 0x00
+2:	mov rcx, rax
+	mov qword ptr [rcx], 0x00
 3:	mov rdx, [rdi]
-	mov rax, rcx
-	mov [rax+0x08], rdx
+	mov rcx, rax
+	mov [rcx+0x08], rdx
 	mov qword ptr [rdi], 0x00
 	mov qword ptr [rdi+0x08], 0x00
-	mov rax, rcx
-	mov rax, [rax+0x10]
-	dec rax
-	mov [rcx+0x10], rax
+	mov rcx, rax
+	mov rcx, [rcx+0x10]
+	dec rcx
+	mov [rax+0x10], rcx
 	call :intrusive linked list.List[=.Task].item_of
 1:	add rsp, 0x08
 	ret
@@ -71,9 +71,8 @@ intrusive linked list.List[=.Task].remove:
 	mov rbx, rdi
 	mov rdi, rax
 	call :intrusive linked list.List[=.Task].node_of
-	xor rdx, rdx
 	mov rcx, [rax]
-	cmp rcx, rdx
+	cmp rcx, 0x00
 	jz :0
 	mov rdx, [rax]
 	mov rcx, [rax+0x08]

@@ -23,7 +23,7 @@ main:
 	xor rcx, rcx
 	jmp :5
 4:	mov rcx, [rsi+0x08]
-	cmp rcx, rax
+	cmp rcx, 0x00
 	jz :6
 	mov rcx, [rsi+0x08]
 	mov qword ptr [rcx], 0x00
@@ -46,7 +46,7 @@ main:
 	xor rdi, rdi
 	jmp :10
 9:	mov rcx, [r10+0x08]
-	cmp rcx, rax
+	cmp rcx, 0x00
 	jz :11
 	mov rcx, [r10+0x08]
 	mov qword ptr [rcx], 0x00
@@ -83,7 +83,7 @@ f:	cmp rsi, 0x06
 	xor rdx, rdx
 	jmp :18
 11:	mov rdx, [r8]
-	cmp rdx, rax
+	cmp rdx, 0x00
 	jz :19
 	mov rdx, [r8]
 	mov qword ptr [rdx+0x08], 0x00
@@ -110,7 +110,7 @@ f:	cmp rsi, 0x06
 	jmp :50
 17:	mov rsi, [rsp+0x98]
 	mov rdx, [rsp+0x90]
-	cmp rdx, rax
+	cmp rdx, 0x00
 	jz :24
 	mov [rdx+0x08], rsi
 	jmp :25
@@ -118,7 +118,7 @@ f:	cmp rsi, 0x06
 19:	mov rdx, rcx
 	mov rsi, [rsp+0x90]
 	mov rcx, [rsp+0x98]
-	cmp rcx, rax
+	cmp rcx, 0x00
 	jz :26
 	mov [rcx], rsi
 	jmp :27
@@ -165,7 +165,7 @@ f:	cmp rsi, 0x06
 	mov [rsp+0x98], rsi
 	lea rdi, [rsp+0x90]
 	mov rsi, [rsp+0x78]
-	cmp rsi, rax
+	cmp rsi, 0x00
 	jz :36
 	mov [rsi], rdi
 	jmp :36
@@ -191,19 +191,20 @@ f:	cmp rsi, 0x06
 	jz :40
 	mov [rdx], rsi
 	jmp :40
-28:	add rcx, 0x02
-	cmp rcx, 0x06
+28:	mov rax, rcx
+	add rax, 0x02
+	cmp rax, 0x06
 	jz :40
 	mov rax, 0x3C
 	jmp :50
-28:	cmp rsi, rax
+28:	cmp rsi, 0x00
 	jnz :41
 	xor rax, rax
 	jmp :42
-29:	mov rcx, [rsp+0x18]
-	cmp rcx, rax
+29:	mov rax, [rsp+0x18]
+	cmp rax, 0x00
 	jz :44
-	mov qword ptr [rcx], 0x00
+	mov qword ptr [rax], 0x00
 	jmp :44
 2c:	mov qword ptr [rsp+0x10], 0x00
 	mov qword ptr [rsp+0x18], 0x00

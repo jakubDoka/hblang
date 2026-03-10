@@ -1,133 +1,133 @@
 main:
 	sub rsp, 0x200
-	xor rax, rax
-	mov rcx, [rsp]
-	cmp rcx, rax
+	mov rax, [rsp]
+	cmp rax, 0x00
 	jz :0
 	jmp :32
-0:	mov rcx, [rsp+0x10]
-	cmp rcx, rax
+0:	mov rax, [rsp+0x10]
+	cmp rax, 0x00
 	jz :2
 	jmp :32
-2:	mov rcx, [rsp+0x30]
-	cmp rcx, rax
+2:	mov rax, [rsp+0x30]
+	cmp rax, 0x00
 	jz :3
 	jmp :32
-3:	mov rcx, [rsp+0x50]
-	cmp rcx, rax
+3:	mov rax, [rsp+0x50]
+	cmp rax, 0x00
 	jz :4
 	jmp :32
-4:	mov rcx, [rsp+0x70]
-	cmp rcx, rax
+4:	mov rax, [rsp+0x70]
+	cmp rax, 0x00
 	jz :5
 	jmp :32
-5:	mov rcx, [rsp+0x90]
-	cmp rcx, rax
+5:	mov rax, [rsp+0x90]
+	cmp rax, 0x00
 	jz :6
 	jmp :32
-6:	mov rcx, [rsp+0xB0]
-	cmp rcx, rax
+6:	mov rax, [rsp+0xB0]
+	cmp rax, 0x00
 	jz :7
 	jmp :32
-7:	mov rcx, [rsp+0xD0]
-	cmp rcx, rax
+7:	mov rax, [rsp+0xD0]
+	cmp rax, 0x00
 	jz :8
 	jmp :32
-8:	mov rcx, [rsp+0xF0]
-	cmp rcx, rax
+8:	mov rax, [rsp+0xF0]
+	cmp rax, 0x00
 	jz :9
 	jmp :32
-9:	mov rcx, [rsp+0x110]
-	cmp rcx, rax
+9:	mov rax, [rsp+0x110]
+	cmp rax, 0x00
 	jz :10
 	jmp :32
-a:	mov rcx, [rsp+0x130]
-	cmp rcx, rax
+a:	mov rax, [rsp+0x130]
+	cmp rax, 0x00
 	jz :11
 	jmp :32
-b:	mov rcx, [rsp+0x150]
-	cmp rcx, rax
+b:	mov rax, [rsp+0x150]
+	cmp rax, 0x00
 	jz :12
 	jmp :32
-c:	mov rcx, [rsp+0x170]
-	cmp rcx, rax
+c:	mov rax, [rsp+0x170]
+	cmp rax, 0x00
 	jz :13
 	jmp :32
-d:	mov rcx, [rsp+0x190]
-	cmp rcx, rax
+d:	mov rax, [rsp+0x190]
+	cmp rax, 0x00
 	jz :14
 	jmp :32
-e:	mov rcx, [rsp+0x1B0]
-	cmp rcx, rax
+e:	mov rax, [rsp+0x1B0]
+	cmp rax, 0x00
 	jz :15
 	jmp :32
-f:	mov rcx, [rsp+0x1D0]
-	cmp rcx, rax
+f:	mov rax, [rsp+0x1D0]
+	cmp rax, 0x00
 	jz :16
 	jmp :32
-10:	mov rcx, [rsp+0x1F0]
-	cmp rcx, rax
+10:	mov rax, [rsp+0x1F0]
+	cmp rax, 0x00
 	jz :17
 	jmp :32
-11:	mov rcx, [rsp+0x40]
-	cmp rcx, rax
+11:	mov rax, [rsp+0x40]
+	cmp rax, 0x00
 	jz :18
 	jmp :32
-12:	mov rcx, [rsp+0x80]
-	cmp rcx, rax
+12:	mov rax, [rsp+0x80]
+	cmp rax, 0x00
 	jz :19
 	jmp :32
-13:	mov rcx, [rsp+0xC0]
-	cmp rcx, rax
+13:	mov rax, [rsp+0xC0]
+	cmp rax, 0x00
 	jz :20
 	jmp :32
-14:	mov rcx, [rsp+0x100]
-	cmp rcx, rax
+14:	mov rax, [rsp+0x100]
+	cmp rax, 0x00
 	jz :21
 	jmp :32
-15:	mov rcx, [rsp+0x140]
-	cmp rcx, rax
+15:	mov rax, [rsp+0x140]
+	cmp rax, 0x00
 	jz :22
 	jmp :32
-16:	mov rcx, [rsp+0x180]
-	cmp rcx, rax
+16:	mov rax, [rsp+0x180]
+	cmp rax, 0x00
 	jz :23
 	jmp :32
-17:	mov rcx, [rsp+0x1C0]
-	cmp rcx, rax
+17:	mov rax, [rsp+0x1C0]
+	cmp rax, 0x00
 	jz :24
 	jmp :32
-18:	mov rcx, [rsp+0x20]
-	cmp rcx, rax
+18:	mov rax, [rsp+0x20]
+	cmp rax, 0x00
 	jz :25
 	jmp :32
-19:	mov rcx, [rsp+0xA0]
-	cmp rcx, rax
+19:	mov rax, [rsp+0xA0]
+	cmp rax, 0x00
 	jz :26
 	jmp :32
-1a:	mov rcx, [rsp+0x120]
-	cmp rcx, rax
+1a:	mov rax, [rsp+0x120]
+	cmp rax, 0x00
 	jz :27
 	jmp :32
-1b:	mov rcx, [rsp+0x1A0]
-	cmp rcx, rax
+1b:	mov rax, [rsp+0x1A0]
+	cmp rax, 0x00
 	jz :28
 	jmp :32
-1c:	mov rcx, [rsp+0x60]
-	cmp rcx, rax
+1c:	mov rax, [rsp+0x60]
+	cmp rax, 0x00
 	jz :29
 	jmp :32
-1d:	mov rcx, [rsp+0x160]
-	cmp rcx, rax
+1d:	mov rax, [rsp+0x160]
+	cmp rax, 0x00
 	jz :30
 	jmp :32
-1e:	mov rcx, [rsp+0xE0]
-	cmp rcx, rax
+1e:	mov rax, [rsp+0xE0]
+	cmp rax, 0x00
 	jz :31
 	jmp :32
-1f:	mov rcx, [rsp+0x1E0]
-	cmp rcx, rax
+1f:	mov rax, [rsp+0x1E0]
+	cmp rax, 0x00
 	jz :32
 	jmp :32
-20:	add rsp, 0x200
+20:	xor rax, rax
+	add rsp, 0x200
 	ret

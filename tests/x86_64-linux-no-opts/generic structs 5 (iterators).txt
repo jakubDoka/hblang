@@ -21,44 +21,38 @@ main.Chain[=main.Chars, =main.Chars].next:
 	push rbx
 	push rbp
 	push r12
-	push r13
-	push r14
-	mov r12, rdi
-	xor rbp, rbp
-	mov rbx, 0x01
-	mov rax, r12
+	mov rbx, rdi
+	mov rax, rbx
 	add rax, 0x18
-	mov r14, rax
-	mov rax, r12
+	mov r12, rax
+	mov rax, rbx
 	add rax, 0x08
-	mov r13, rax
-6:	mov al, [r12]
-	cmp al, bpl
+	mov rbp, rax
+6:	mov al, [rbx]
+	cmp al, 0x00
 	jnz :0
-	mov rdi, r13
+	mov rdi, rbp
 	call :main.Chars.next
 	mov rcx, rax
 	shr cx, 0x08
 	test cl, cl
 	jz :1
 	jmp :6
-1:	mov byte ptr [r12], 0x01
+1:	mov byte ptr [rbx], 0x01
 	jmp :3
-0:	cmp al, bl
+0:	cmp al, 0x01
 	jnz :4
-	mov rdi, r14
+	mov rdi, r12
 	call :main.Chars.next
 	mov rcx, rax
 	shr cx, 0x08
 	test cl, cl
 	jz :5
 	jmp :6
-5:	mov byte ptr [r12], 0x02
+5:	mov byte ptr [rbx], 0x02
 3:	jmp :6
 4:	xor rax, rax
-6:	pop r14
-	pop r13
-	pop r12
+6:	pop r12
 	pop rbp
 	pop rbx
 	ret

@@ -39,9 +39,8 @@ main:
 	mov rcx, 0x07
 	lea rdi, [rsp+0x30]
 	call :binary search.binary_search
-	xor rcx, rcx
 	mov al, [rsp+0x38]
-	cmp al, cl
+	cmp al, 0x00
 	jnz :0
 	mov rax, 0x64
 	jmp :1

@@ -1,10 +1,9 @@
 main:
-	mov rdx, 0x01
-	xor rcx, rcx
+	mov rcx, 0x01
 3:	mov al, [0x0000000000000006] ; corrupt
 	test al, al
 	jz :0
-	cmp al, cl
+	cmp al, 0x00
 	jnz :3
 	jmp :3
 3:	test al, al

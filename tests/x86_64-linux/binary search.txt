@@ -6,10 +6,9 @@ main:
 	mov qword ptr [rsp+0x18], 0x07
 	mov qword ptr [rsp+0x20], 0x09
 	mov qword ptr [rsp+0x28], 0x0B
-	xor r10, r10
 	mov rcx, 0x06
 	lea r9, [rsp]
-	mov r8, 0x07
+	xor r8, r8
 	xor rdx, rdx
 6:	cmp rdx, rcx
 	jb :0
@@ -22,17 +21,17 @@ main:
 	add rax, rsi
 	lea rdi, [r9+rax*8]
 	mov rsi, [rdi]
-	cmp rsi, r8
+	cmp rsi, 0x07
 	jnz :2
 	mov rcx, 0x01
-1:	cmp cl, r10b
+1:	cmp cl, r8b
 	jnz :4
 	mov rax, 0x64
 	jmp :4
 4:	add rsp, 0x30
 	ret
 2:	mov rsi, [rdi]
-	cmp rsi, r8
+	cmp rsi, 0x07
 	jnb :4
 	mov rdx, rax
 	inc rdx

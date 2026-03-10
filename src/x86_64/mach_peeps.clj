@@ -74,17 +74,17 @@
 (Load ?c m bs @ base dis = {bs.knownOffset()}) :
   (OffsetLoad (:dis {@intCast(dis)}) c m base)
 
+
 (If:f c (BinOp _ (:op op & .ne | .eq | .uge | .ule | .ugt
   | .ult | .sge | .sle | .sgt | .slt) a b)) :
   (CondJump (:op) (:base {f.extra(.If).*}) c a b)
 
-(If:f c (BinOp _ (:op op & .ne | .eq | .uge | .ule | .ugt
-  | .ult | .sge | .sle | .sgt | .slt) a (CInt _ (:value value & {Backend.clampI32(value)})))) :
-  (ImmCondJump (:op) (:base {f.extra(.If).*}) (:imm {@intCast(value)}) c a)
-
 (If:f c (ImmOp _ (:op op & .ne | .eq | .uge | .ule | .ugt
   | .ult | .sge | .sle | .sgt | .slt) a :imm)) :
   (ImmCondJump (:op) (:base {f.extra(.If).*}) :imm c a)
+
+(CondJump:f c (:op) a (CInt (:value value & {Backend.clampI32(value)}))) :
+  (ImmCondJump (:op) (:base {f.extra(.CondJump).base}) (:imm {@intCast(value)}) c a)
 
 (If:f c (ImmOp _ (:op op & .ugt | .ne) v (:imm 0))) :
   (If (:id {f.extra(.If).id}) c v)

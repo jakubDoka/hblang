@@ -35,7 +35,7 @@ main:
 8:	cmp rdi, r9
 	jnb :6
 	mov dl, [rdi]
-	cmp dl, cl
+	cmp dl, 0x01
 	jnz :7
 	jmp :8
 7:	inc rax

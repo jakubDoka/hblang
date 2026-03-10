@@ -6883,7 +6883,7 @@ pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config
 }
 
 pub fn runTest(name: []const u8, code: []const u8, gpa: std.mem.Allocator) !void {
-    utils.Arena.tryInitScratch(1024 * 1024);
+    utils.Arena.tryInitScratch(1024 * 1024 * 16);
 
     var scratch = utils.Arena.init(1024 * 1024 * 64);
     defer scratch.deinit();
