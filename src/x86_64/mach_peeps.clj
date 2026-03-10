@@ -133,6 +133,8 @@
        (F32:n _ (:imm {0.0}))) : n
 (Splat _ (:data_type {hb.backend.graph.DataType.vec(.f64, .v128)})
        (F64:n _ (:imm {0.0}))) : n
+(Splat ?c (:data_type {hb.backend.graph.DataType.vec(.i8, .v128)}) v) :
+  (SplatSmall c v (F64 c (:imm {0.0})))
 
 (UnOp ?c (:op .fneg) (:data_type .f32) a) :
   (BinOp c (:op .fsub) (F32 c (:imm {0.0})) a)

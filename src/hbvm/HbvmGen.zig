@@ -581,6 +581,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                             self.emit(.cp, .{ self.getReg(no), self.getReg(inps[0]) });
                         }
                     },
+                    .bitmask => unreachable, // TODO
+                    .ctz => unreachable, // TODO
                     .cast => unreachable,
                 }
             },

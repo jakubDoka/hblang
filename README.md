@@ -2988,6 +2988,45 @@ main := fn(): uint {
 }
 ```
 
+#### simd byte search
+```hb
+expectations := .{
+    return_value: 45,
+}
+
+main := fn(): uint {
+    // TODO
+    $if @target("hbvm-ableos") return 45
+
+    arr: [50]u8 = idk
+    for a := arr[..] a.* = 0
+    arr[45] = 1
+
+    index_of_scalar := fn($elem: type, slice: []elem, value: elem): ?uint {
+        $V := @simd(elem)
+
+        vectorized := @as(^V, @bit_cast(slice.ptr))[0..slice.len / @len_of(V)]
+        query: V = @splat(value)
+        for i := 0.., v := vectorized {
+            mask := @bitmask(v.* == query)
+            if mask != 0 return i * @len_of(V) + @count_trailing_zeros(mask)
+        }
+
+        $if @size_of(V) > 1 {
+            start := vectorized.len * @len_of(V)
+            for i := start.., s := slice[start..] {
+                if s.* == value return i
+            }
+        }
+
+        return null
+    }
+
+    index := index_of_scalar(u8, arr[..], 1)
+
+    return index || arr.len
+}
+```
 
 ## progress
 

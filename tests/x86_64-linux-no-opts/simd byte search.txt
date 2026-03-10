@@ -1,0 +1,68 @@
+main.index_of_scalar[=u8]:
+	pxor xmm0, xmm0
+	mov r8, rdx
+	shr r8, 0x04
+	movd xmm1, ecx
+	pshufb xmm1, xmm0
+	xor r11, r11
+	xor r10, r10
+	shl r8, 0x04
+	mov rax, rsi
+	add rax, r8
+3:	cmp rsi, rax
+	jnb :0
+	movups xmm0, [rsi]
+	pcmpeqb xmm0, xmm1
+	pmovmskb r9d, xmm0
+	cmp r9w, r11w
+	jz :1
+	mov byte ptr [rdi+0x08], 0x01
+	bsf ax, r9w
+	movzx rax, al
+	shl r10, 0x04
+	add r10, rax
+	mov [rdi], r10
+	jmp :6
+1:	inc r10
+	add rsi, 0x10
+	jmp :3
+0:	sub rdx, r8
+	mov rsi, rax
+	add rsi, rdx
+6:	cmp rax, rsi
+	jnb :4
+	mov dl, [rax]
+	cmp dl, cl
+	jnz :5
+	mov byte ptr [rdi+0x08], 0x01
+	mov [rdi], r8
+	jmp :6
+5:	inc rax
+	inc r8
+	jmp :6
+4:	mov byte ptr [rdi+0x08], 0x00
+6:	ret
+main:
+	sub rsp, 0x48
+	lea rsi, [rsp+0x10]
+	lea rcx, [rsp+0x42]
+	mov rax, rsi
+1:	cmp rax, rcx
+	jnb :0
+	mov byte ptr [rax], 0x00
+	inc rax
+	jmp :1
+0:	mov byte ptr [rsp+0x3D], 0x01
+	mov rax, 0x32
+	lea rdi, [rsp]
+	mov rcx, 0x01
+	mov rdx, rax
+	call :main.index_of_scalar[=u8]
+	mov al, [rsp+0x08]
+	test al, al
+	jz :2
+	mov rax, [rsp]
+	jmp :3
+2:	mov rax, 0x32
+3:	add rsp, 0x48
+	ret

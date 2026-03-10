@@ -997,8 +997,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .CInt => |extra| self.emitCInt(instr, extra.value),
         .Poison => self.emitCInt(instr, 0),
         .Eqz => {
-            //self.emitLocalLoad(inps[0]);
-
             const op_ty = dataTypeToWasmType(inps[0].data_type);
             try self.ctx.buf.writer.writeByte(switch (op_ty) {
                 .i32 => opb(.i32_eqz),
@@ -1009,8 +1007,8 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .UnOp => |extra| up: {
-            //self.emitLocalLoad(inps[0]);
             const op_ty = inps[0].data_type;
+            if (extra.op == .bitmask) std.debug.assert(op_ty.repr().size == .v128);
             const op_code: u8 = switch (extra.op) {
                 .sext => switch (inps[0].data_type) {
                     .i8 => switch (instr.data_type) {
@@ -1090,7 +1088,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     else => utils.panic("{f}", .{inps[0].data_type}),
                 },
                 .itf => switch (inps[0].data_type) {
-                    .i32 => switch (instr.data_type) {
+                    .i8, .i16, .i32 => switch (instr.data_type) {
                         .f32 => opb(.f32_convert_i32_s),
                         .f64 => opb(.f64_convert_i32_s),
                         else => utils.panic("{f}", .{instr.data_type}),
@@ -1108,7 +1106,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     else => utils.panic("{f}", .{op_ty}),
                 },
                 .not => switch (op_ty) {
-                    .i32 => opb(.i32_eqz),
+                    .i8, .i16, .i32 => opb(.i32_eqz),
                     .i64 => opb(.i64_eqz),
                     else => utils.panic("{f}", .{op_ty}),
                 },
@@ -1140,6 +1138,12 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     },
                     else => utils.panic("{f}", .{op_ty}),
                 },
+                .ctz => switch (op_ty) {
+                    .i8, .i16, .i32 => opb(.i32_ctz),
+                    .i64 => opb(.i64_ctz),
+                    else => utils.panic("{f}", .{op_ty}),
+                },
+                .bitmask => opb(.prefix_fd),
             };
             try self.ctx.buf.writer.writeByte(op_code);
 
@@ -1148,6 +1152,15 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     inline .fneg => switch (op_ty.repr().tag) {
                         .f32 => eopw(.f32x4_neg),
                         .f64 => eopw(.f64x2_neg),
+                        else => unreachable,
+                    },
+                    .bitmask => switch (op_ty.repr().tag) {
+                        .i8 => eopw(.i8x16_bitmask),
+                        .i16 => eopw(.i16x8_bitmask),
+                        .i32 => eopw(.i32x4_bitmask),
+                        .i64 => eopw(.i64x2_bitmask),
+                        .f32 => eopw(.i32x4_bitmask),
+                        .f64 => eopw(.i64x2_bitmask),
                         else => unreachable,
                     },
                     else => unreachable,
@@ -1185,8 +1198,10 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .ishl => utl.selectOp(op_ty, .i, .shl),
                 .ushr => utl.selectOp(op_ty, .i, .shr_u),
                 .sshr => utl.selectOp(op_ty, .i, .shr_s),
-                .eq => switch (oper_ty) {
-                    inline .i32, .i64, .f32, .f64 => |t| opb(@field(object.Op, @tagName(t) ++ "_eq")),
+                .eq => switch (inps[0].data_type) {
+                    inline .i64, .f32, .f64 => |t| opb(@field(object.Op, @tagName(t) ++ "_eq")),
+                    .i8, .i16, .i32 => opb(.i32_eq),
+                    _ => opb(.prefix_fd),
                     else => utils.panic("{}", .{oper_ty}),
                 },
                 .ne => switch (oper_ty) {
@@ -1217,6 +1232,15 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     inline .fadd, .fsub, .fmul, .fdiv => |t| switch (instr.data_type.repr().tag) {
                         .f32 => eopw(@field(object.EOp, "f32x4_" ++ @tagName(t)[1..])),
                         .f64 => eopw(@field(object.EOp, "f64x2_" ++ @tagName(t)[1..])),
+                        else => unreachable,
+                    },
+                    .eq => switch (instr.data_type.repr().tag) {
+                        .i8 => eopw(.i8x16_eq),
+                        .i16 => eopw(.i16x8_eq),
+                        .i32 => eopw(.i32x4_eq),
+                        .i64 => eopw(.i64x2_eq),
+                        .f32 => eopw(.f32x4_eq),
+                        .f64 => eopw(.f64x2_eq),
                         else => unreachable,
                     },
                     else => unreachable,

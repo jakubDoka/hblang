@@ -2969,6 +2969,37 @@ pub fn directive(
                 value.load(tok.idx, self),
             ));
         },
+        .bitmask => {
+            const value = try self.expr(ctx, lex);
+            if (!value.ty.isSimd(.isInteger)) {
+                return self.report(tok.idx, "expected simd of integer, got {}", .{value.ty});
+            }
+
+            const vty: Types.Id = switch (value.ty.data().Simd.laneCount(self.types)) {
+                0...8 => .u8,
+                16 => .u16,
+                else => return self.report(tok.idx, "TODO: support other widths", .{}),
+            };
+
+            break :d .value(vty, self.bl.addUnOp(
+                self.sloc(tok.idx),
+                .bitmask,
+                self.types.abi.categorizeAssumeReg(vty, self.types),
+                value.load(tok.idx, self),
+            ));
+        },
+        .count_trailing_zeros => {
+            const value = try self.expr(ctx, lex);
+            if (!value.ty.isBuiltin(.isInteger) and value.ty != .bool) {
+                return self.report(tok.idx, "expected integer, got {}", .{value.ty});
+            }
+            break :d .value(.u8, self.bl.addUnOp(
+                self.sloc(tok.idx),
+                .ctz,
+                .i8,
+                value.load(tok.idx, self),
+            ));
+        },
         .as => {
             const ty = try self.typ(lex);
             try self.expectNext(iter);
@@ -4237,7 +4268,17 @@ pub fn suffix(self: *Codegen, sctx: SuffixCtx, lex: *Lexer, res: *LLValue) Suffi
 
             var result: Types.Id = oper_ty;
             if (res.value.ty.data() == .Pointer) result = .int;
-            if (top.kind.isComparison()) result = .bool;
+            if (top.kind.isComparison() and result.data() != .Simd) result = .bool;
+            if (top.kind.isComparison() and result.data() == .Simd) {
+                result = .nany(Types.Simd{ .lane = switch (result
+                    .data().Simd.lane.size(self.types)) {
+                    1 => .u8,
+                    2 => .u16,
+                    4 => .u32,
+                    8 => .u64,
+                    else => unreachable,
+                } });
+            }
 
             const op = try self.lexemeToBinOp(top.idx, top.kind, oper_ty);
 

@@ -1,0 +1,50 @@
+main:
+	sub rsp, 0x40
+	lea rax, [rsp]
+	lea r9, [rsp+0x32]
+1:	cmp rax, r9
+	jnb :0
+	mov byte ptr [rax], 0x00
+	inc rax
+	jmp :1
+0:	mov byte ptr [rsp+0x2D], 0x01
+	pxor xmm0, xmm0
+	xor rax, rax
+	xor r8, r8
+	lea rdi, [rsp+0x30]
+	mov rcx, 0x01
+	movd xmm1, ecx
+	pshufb xmm1, xmm0
+	lea rsi, [rsp]
+5:	cmp rsi, rdi
+	jnb :2
+	movups xmm0, [rsi]
+	pcmpeqb xmm0, xmm1
+	pmovmskb edx, xmm0
+	cmp dx, r8w
+	jz :3
+	bsf dx, dx
+	movzx rdx, dl
+	shl rax, 0x04
+	add rax, rdx
+	jmp :8
+3:	inc rax
+	add rsi, 0x10
+	jmp :5
+2:	mov rax, 0x30
+8:	cmp rdi, r9
+	jnb :6
+	mov dl, [rdi]
+	cmp dl, cl
+	jnz :7
+	jmp :8
+7:	inc rax
+	inc rdi
+	jmp :8
+6:	xor rcx, rcx
+8:	test cl, cl
+	jz :9
+	jmp :10
+9:	mov rax, 0x32
+a:	add rsp, 0x40
+	ret

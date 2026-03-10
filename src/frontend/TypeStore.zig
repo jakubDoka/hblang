@@ -653,6 +653,10 @@ pub const Id = enum(u32) {
         };
     }
 
+    pub fn isAnySimd(self: Id, types: *Types) bool {
+        return self.data() == .Simd and self.data().Simd.laneCount(types) > 1;
+    }
+
     pub fn isSimd(
         self: Id,
         comptime pred: enum { isInteger, isUnsigned, isSigned, isFloat },

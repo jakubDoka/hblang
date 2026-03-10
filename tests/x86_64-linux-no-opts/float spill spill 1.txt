@@ -15,7 +15,7 @@ float spill spill 1.other_f:
 	ret
 main:
 	sub rsp, 0x08
-	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	pxor xmm0, xmm0
 	call :float spill spill 1.opaque_float
 	movss [rsp], xmm0
 	movss xmm0, dword ptr [0x0000000000000008] ; f32s

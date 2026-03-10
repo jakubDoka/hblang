@@ -380,6 +380,7 @@ pub const classes = enum {
         scale: u8,
     };
     pub const Cmov = extern struct {};
+    pub const SplatSmall = extern struct {};
 };
 
 pub const biased_regs = b: {
@@ -800,10 +801,10 @@ pub fn inPlaceSlot(node: *Func.Node) ?usize {
         .FusedMulAdd => 0,
         .UnOp => |extra| switch (@as(graph.UnOp, extra.op)) {
             .ineg, .bnot, .ired, .not => 0,
-            .fneg, .fcst, .sext, .uext, .cast, .itf, .fti => return null,
+            .fneg, .fcst, .sext, .uext, .cast, .itf, .fti, .ctz, .bitmask => return null,
         },
         .GetLane => 0,
-        .Splat => 0,
+        .Splat => if (node.data_type.repr().tag.isFloat()) 0 else null,
         else => null,
     };
 }
@@ -1548,7 +1549,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const lhs = self.getReg(inps[0]);
                 const rhs = self.getReg(inps[1]);
 
-                switch (op) {
+                if (op_dt.repr().size == .v128 and op_dt.repr().tag == .i8) {
+
+                    // PCMPEQB lhs, rhs
+                    self.emitByte(0x66);
+                    const rex_byte = Reg.rex(lhs, rhs, .rax, false);
+                    if (rex_byte != 0x40) self.emitByte(rex_byte);
+                    self.emitBytes(&.{ 0x0f, 0x74, Reg.Mod.direct.rm(lhs, rhs) });
+                } else switch (op) {
                     .ushr, .ishl, .sshr => {
                         std.debug.assert(lhs == dst);
                         std.debug.assert(rhs == .rcx);
@@ -1809,6 +1817,19 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitRex(dst, src, .rax, 0);
                         self.emitBytes(&.{ 0x0F, 0x5a, Reg.Mod.direct.rm(dst, src) });
                     },
+                    .ctz => {
+                        std.debug.assert(src_dt != .i8);
+                        if (src_dt == .i16) self.emitByte(0x66);
+                        self.emitRex(dst, src, .rax, src_dt.size());
+                        self.emitBytes(&.{ 0x0F, 0xBC, Reg.Mod.direct.rm(dst, src) });
+                    },
+                    .bitmask => {
+                        // PMOVMSKB dst_gpr, src_xmm
+                        self.emitByte(0x66);
+                        const rex_byte = Reg.rex(dst, src, .rax, false);
+                        if (rex_byte != 0x40) self.emitByte(rex_byte);
+                        self.emitBytes(&.{ 0x0f, 0xd7, Reg.Mod.direct.rm(dst, src) });
+                    },
                     .fneg => unreachable,
                 }
             },
@@ -1841,13 +1862,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 std.debug.assert(dst == src);
 
+                if (instr.data_type.isInt()) self.emitByte(0x66);
                 if (instr.data_type.repr().tag == .f64) self.emitByte(0xF2);
 
                 self.emitRex(dst, src, .no_index, instr.data_type.size());
                 self.emitBytes(&.{0x0F});
                 self.emitByte(switch (instr.data_type.repr().tag) {
-                    .i8 => unreachable, // TODO
-                    .i16 => unreachable, // TODO
+                    .i8 => unreachable,
+                    .i16 => unreachable, // TODD
                     .i32 => 0x70,
                     .i64 => 0x6C,
                     .f32 => 0xC6,
@@ -1856,6 +1878,23 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 });
                 self.emitByte(Reg.Mod.direct.rm(dst, src));
                 if (instr.data_type.repr().tag == .f32) self.emitByte(0x00);
+            },
+            .SplatSmall => {
+                std.debug.assert(instr.data_type == graph.DataType.vec(.i8, .v128));
+
+                const dst = self.getReg(instr);
+                const elem = self.getReg(inps[0]);
+                const mask = self.getReg(inps[1]);
+
+                // movd dst, elem
+                self.emitByte(0x66);
+                self.emitRex(dst, elem, .rax, 0);
+                self.emitBytes(&.{ 0x0f, 0x6e, Reg.Mod.direct.rm(dst, elem) });
+
+                // pshufb dst, mask
+                self.emitByte(0x66);
+                self.emitRex(dst, mask, .rax, 0);
+                self.emitBytes(&.{ 0x0F, 0x38, 0x00, Reg.Mod.direct.rm(dst, mask) });
             },
             .Arg, .Ret, .Mem, .Never, .Jmp, .Return => {},
             else => {

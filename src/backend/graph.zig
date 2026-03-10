@@ -278,6 +278,8 @@ pub const UnOp = enum(u8) {
     itf,
     fti,
     fcst,
+    ctz,
+    bitmask,
 
     pub inline fn propagatesPoison(_: UnOp) bool {
         return true;
@@ -314,6 +316,8 @@ pub const UnOp = enum(u8) {
                 @as(u32, @bitCast(@as(f32, @floatCast(tf(oper)))))
             else
                 @bitCast(@as(f64, @floatCast(tf32(oper)))),
+            .ctz => return @ctz(tu(oper | ~dst.mask())),
+            .bitmask => unreachable, // TODO
         }) & dst.mask();
     }
 };
@@ -359,6 +363,13 @@ pub const DataType = enum(u8) {
 
         pub fn size(self: Tag) u8 {
             return @as(u8, 1) << self.sizePow();
+        }
+
+        pub fn isFloat(self: Tag) bool {
+            return switch (self) {
+                .f32, .f64 => true,
+                else => false,
+            };
         }
     };
 
@@ -2418,7 +2429,7 @@ pub fn Func(comptime Backend: type) type {
                 return lhs;
             }
 
-            if (op.isCmp()) std.debug.assert(ty == .i8);
+            if (op.isCmp() and lhs.data_type.laneCount() == 1) std.debug.assert(ty == .i8);
 
             return self.addNode(
                 .BinOp,

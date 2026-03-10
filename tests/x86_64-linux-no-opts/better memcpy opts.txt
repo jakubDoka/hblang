@@ -3,7 +3,7 @@ main:
 	movss xmm6, dword ptr [0x0000000000000008] ; f32s
 	movss xmm2, dword ptr [0x0000000000000008] ; f32s
 	movss xmm1, dword ptr [0x0000000000000008] ; f32s
-	movss xmm0, dword ptr [0x0000000000000008] ; f32s
+	pxor xmm0, xmm0
 	movss [rsp], xmm0
 	movss [rsp+0x04], xmm6
 	movss [rsp+0x08], xmm2
