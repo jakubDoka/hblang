@@ -478,8 +478,73 @@ pub fn Mixin(comptime Backend: type) type {
                 const dst = node.inputs()[2].?;
                 const src = node.inputs()[3].?;
                 const len = node.inputs()[4].?;
+
                 if (len.kind == .CInt) {
                     const size = len.extra(.CInt).value;
+
+                    forward: {
+                        if (Backend == Builder) break :forward;
+
+                        if (src.kind != .Local) {
+                            break :forward;
+                        }
+                        if (src.inputs()[1].?.extra(.LocalAlloc).meta.kind != .variable) {
+                            break :forward;
+                        }
+
+                        if (src.inputs()[1].?.outputs().len != 1) {
+                            break :forward;
+                        }
+
+                        if (src.inputs()[1].?.extra(.LocalAlloc).size != size) {
+                            break :forward;
+                        }
+                        if (dst.kind == .Local and dst.inputs()[1].?.extra(.LocalAlloc).meta.kind == .parameter) {
+                            break :forward;
+                        }
+
+                        if (dst != dst.knownOffset()[0]) {
+                            break :forward;
+                        }
+
+                        for (dst.outputs()) |o| {
+                            if (o.get() != node) {
+                                break :forward;
+                            }
+                        }
+
+                        var found: usize = 0;
+                        var cursor = mem;
+                        var last_call: ?*Node = null;
+                        while (cursor.kind == .Store or cursor.kind == .MemCpy) : (cursor = cursor.mem()) {
+                            if (cursor.base().knownOffset()[0] == src) found += 1;
+
+                            if (cursor.mem().kind == .Mem and cursor.mem().inputs()[0].?.kind == .CallEnd) {
+                                last_call = cursor.mem().inputs()[0].?.inputs()[0].?;
+                            }
+                        }
+
+                        var output_count: usize = 0;
+                        for (src.outputs()) |o| {
+                            if (o.get().kind == .BinOp) {
+                                output_count += o.get().outputs().len;
+                            } else {
+                                if (o.get() == last_call) {
+                                    last_call = null;
+                                    continue;
+                                }
+                                output_count += 1;
+                            }
+                        }
+
+                        if (found != output_count -| 1) {
+                            break :forward;
+                        }
+
+                        self.subsume(dst, src, .intern);
+
+                        return mem;
+                    }
 
                     if (len.extra(.CInt).value <= 32) mimic_structure: {
                         const src_base, const src_offset = src.knownOffset();
@@ -489,6 +554,8 @@ pub fn Mixin(comptime Backend: type) type {
                         {
                             break :mimic_structure;
                         }
+
+                        if (src_base.inputs()[1].?.outputs().len != 1) break :mimic_structure;
 
                         var tmp = utils.Arena.scrath(work.allocator.ptr);
                         defer tmp.deinit();
@@ -513,6 +580,8 @@ pub fn Mixin(comptime Backend: type) type {
                                 try mem_ops.append(tmp.arena.allocator(), o.get());
                             }
                         }
+
+                        if (mem_ops.items.len > 6) break :mimic_structure;
 
                         const Slot = struct { offset: i64, dt: graph.DataType };
                         var slots = std.ArrayList(Slot).empty;
@@ -543,13 +612,10 @@ pub fn Mixin(comptime Backend: type) type {
                             }
                         }
 
-                        var reached = false;
                         for (slots.items) |s| {
                             // TODO: we should do this upfront, but eh for now
                             if (s.offset < src_offset) continue;
                             if (s.offset - src_offset + s.dt.size() > size) continue;
-
-                            reached = true;
 
                             const dst_off = self.addFieldOffset(node.sloc, dst, s.offset - src_offset);
                             const src_off = self.addFieldOffset(node.sloc, src, s.offset - src_offset);

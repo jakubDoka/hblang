@@ -2,6 +2,29 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### store memcpy forwarding
+```hb
+main := fn(): uint {
+    arr := bigus()
+
+    return arr[22]
+}
+
+$size := 32
+
+bigus := fn(): [size]u8 {
+    res: [size]u8 = idk
+
+    $i := 0
+    $while i < size {
+        res[i] = 0
+        i += 1
+    }
+
+    return res
+}
+```
+
 #### better memcpy opts
 ```hb
 main := fn(): int {

@@ -44,9 +44,9 @@ pub fn Mixin(comptime Backend: type) type {
 
             const L = @This();
 
-            fn resolve(func: *Func, scope: *Scope, index: usize) *Node {
+            fn resolve(func: *Func, scope: *Scope, index: usize, ty: graph.DataType) *Node {
                 return switch (scope.locals[index].expand() orelse {
-                    return func.addUninit(.none, .i64);
+                    return func.addUninit(.none, ty);
                 }) {
                     .Node => |n| n,
                     .Loop => |loop| {
@@ -56,7 +56,7 @@ pub fn Mixin(comptime Backend: type) type {
                             unreachable;
                         }
                         if (!loop.done) {
-                            const initVal = resolve(func, itms, index);
+                            const initVal = resolve(func, itms, index, ty);
 
                             if (!itms.locals[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
                                 itms.set(func, index, func.addNode(
@@ -68,7 +68,7 @@ pub fn Mixin(comptime Backend: type) type {
                                 ));
                             }
                         } else {
-                            _ = resolve(func, itms, index);
+                            _ = resolve(func, itms, index, ty);
                         }
                         scope.set(func, index, itms.locals[index].expand().?.Node);
 
@@ -219,10 +219,26 @@ pub fn Mixin(comptime Backend: type) type {
                                     var res_ty = graph.DataType.top;
                                     if (!all_same) {
                                         all_same = true;
+
+                                        for (s.items) |*sc| {
+                                            if (sc.locals[i].expand()) |v| {
+                                                switch (v) {
+                                                    .Node => {
+                                                        res_ty = v.Node.data_type;
+                                                        break;
+                                                    },
+                                                    .Loop => {},
+                                                }
+                                            }
+                                        }
+
                                         for (inps[1..], s.items, 0..) |*n, *sc, j| {
-                                            const next = Local.resolve(self, sc, i);
+                                            const next = Local.resolve(self, sc, i, res_ty);
                                             n.* = next;
-                                            res_ty = if (res_ty == .top) next.data_type else res_ty.unify(next.data_type);
+                                            res_ty = if (res_ty == .top)
+                                                next.data_type
+                                            else
+                                                res_ty.unify(next.data_type);
                                             all_same = inps[1..][j -| 1] == next and all_same;
                                         }
                                     }
@@ -243,7 +259,7 @@ pub fn Mixin(comptime Backend: type) type {
                                         };
 
                                         if (rhs == .Loop and rhs.Loop != s) {
-                                            rhs = .{ .Node = Local.resolve(self, &ctx.scope, i) };
+                                            rhs = .{ .Node = Local.resolve(self, &ctx.scope, i, lhs.Node.data_type) };
                                         }
 
                                         if (rhs == .Node) {
@@ -316,7 +332,7 @@ pub fn Mixin(comptime Backend: type) type {
                         if (lo.kind == .Load) {
                             const idx = ctx.slot_ids[lo.id];
                             if (idx != escaped_schedue) {
-                                const su = Local.resolve(self, &ctx.scope, idx);
+                                const su = Local.resolve(self, &ctx.scope, idx, lo.data_type);
                                 self.subsume(su, lo, .intern);
                             }
                         }

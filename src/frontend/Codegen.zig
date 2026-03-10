@@ -97,7 +97,7 @@ pub const Value = struct {
             .empty => if (self.ty == .never)
                 gen.bl.addUninit(gen.sloc(pos), .bot)
             else {
-                gen.report(pos, "BUG", .{}) catch {};
+                gen.report(pos, "BUG {}", .{self.ty}) catch {};
                 unreachable;
             },
             .value => |v| v,

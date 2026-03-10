@@ -27,12 +27,11 @@
   (BinOp _ (:op op & .iadd | .isub | .bor | .band | .bxor)
     (Load _ (&m) (&bs)) r)) : (OpStore (:dis {@intCast(dis)}) (:op) c m base r)
 
-(Store ?c m bs @ (Local _ LocalAlloc:l)
-  dis = {bs.knownOffset()}
+(Store ?c m bs @ (Local _ LocalAlloc:l) dis = {bs.knownOffset()}
   (CInt (:data_type dt && {dt.isInt()}) (:value value & {Backend.clampI32(value)}))) :
   (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) (:ty dt) c m l)
 
-(Store ?c  m bs @ LocalAlloc:l
+(Store ?c m bs @ LocalAlloc:l
   dis = {bs.knownOffset()}
   (CInt (:data_type dt && {dt.isInt()}) (:value value & {Backend.clampI32(value)}))) :
   (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) (:ty dt) c m l)

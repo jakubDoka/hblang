@@ -2741,7 +2741,7 @@ pub fn Func(comptime Backend: type) type {
             target: *Node,
             comptime mode: ModMode,
         ) void {
-            //std.debug. print("subsume: {f} -> {f}\n", .{ target, this });
+            //std.debug .print("subsume: {f} -> {f}\n", .{ target, this });
             if (target.isDead()) return;
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             if (mode == .intern) self.uninternNode(target);
