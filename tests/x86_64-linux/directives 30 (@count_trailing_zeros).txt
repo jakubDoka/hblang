@@ -1,0 +1,34 @@
+main:
+	mov al, [0x0000000000000006] ; corrupt
+	movzx dx, al
+	mov rax, 0x100
+	or edx, eax
+	mov rcx, 0x03
+	bsf ax, dx
+	cmp al, cl
+	jz :0
+	mov rax, 0x01
+	jmp :5
+0:	mov ax, [0x0000000000000007] ; directives 30 (@count_trailing_zeros).opaquew
+	mov rcx, 0x0A
+	bsf ax, ax
+	cmp al, cl
+	jz :2
+	mov rax, 0x02
+	jmp :5
+2:	mov eax, [0x0000000000000006] ; corrupt
+	mov rcx, 0x1E
+	bsf eax, eax
+	cmp al, cl
+	jz :3
+	mov rax, 0x03
+	jmp :5
+3:	mov rax, [0x0000000000000007] ; directives 30 (@count_trailing_zeros).opaqueqw
+	mov rcx, 0x3C
+	bsf rax, rax
+	cmp al, cl
+	jz :4
+	mov rax, 0x04
+	jmp :5
+4:	xor rax, rax
+5:	ret

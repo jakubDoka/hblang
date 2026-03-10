@@ -7,28 +7,28 @@
   (type (;5;) (func (result i64)))
   (func $main (type 0) (result i64)
     (local i64 i64)
-    call $main.some_fn3_=main.some_fn_.funcs_4_
+    call $main.some_fn3_=main.some_fn_.funcs_5_
     local.set 0
-    call $main.some_fn3_=main.some_fn3_=main.some_fn2_.funcs_6__.funcs_8_
+    call $main.some_fn3_=main.some_fn3_=main.some_fn2_.funcs_7__.funcs_9_
     local.set 1
     local.get 0
     local.get 1
     i64.add
     return
     unreachable)
-  (func $main.some_fn3_=main.some_fn_.funcs_4_ (type 1) (result i64)
+  (func $main.some_fn3_=main.some_fn_.funcs_5_ (type 1) (result i64)
     call $main.some_fn
     i64.const 10
     i64.add
     return
     unreachable)
-  (func $main.some_fn3_=main.some_fn3_=main.some_fn2_.funcs_6__.funcs_8_ (type 2) (result i64)
-    call $main.some_fn3_=main.some_fn2_.funcs_6_
+  (func $main.some_fn3_=main.some_fn3_=main.some_fn2_.funcs_7__.funcs_9_ (type 2) (result i64)
+    call $main.some_fn3_=main.some_fn2_.funcs_7_
     i64.const 10
     i64.add
     return
     unreachable)
-  (func $main.some_fn3_=main.some_fn2_.funcs_6_ (type 3) (result i64)
+  (func $main.some_fn3_=main.some_fn2_.funcs_7_ (type 3) (result i64)
     call $main.some_fn2
     i64.const 10
     i64.add

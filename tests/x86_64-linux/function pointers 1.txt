@@ -1,10 +1,10 @@
-main.funcs[2]:
+main.funcs[3]:
 	sub dil, 0x0A
 	mov rax, rdi
 	ret
 main:
 	sub rsp, 0x08
-	lea rax, [0x0000000000000007] ; main.funcs[2]
+	lea rax, [0x0000000000000007] ; main.funcs[3]
 	mov rdi, 0x0A
 	call rax
 	movzx rax, al

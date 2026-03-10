@@ -1,17 +1,17 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :functions 6 (comptime @Any).foo[=main.funcs[1]]
+        jal $31, $0, :functions 6 (comptime @Any).foo[=main.funcs[2]]
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-functions 6 (comptime @Any).foo[=main.funcs[1]]:
+functions 6 (comptime @Any).foo[=main.funcs[2]]:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :main.funcs[1]
+        jal $31, $0, :main.funcs[2]
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-main.funcs[1]:
+main.funcs[2]:
          cp $1, $0
        jala $0, $31, 0

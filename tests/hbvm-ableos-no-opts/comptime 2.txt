@@ -1,14 +1,14 @@
 main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
-        jal $31, $0, :main.some_fn3[=main.some_fn].funcs[4]
+        jal $31, $0, :main.some_fn3[=main.some_fn].funcs[5]
          cp $32, $1
-        jal $31, $0, :main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[6]].funcs[8]
+        jal $31, $0, :main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[7]].funcs[9]
       add64 $1, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-main.some_fn3[=main.some_fn].funcs[4]:
+main.some_fn3[=main.some_fn].funcs[5]:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :main.some_fn
@@ -16,15 +16,15 @@ main.some_fn3[=main.some_fn].funcs[4]:
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[6]].funcs[8]:
+main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[7]].funcs[9]:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :main.some_fn3[=main.some_fn2].funcs[6]
+        jal $31, $0, :main.some_fn3[=main.some_fn2].funcs[7]
      addi64 $1, $1, 10
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-main.some_fn3[=main.some_fn2].funcs[6]:
+main.some_fn3[=main.some_fn2].funcs[7]:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :main.some_fn2

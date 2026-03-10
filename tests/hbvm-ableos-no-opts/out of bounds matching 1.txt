@@ -7,7 +7,7 @@ main:
          st $1, $254, 0, 8
          st $2, $254, 8, 8
      addi64 $1, $254, 0
-        jal $31, $0, :out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]
+        jal $31, $0, :out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[5]]
         lra $1, $0, :out of bounds matching 1.sum
          ld $1, $1, 0, 8
      addi64 $254, $254, 24
@@ -15,7 +15,7 @@ main:
          tx
 out of bounds matching 1.byte_iter:
        jala $0, $31, 0
-out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]:
+out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[5]]:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
          cp $32, $1
@@ -23,7 +23,7 @@ out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]:
         jal $31, $0, :out of bounds matching 1.Iterator[=.byte_iter].next
        andi $2, $2, 255
         jeq $2, $0, :5
-        jal $31, $0, :main.funcs[4]
+        jal $31, $0, :main.funcs[5]
         jmp :7
 5:   addi64 $254, $254, 16
          ld $31, $254, -16, 16
@@ -35,7 +35,7 @@ out of bounds matching 1.Iterator[=.byte_iter].next:
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-main.funcs[4]:
+main.funcs[5]:
         lra $3, $0, :out of bounds matching 1.sum
          ld $2, $3, 0, 8
       add64 $1, $2, $1

@@ -6971,6 +6971,7 @@ pub fn runTestForTarget(
             .name = name,
             .code = exe.items,
             //.output = &writer.interface,
+            //.colors = .escape_codes,
         });
 
     const diff_failed = print_test: {

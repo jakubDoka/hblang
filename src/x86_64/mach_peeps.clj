@@ -144,6 +144,10 @@
   (BinOp c (:op .fsub) (F32 c (:imm {0.0})) a)
 (UnOp ?c (:op .fneg) (:data_type {hb.backend.graph.DataType.vec(.f64, .v128)}) a) :
   (BinOp c (:op .fsub) (F64 c (:imm {0.0})) a)
+(UnOp ?c (:op .ctz) (_:nd (:data_type .i8))) :
+  (UnOp c (:op .ctz) (BinOp c (:data_type .i16) (:op .bor)
+                            (UnOp c (:data_type .i16) (:op .uext) nd)
+                            (CInt c (:data_type .i16) (:value {1 << 8}))))
 
 (CInt ?c (:data_type .f64) (:value value)) : (F64 (:imm {@bitCast(value)}) c)
 (CInt ?c (:data_type .f32) (:value value)) :

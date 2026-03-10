@@ -29,6 +29,9 @@
   (StackLoad ?c (:data_type src_ty) (:offset) m bs)) :
   (UnsignedStackLoad (:offset) (:src_ty) c m bs)
 
+(UnOp ?c (:data_type .i8) (:op .ctz) (_:v (:data_type .i64))) :
+  (UnOp c (:op .ired) (:data_type .i8) (UnOp c (:data_type .i64) (:op .ctz) v))
+
 (UnOp _ (:op .uext) (:data_type .i32 | .i16) (WLoad:l)) : l
 
 (UnOp _ (:op .uext) (:data_type .i32 | .i16) (StackLoad:l)) : l

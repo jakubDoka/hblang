@@ -2,7 +2,7 @@ out of bounds matching 1.byte_iter:
 	mov [rdi], rsi
 	mov [rdi+0x08], rdx
 	ret
-out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]:
+out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[5]]:
 	push rbx
 	sub rsp, 0x10
 	mov rbx, rdi
@@ -13,7 +13,7 @@ out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]:
 	test al, al
 	jz :0
 	mov rdi, [rsp]
-	call :main.funcs[4]
+	call :main.funcs[5]
 	jmp :1
 0:	add rsp, 0x10
 	pop rbx
@@ -23,7 +23,7 @@ out of bounds matching 1.Iterator[=.byte_iter].next:
 	call :out of bounds matching 1.byte_iter.next
 	add rsp, 0x08
 	ret
-main.funcs[4]:
+main.funcs[5]:
 	mov rax, [0x0000000000000007] ; out of bounds matching 1.sum
 	add rax, rdi
 	mov [0x0000000000000007], rax ; out of bounds matching 1.sum
@@ -53,7 +53,7 @@ main:
 	mov rdx, 0x03
 	call :out of bounds matching 1.byte_iter
 	lea rdi, [rsp]
-	call :out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[4]]
+	call :out of bounds matching 1.Iterator[=.byte_iter].for_each[, =main.funcs[5]]
 	mov rax, [0x0000000000000007] ; out of bounds matching 1.sum
 	add rsp, 0x18
 	ret

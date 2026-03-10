@@ -1,0 +1,75 @@
+main:
+        lra $1, $0, :directives 30 (@count_trailing_zeros).opaqueb
+       li64 $4, 58
+        lra $3, $0, :main.debruijn_table
+         ld $2, $1, 0, 1
+       andi $1, $2, 255
+        jne $1, $0, :2
+        li8 $1, 8
+        jmp :3
+2:      ori $2, $2, -72057594037927936
+        neg $1, $2
+        and $1, $2, $1
+     muli64 $1, $1, 157587932685088877
+      sru64 $1, $1, $4
+      add64 $1, $3, $1
+         ld $1, $1, 0, 1
+3:     andi $2, $1, 255
+       li64 $1, 3
+        jeq $2, $1, :4
+       li64 $1, 1
+        jmp :5
+4:      lra $1, $0, :directives 30 (@count_trailing_zeros).opaquew
+         ld $2, $1, 0, 2
+       andi $1, $2, 65535
+        jne $1, $0, :7
+        li8 $1, 16
+        jmp :8
+7:      ori $2, $2, -281474976710656
+        neg $1, $2
+        and $1, $2, $1
+     muli64 $1, $1, 157587932685088877
+      sru64 $1, $1, $4
+      add64 $1, $3, $1
+         ld $1, $1, 0, 1
+8:     li64 $2, 10
+       andi $1, $1, 255
+        jeq $1, $2, :9
+       li64 $1, 2
+        jmp :5
+9:      lra $1, $0, :directives 30 (@count_trailing_zeros).opaquedw
+         ld $2, $1, 0, 4
+       andi $1, $2, 4294967295
+        jne $1, $0, :b
+        li8 $1, 32
+        jmp :c
+b:      ori $2, $2, -4294967296
+        neg $1, $2
+        and $1, $2, $1
+     muli64 $1, $1, 157587932685088877
+      sru64 $1, $1, $4
+      add64 $1, $3, $1
+         ld $1, $1, 0, 1
+c:     li64 $2, 30
+       andi $1, $1, 255
+        jeq $1, $2, :d
+       li64 $1, 3
+        jmp :5
+d:      lra $1, $0, :directives 30 (@count_trailing_zeros).opaqueqw
+         ld $2, $1, 0, 8
+        jne $2, $0, :f
+        li8 $1, 64
+        jmp :10
+f:      neg $1, $2
+        and $1, $2, $1
+     muli64 $1, $1, 157587932685088877
+      sru64 $1, $1, $4
+      add64 $1, $3, $1
+         ld $1, $1, 0, 1
+10:     li64 $2, 60
+       andi $1, $1, 255
+        jeq $1, $2, :11
+       li64 $1, 4
+        jmp :5
+11:       cp $1, $0
+5:       tx

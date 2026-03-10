@@ -3,14 +3,14 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    call $functions_6__comptime_@Any_.foo_=main.funcs_1__
+    call $functions_6__comptime_@Any_.foo_=main.funcs_2__
     return
     unreachable)
-  (func $functions_6__comptime_@Any_.foo_=main.funcs_1__ (type 1) (result i64)
-    call $main.funcs_1_
+  (func $functions_6__comptime_@Any_.foo_=main.funcs_2__ (type 1) (result i64)
+    call $main.funcs_2_
     return
     unreachable)
-  (func $main.funcs_1_ (type 2) (result i64)
+  (func $main.funcs_2_ (type 2) (result i64)
     i64.const 0
     return
     unreachable)

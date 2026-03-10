@@ -2530,6 +2530,23 @@ access := fn(vl: ^uint): uint {
 }
 ```
 
+#### directives 30 (@count_trailing_zeros)
+```hb
+opaqueb: u8 = 1 << 3
+opaquew: u16 = 1 << 10
+opaquedw: u32 = 1 << 30
+opaqueqw: uint = 1 << 60
+
+main := fn(): uint {
+    if @count_trailing_zeros(opaqueb) != 3 return 1
+    if @count_trailing_zeros(opaquew) != 10 return 2
+    if @count_trailing_zeros(opaquedw) != 30 return 3
+    if @count_trailing_zeros(opaqueqw) != 60 return 4
+
+    return 0
+}
+```
+
 #### bubble sort
 ```hb
 expectations := .{
@@ -3169,8 +3186,10 @@ main := fn(): uint {
   - [ ] ? `@recall(..<args>): never`
   - [x] `@has_decl(<ty>, "<name>")`
     - [ ] comptime interrupt
-  - [ ] `@simd(<ty>): type`
-  - [ ] `@splat(<value>): @simd(<ty>)`
+  - [x] `@simd(<ty>): type`
+  - [x] `@splat(<value>): @simd(<ty>)`
+  - [x] `@bitmask(<simd_value>): @simd(<int>)`
+  - [x] `@count_trailing_zeros(<int>): u8`
 - [ ] optimizations
   - [ ] assumptions
   - [ ] memory

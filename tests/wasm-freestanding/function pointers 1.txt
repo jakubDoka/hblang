@@ -12,7 +12,7 @@
     i64.extend_i32_u
     return
     unreachable)
-  (func $main.funcs_2_ (type 2) (param i32) (result i32)
+  (func $main.funcs_3_ (type 2) (param i32) (result i32)
     local.get 0
     i32.const 10
     i32.sub
@@ -31,5 +31,5 @@
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))
-  (elem (;0;) (i32.const 0) func $main.funcs_2_)
+  (elem (;0;) (i32.const 0) func $main.funcs_3_)
   (data (;0;) (i32.const 131072) ""))

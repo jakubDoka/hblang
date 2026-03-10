@@ -1,8 +1,8 @@
-main.funcs[1]:
+main.funcs[2]:
 	ret
 main:
 	sub rsp, 0x08
-	lea rax, [0x0000000000000007] ; main.funcs[1]
+	lea rax, [0x0000000000000007] ; main.funcs[2]
 	call rax
 	xor rax, rax
 	add rsp, 0x08

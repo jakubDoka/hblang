@@ -27,7 +27,7 @@
     i64.const 0
     global.get 0
     i64.add
-    call $out_of_bounds_matching_1.Iterator_=.byte_iter_.for_each___=main.funcs_4__
+    call $out_of_bounds_matching_1.Iterator_=.byte_iter_.for_each___=main.funcs_5__
     global.get 1
     i32.wrap_i64
     i64.load
@@ -42,7 +42,7 @@
     local.get 1
     return
     unreachable)
-  (func $out_of_bounds_matching_1.Iterator_=.byte_iter_.for_each___=main.funcs_4__ (type 2) (param i64)
+  (func $out_of_bounds_matching_1.Iterator_=.byte_iter_.for_each___=main.funcs_5__ (type 2) (param i64)
     (local i64 i64)
     loop  ;; label = @1
       block  ;; label = @2
@@ -56,7 +56,7 @@
         return
       end
       local.get 1
-      call $main.funcs_4_
+      call $main.funcs_5_
       br 0 (;@1;)
     end
     unreachable)
@@ -65,7 +65,7 @@
     call $out_of_bounds_matching_1.byte_iter.next
     return
     unreachable)
-  (func $main.funcs_4_ (type 4) (param i64)
+  (func $main.funcs_5_ (type 4) (param i64)
     global.get 1
     i32.wrap_i64
     local.get 0

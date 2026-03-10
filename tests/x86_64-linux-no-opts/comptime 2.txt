@@ -1,16 +1,16 @@
-main.some_fn3[=main.some_fn].funcs[4]:
+main.some_fn3[=main.some_fn].funcs[5]:
 	sub rsp, 0x08
 	call :main.some_fn
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
-main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[6]].funcs[8]:
+main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[7]].funcs[9]:
 	sub rsp, 0x08
-	call :main.some_fn3[=main.some_fn2].funcs[6]
+	call :main.some_fn3[=main.some_fn2].funcs[7]
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
-main.some_fn3[=main.some_fn2].funcs[6]:
+main.some_fn3[=main.some_fn2].funcs[7]:
 	sub rsp, 0x08
 	call :main.some_fn2
 	add rax, 0x0A
@@ -27,9 +27,9 @@ main.some_fn:
 	ret
 main:
 	push rbx
-	call :main.some_fn3[=main.some_fn].funcs[4]
+	call :main.some_fn3[=main.some_fn].funcs[5]
 	mov rbx, rax
-	call :main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[6]].funcs[8]
+	call :main.some_fn3[=main.some_fn3[=main.some_fn2].funcs[7]].funcs[9]
 	add rbx, rax
 	mov rax, rbx
 	pop rbx

@@ -1870,7 +1870,7 @@ pub fn init(
         value = gen.lookupIdent(gen.scope, "SrcLoc").?;
         const source_loc = gen.peval(.start, value, Types.Id) catch unreachable;
 
-        value = gen.lookupIdent(gen.scope, "count_trailing_zeroes").?;
+        value = gen.lookupIdent(gen.scope, "count_trailing_zeros").?;
         const ctz = gen.peval(.start, value, Types.FuncId) catch unreachable;
 
         self.builtins = .{
