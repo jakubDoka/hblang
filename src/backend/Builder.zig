@@ -190,7 +190,7 @@ pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64, debug_
 pub fn addLoad(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
     const true_base, _ = addr.knownOffset();
     const ctrl = if (true_base.kind == .Local or true_base.kind == .GlobalAddr) null else self.control();
-    return self.func.addNode(.Load, sloc, ty, &.{ ctrl, self.memory(), addr }, .{});
+    return self.func.addNode(.Load, sloc, ty, &.{ ctrl, self.memory(), addr }, .{ .base = .{ .alignment = ty.alignment() } });
 }
 
 pub fn addFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
@@ -258,7 +258,7 @@ pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType
     const mem = self.memory();
     const true_base, _ = addr.knownOffset();
     const ctrl = if (true_base.kind == .Local or true_base.kind == .GlobalAddr) null else self.control();
-    const store = self.func.addNode(.Store, sloc, .top, &.{ ctrl, mem, addr, value }, .{});
+    const store = self.func.addNode(.Store, sloc, .top, &.{ ctrl, mem, addr, value }, .{ .base = .{ .alignment = ty.alignment() } });
     self.func.setInputNoIntern(self.scope orelse return, 1, store);
 }
 
@@ -285,7 +285,9 @@ pub fn addFixedMemCpy(self: *Builder, sloc: graph.Sloc, dst: *BuildNode, src: *B
     const mem = self.memory();
     const ctrl = self.control();
     const siz = self.addIntImm(sloc, .i64, @bitCast(size));
-    const mcpy = self.func.addNode(.MemCpy, sloc, .top, &.{ ctrl, mem, dst, src, siz }, .{});
+    const mcpy = self.func.addNode(.MemCpy, sloc, .top, &.{ ctrl, mem, dst, src, siz }, .{
+        .base = .{ .base = .{ .alignment = 1 } },
+    });
     self.func.setInputNoIntern(self.scope orelse return, 1, mcpy);
 }
 

@@ -121,41 +121,41 @@ pub const Ctx = struct {
 
 pub const classes = enum {
     pub const WStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         offset: i64,
     };
     pub const StackStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         offset: i64,
         pub const data_dep_offset = 2;
     };
     pub const WLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         offset: i64,
     };
     pub const UnsignedLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         src_ty: graph.DataType,
         offset: i64,
     };
     pub const SignedLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         src_ty: graph.DataType,
         offset: i64,
     };
     pub const StackLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         offset: i64,
         pub const data_dep_offset = 2;
     };
     pub const UnsignedStackLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         src_ty: graph.DataType,
         offset: i64,
         pub const data_dep_offset = 2;
     };
     pub const SignedStackLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         src_ty: graph.DataType,
         offset: i64,
         pub const data_dep_offset = 2;

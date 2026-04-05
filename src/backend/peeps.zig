@@ -585,7 +585,7 @@ pub fn Mixin(comptime Backend: type) type {
 
                         if (mem_ops.items.len > 6) break :mimic_structure;
 
-                        const Slot = struct { offset: i64, dt: graph.DataType };
+                        const Slot = struct { offset: i64, dt: graph.DataType, base: graph.MemOp };
                         var slots = std.ArrayList(Slot).empty;
                         for (mem_ops.items) |use| {
                             _, const offs = use.base().knownOffset();
@@ -610,6 +610,7 @@ pub fn Mixin(comptime Backend: type) type {
                                 try slots.append(tmp.arena.allocator(), .{
                                     .offset = @intCast(offs),
                                     .dt = use.accessTy(),
+                                    .base = use.subclass(graph.MemOp).?.ext,
                                 });
                             }
                         }
@@ -621,9 +622,9 @@ pub fn Mixin(comptime Backend: type) type {
 
                             const dst_off = self.addFieldOffset(node.sloc, dst, s.offset - src_offset);
                             const src_off = self.addFieldOffset(node.sloc, src, s.offset - src_offset);
-                            const ld = self.addNode(.Load, node.sloc, s.dt, &.{ ctrl, mem, src_off }, .{});
+                            const ld = self.addNode(.Load, node.sloc, s.dt, &.{ ctrl, mem, src_off }, .{ .base = s.base });
                             work.add(ld);
-                            mem = self.addNode(.Store, node.sloc, s.dt, &.{ ctrl, mem, dst_off, ld }, .{});
+                            mem = self.addNode(.Store, node.sloc, s.dt, &.{ ctrl, mem, dst_off, ld }, .{ .base = s.base });
                             work.add(mem);
                         }
 
@@ -633,6 +634,7 @@ pub fn Mixin(comptime Backend: type) type {
                     if (len.extra(.CInt).value <= 16) {
                         var cursor: u64 = 0;
                         var copy_elem = DataType.i64;
+                        const base = node.extra(.MemCpy).base.base;
 
                         while (cursor != size) {
                             while (cursor + copy_elem.size() > size) : (copy_elem =
@@ -641,9 +643,9 @@ pub fn Mixin(comptime Backend: type) type {
 
                             const dst_off = self.addFieldOffset(node.sloc, dst, @intCast(cursor));
                             const src_off = self.addFieldOffset(node.sloc, src, @intCast(cursor));
-                            const ld = self.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
+                            const ld = self.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{ .base = base });
                             work.add(ld);
-                            mem = self.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
+                            mem = self.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{ .base = base });
                             work.add(mem);
 
                             cursor += copy_elem.size();
@@ -764,7 +766,7 @@ pub fn Mixin(comptime Backend: type) type {
                         node.sloc,
                         node.data_type,
                         dinps,
-                        .{},
+                        node.extra(.Store).*,
                     );
                     work.add(st);
                     return st;
@@ -786,7 +788,7 @@ pub fn Mixin(comptime Backend: type) type {
                         node.sloc,
                         node.data_type,
                         dinps,
-                        .{},
+                        node.extra(.Load).*,
                     );
                     work.add(st);
                     return st;

@@ -365,6 +365,14 @@ pub const DataType = enum(u8) {
             return @as(u8, 1) << self.sizePow();
         }
 
+        pub fn alignPow(self: Tag) u3 {
+            return self.sizePow();
+        }
+
+        pub fn alignment(self: Tag) u8 {
+            return @as(u8, 1) << self.alignPow();
+        }
+
         pub fn isFloat(self: Tag) bool {
             return switch (self) {
                 .f32, .f64 => true,
@@ -494,9 +502,13 @@ pub const DataType = enum(u8) {
         return false;
     }
 
-    pub fn memUnitForAlign(alignment: u64) DataType {
+    pub fn memUnitForAlign(alignmen: u64) DataType {
         return @enumFromInt(@intFromEnum(DataType.i8) +
-            @min(std.math.log2_int(u64, alignment), 3));
+            @min(std.math.log2_int(u64, alignmen), 3));
+    }
+
+    pub fn alignment(self: DataType) u64 {
+        return self.repr().tag.alignment();
     }
 };
 
@@ -799,15 +811,18 @@ pub const Arg = extern struct {
 };
 pub const MemOp = extern struct {
     pub const data_dep_offset = 1;
+
+    alignment: u64,
 };
+
 pub const MemCpy = extern struct {
-    base: Store = .{},
+    base: Store,
 };
 pub const Load = extern struct {
-    base: MemOp = .{},
+    base: MemOp,
 };
 pub const Store = extern struct {
-    base: MemOp = .{},
+    base: MemOp,
 };
 pub const If = extern struct {
     base: Cfg = .{},

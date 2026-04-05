@@ -64,29 +64,29 @@ pub const classes = enum {
     };
     // [?Cfg, mem, ptr]
     pub const StackLd = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         offset: i64,
         pub const data_dep_offset = 2;
     };
     // [?Cfg, mem, ptr, value, ...antideps]
     pub const StackSt = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         offset: i64,
         pub const data_dep_offset = 2;
     };
     // [?Cfg, mem, ptr]
     pub const Ld = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         offset: i64,
     };
     // [?Cfg, mem, ptr, value, ...antideps]
     pub const St = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         offset: i64,
     };
     // [?Cfg, mem, src, dst, ...antideps]
     pub const BlockCpy = extern struct {
-        base: graph.MemCpy = .{},
+        base: graph.MemCpy,
         size: u16,
     };
     pub const Zero = extern struct {

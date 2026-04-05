@@ -247,17 +247,17 @@ pub const Reloc = struct {
 pub const classes = enum {
     pub const FusedMulAdd = extern struct {};
     pub const RepStosb = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
     };
     pub const GlobalLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         dis: i32,
         id: u32,
 
         pub const data_dep_offset = 2;
     };
     pub const ConstGlobalStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         dis: i32,
         id: u32,
         imm: i32,
@@ -266,26 +266,26 @@ pub const classes = enum {
         pub const data_dep_offset = 2;
     };
     pub const GlobalStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         dis: i32,
         id: u32,
 
         pub const data_dep_offset = 2;
     };
     pub const StackLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         dis: i32,
 
         pub const data_dep_offset = 2;
     };
     pub const StackStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         dis: i32,
 
         pub const data_dep_offset = 2;
     };
     pub const ConstStackStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         dis: i32,
         imm: i32,
         ty: graph.DataType,
@@ -293,45 +293,45 @@ pub const classes = enum {
         pub const data_dep_offset = 2;
     };
     pub const ConstStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         dis: i32,
         imm: i32,
         ty: graph.DataType,
     };
     pub const OffsetLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         dis: i32,
     };
     pub const OffsetStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         dis: i32,
     };
     pub const OpLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         op: graph.BinOp,
         dis: i32,
     };
     pub const OpStackLoad = extern struct {
-        base: graph.Load = .{},
+        base: graph.Load,
         op: graph.BinOp,
         dis: i32,
 
         pub const data_dep_offset = 2;
     };
     pub const OpStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         op: graph.BinOp,
         dis: i32,
     };
     pub const OpStackStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         op: graph.BinOp,
         dis: i32,
 
         pub const data_dep_offset = 2;
     };
     pub const ConstOpStackStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         op: graph.BinOp,
         ty: graph.DataType,
         dis: i32,
@@ -340,7 +340,7 @@ pub const classes = enum {
         pub const data_dep_offset = 2;
     };
     pub const ConstOpStore = extern struct {
-        base: graph.Store = .{},
+        base: graph.Store,
         op: graph.BinOp,
         ty: graph.DataType,
         imm: i32,

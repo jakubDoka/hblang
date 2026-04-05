@@ -9,9 +9,9 @@ slices 3.reverse:
 	jmp :1
 0:	xor r8, r8
 	dec rdx
-3:	mov rax, [rsp]
-	cmp r8, rdx
+3:	cmp r8, rdx
 	jnb :2
+	mov rax, [rsp]
 	mov rcx, rax
 	add rcx, rdx
 	mov sil, [rcx]
@@ -21,10 +21,11 @@ slices 3.reverse:
 	mov rax, [rsp]
 	add rax, rdx
 	mov [rax], cl
-	inc r8
 	dec rdx
+	inc r8
 	jmp :3
-2:	mov [rdi], rax
+2:	mov rax, [rsp]
+	mov [rdi], rax
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 1:	add rsp, 0x10

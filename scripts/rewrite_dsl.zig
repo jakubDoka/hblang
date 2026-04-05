@@ -46,15 +46,17 @@ pub fn main() !void {
         try formatPattern("node", "", rule.pattern, &writer.interface);
         maybe_id = 0;
 
+        const top_level_type = if (rule.pattern.* == .Atom) rule.pattern.Atom.name else "";
+
         if (rule.postprocess) |postprocess| {
             try writer.interface.writeAll("        const res = ");
-            try formatReplacement(rule.replacement, &writer.interface);
+            try formatReplacement(rule.replacement, &writer.interface, top_level_type);
             try writer.interface.writeAll(";\n");
             try writer.interface.writeAll(postprocess);
             try writer.interface.writeAll("return res;\n");
         } else {
             try writer.interface.writeAll("        return ");
-            try formatReplacement(rule.replacement, &writer.interface);
+            try formatReplacement(rule.replacement, &writer.interface, top_level_type);
             try writer.interface.writeAll(";\n");
         }
 
@@ -182,7 +184,7 @@ pub fn doIndent(writer: *std.io.Writer) anyerror!void {
 
 const builtin_fields = [_][]const u8{ "sloc", "data_type" };
 
-pub fn formatReplacement(replacement: *Ast.Expr, writer: *std.Io.Writer) anyerror!void {
+pub fn formatReplacement(replacement: *Ast.Expr, writer: *std.Io.Writer, top_level_type: []const u8) anyerror!void {
     switch (replacement.*) {
         .Atom => |a| {
             try writer.print(
@@ -194,7 +196,7 @@ pub fn formatReplacement(replacement: *Ast.Expr, writer: *std.Io.Writer) anyerro
                     if (arg.* != .Field) continue;
                     if (!std.mem.eql(u8, arg.Field.name, name)) continue;
                     if (arg.Field.expr) |expr| {
-                        try formatReplacement(expr, writer);
+                        try formatReplacement(expr, writer, "");
                     } else {
                         try writer.writeAll(name);
                     }
@@ -206,28 +208,28 @@ pub fn formatReplacement(replacement: *Ast.Expr, writer: *std.Io.Writer) anyerro
             }
             try writer.writeAll("&.{\n");
             indent += 1;
-            var i: usize = 0;
             for (a.args) |arg| {
                 if (arg.* == .Field) continue;
                 try doIndent(writer);
-                try formatReplacement(arg, writer);
+                try formatReplacement(arg, writer, "");
                 try writer.writeAll(",\n");
-                i += 1;
             }
             indent -= 1;
             try doIndent(writer);
             try writer.writeAll("}, .{\n");
-            i = 0;
             indent += 1;
+            if (a.interits) {
+                try doIndent(writer);
+                try writer.print(".base = node.extra(.{s}).*,\n", .{top_level_type});
+            }
             o: for (a.args) |arg| {
                 if (arg.* != .Field) continue;
                 for (builtin_fields) |name| {
                     if (std.mem.eql(u8, arg.Field.name, name)) continue :o;
                 }
                 try doIndent(writer);
-                try formatReplacement(arg, writer);
+                try formatReplacement(arg, writer, "");
                 try writer.writeAll(",\n");
-                i += 1;
             }
             indent -= 1;
             try doIndent(writer);
@@ -236,7 +238,7 @@ pub fn formatReplacement(replacement: *Ast.Expr, writer: *std.Io.Writer) anyerro
         .Field => |f| {
             try writer.print(".{s} = ", .{f.name});
             if (f.expr) |expr| {
-                try formatReplacement(expr, writer);
+                try formatReplacement(expr, writer, "");
             } else {
                 try writer.writeAll(f.name);
             }
@@ -265,6 +267,7 @@ pub const Ast = struct {
             name: []const u8,
             binding: ?[]const u8,
             args: []const *Expr,
+            interits: bool,
         },
         Field: struct {
             name: []const u8,
@@ -355,6 +358,7 @@ pub const Parser = struct {
                     .name = token.source,
                     .binding = try self.parseBinding(),
                     .args = &.{},
+                    .interits = false,
                 },
             },
             .field_name => .{
@@ -404,12 +408,20 @@ pub const Parser = struct {
             },
             .@"(" => b: {
                 const prefix = self.lexer.next();
+
+                var interits = false;
+                if (self.lexer.peek().kind == .@"#") {
+                    interits = true;
+                    _ = self.lexer.next();
+                }
+
                 break :b switch (prefix.kind) {
                     .atom_name, .binding_name => .{
                         .Atom = .{
                             .name = prefix.source,
                             .binding = try self.parseBinding(),
                             .args = try self.parseExprList(),
+                            .interits = interits,
                         },
                     },
                     .field_name => .{
@@ -587,6 +599,7 @@ pub const Token = struct {
         hex_integer,
         zix_expr,
         tag,
+        @"#",
         @"(",
         @")",
         @":",
@@ -630,6 +643,10 @@ pub const Lexer = struct {
                     }
 
                     break .zix_expr;
+                },
+                '#' => {
+                    self.pos += 1;
+                    break .@"#";
                 },
                 ':' => {
                     self.pos += 1;

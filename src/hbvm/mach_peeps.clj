@@ -3,19 +3,19 @@
 (UnOp _ (:op .cast) oper) : oper
 
 (MemCpy c m d s (CInt (:value size))) :
-  (BlockCpy c m d s (:size {@intCast(size)}))
+  (BlockCpy# c m d s (:size {@intCast(size)}))
 
 (Store ?c m bs @ (Local _ LocalAlloc:l) offset = {bs.knownOffset()} v) :
-  (StackSt (:offset) c m l v)
+  (StackSt# (:offset) c m l v)
 
 (Store ?c m bs @ base offset = {bs.knownOffset()} v) :
-  (St (:offset) c m base v)
+  (St# (:offset) c m base v)
 
 (Load ?c m bs @ (Local _ LocalAlloc:l) offset = {bs.knownOffset()}) :
-  (StackLd (:offset) c m l)
+  (StackLd# (:offset) c m l)
 
 (Load ?c m bs @ base offset = {bs.knownOffset()}) :
-  (Ld (:offset) c m base)
+  (Ld# (:offset) c m base)
 
 (BinOp ?c
   (:op op @ pop = {switch (op) {
