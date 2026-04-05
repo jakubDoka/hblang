@@ -84,7 +84,7 @@ pub fn build(b: *std.Build) !void {
 
     const hbf = hb: {
         const hbf = b.addModule("hb", .{
-            .root_source_file = b.path("src/root.zig"),
+            .root_source_file = b.path("src/frontend.zig"),
             .target = target,
             .optimize = optimize,
         });

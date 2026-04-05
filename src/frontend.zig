@@ -1,19 +1,17 @@
-pub const frontend = opaque {
-    pub const Lexer = @import("frontend/Lexer.zig");
-    pub const Codegen = @import("frontend/Codegen.zig");
-    pub const Abi = @import("frontend/Abi.zig");
-    pub const Types = @import("frontend/TypeStore.zig");
-    pub const DeclIndex = @import("frontend/DeclIndex.zig");
-    pub const Fmt = @import("frontend/Fmt.zig");
-};
+pub const Lexer = @import("frontend/Lexer.zig");
+pub const Codegen = @import("frontend/Codegen.zig");
+pub const Abi = @import("frontend/Abi.zig");
+pub const Types = @import("frontend/TypeStore.zig");
+pub const DeclIndex = @import("frontend/DeclIndex.zig");
+pub const Fmt = @import("frontend/Fmt.zig");
 
 pub const backend = @import("hbb");
 
 pub const utils = @import("utils-lib");
 pub const diff = @import("diff.zig");
 pub const lane = utils.lane;
-pub const runTest = frontend.Codegen.runTest;
-pub const runVendoredTest = frontend.Codegen.runVendoredTest;
+pub const runTest = Codegen.runTest;
+pub const runVendoredTest = Codegen.runVendoredTest;
 pub const LineIndex = backend.LineIndex;
 pub const hbvm = backend.hbvm;
 
@@ -288,7 +286,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
             };
 
             if (opts.output) |o| {
-                try frontend.Fmt.fmt(
+                try Fmt.fmt(
                     opts.root_file,
                     source,
                     null,
@@ -355,7 +353,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
 
     const bckend = opts.target.toMachine(opts.check, &type_system_memory, opts.gpa);
 
-    var types = hb.frontend.Types.init(
+    var types = hb.Types.init(
         asts,
         &loader.loader,
         opts.target,
@@ -376,8 +374,8 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
 
     defer lane.sync(.{});
 
-    hb.frontend.Codegen.collectExports(&types) catch return error.Failed;
-    hb.frontend.Codegen.emitReachable(&types, opts.gpa, opt_options);
+    hb.Codegen.collectExports(&types) catch return error.Failed;
+    hb.Codegen.emitReachable(&types, opts.gpa, opt_options);
 
     if (types.errored > 0) {
         return error.Failed;
@@ -473,7 +471,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
     }
 
     if (opts.vendored_test) {
-        const expectations: frontend.Codegen.Expectations = .init(asts[0].source);
+        const expectations: Codegen.Expectations = .init(asts[0].source);
 
         const out = bckend.finalizeBytes(types.arena.allocator(), options);
         if (types.errored > 0) return error.Failed;
@@ -570,25 +568,25 @@ const Loader = struct {
     arena: *Arena,
     gpa: std.mem.Allocator,
     shared: *Shared,
-    loader: frontend.DeclIndex.Loader = .init(Loader),
+    loader: DeclIndex.Loader = .init(Loader),
 
     pub const Shared = struct {
         base: []const u8,
         path_projections: std.StringHashMapUnmanaged([]const u8),
-        files: std.ArrayList(hb.frontend.DeclIndex.File) = .{},
+        files: std.ArrayList(hb.DeclIndex.File) = .{},
         in_progress: usize = 0,
         completed: usize = 0,
         state_lock: std.Thread.Mutex = .{},
         lobby: utils.lane.Lobby = .{},
     };
 
-    pub fn loadEmbed(self: *Loader, opts: hb.frontend.DeclIndex.Loader.LoadOptions) [:0]const u8 {
+    pub fn loadEmbed(self: *Loader, opts: hb.DeclIndex.Loader.LoadOptions) [:0]const u8 {
         _ = self;
         _ = opts;
         unreachable;
     }
 
-    pub fn load(self: *Loader, opts: hb.frontend.DeclIndex.Loader.LoadOptions) ?hb.frontend.DeclIndex.File.Id {
+    pub fn load(self: *Loader, opts: hb.DeclIndex.Loader.LoadOptions) ?hb.DeclIndex.File.Id {
         var tmp = Arena.scrath(null);
         defer tmp.deinit();
 
@@ -604,9 +602,9 @@ const Loader = struct {
         const canon = makeRelative(tmp.arena.allocator(), path, base) catch return null;
 
         _ = std.fs.cwd().statFile(path) catch |err| {
-            var types: frontend.Types = undefined;
+            var types: Types = undefined;
             types.loader = &self.loader;
-            frontend.Codegen.reportGeneric(
+            Codegen.reportGeneric(
                 file.path,
                 file.source,
                 &types,
@@ -647,7 +645,7 @@ const Loader = struct {
         root: []const u8,
         diagnostics: ?*std.Io.Writer,
         colors: std.io.tty.Config,
-    ) Error!?struct { []hb.frontend.DeclIndex.File, []const u8, Loader } {
+    ) Error!?struct { []hb.DeclIndex.File, []const u8, Loader } {
         var root_tmp = utils.Arena.scrath(scratch);
         defer root_tmp.deinit();
 
@@ -732,7 +730,7 @@ const Loader = struct {
             self.loader.from = @enumFromInt(i);
             self.loader.path = slot_path;
 
-            const file = hb.frontend.DeclIndex.File
+            const file = hb.DeclIndex.File
                 .init(source, &self.loader, self.arena);
 
             self.shared.state_lock.lock();

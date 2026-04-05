@@ -2,7 +2,7 @@ const std = @import("std");
 const root = @import("hbf");
 const graph = root.backend.graph;
 const utils = root.utils;
-const Types = root.frontend.Types;
+const Types = root.Types;
 const Id = Types.Id;
 
 const Abi = @This();

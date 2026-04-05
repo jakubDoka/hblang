@@ -1,14 +1,14 @@
 const std = @import("std");
 const hb = @import("hbf");
 const utils = hb.utils;
-const Lexer = hb.frontend.Lexer.Prelexed;
+const Lexer = hb.Lexer.Prelexed;
 const BBuilder = hb.backend.Builder;
 const BNode = BBuilder.BuildNode;
 const graph = hb.backend.graph;
-const Types = hb.frontend.Types;
-const File = hb.frontend.DeclIndex.File;
-const Loader = hb.frontend.DeclIndex.Loader;
-const Abi = hb.frontend.Abi;
+const Types = hb.Types;
+const File = hb.DeclIndex.File;
+const Loader = hb.DeclIndex.Loader;
+const Abi = hb.Abi;
 const Machine = hb.backend.Machine;
 const Vm = hb.hbvm.Vm;
 const Target = hb.backend.Machine.SupportedTarget;
@@ -402,7 +402,7 @@ pub fn lookupIdentLow(
     const file = scope_meta.file.get(self.types);
 
     if (!dotted) {
-        if (hb.frontend.DeclIndex.filePrefixLookup(
+        if (hb.DeclIndex.filePrefixLookup(
             self.vars.items(.prefix),
             Variable,
             self.vars.items(.variable),
@@ -2804,7 +2804,7 @@ pub fn directive(
         },
         .CurrentScope => self.tyLit(pos, self.scope.data()
             .findCurrentScope(self.types)),
-        .RootScope => self.tyLit(pos, hb.frontend.DeclIndex.File.Id
+        .RootScope => self.tyLit(pos, hb.DeclIndex.File.Id
             .root.getScope(self.types)),
         .ChildOf => {
             const oper = try self.typ(lex);
@@ -6336,7 +6336,7 @@ pub fn typeCheck(
 pub fn defineVariable(self: *Codegen, name: Lexer.Token) usize {
     const file = self.file.get(self.types);
     self.vars.append(self.bl.arena(), .{
-        .prefix = hb.frontend.DeclIndex.prefixOf(file.peekStr(name.idx)),
+        .prefix = hb.DeclIndex.prefixOf(file.peekStr(name.idx)),
         .variable = .{
             .ty = .void,
             .meta = .{
@@ -6835,7 +6835,7 @@ pub fn highlightCode(
     var last: usize = 0;
     var token = lexer.next();
     while (token.kind != .Eof) : (token = lexer.next()) {
-        const mods = hb.frontend.Fmt.Class.fromLexeme(token.kind).?;
+        const mods = hb.Fmt.Class.fromLexeme(token.kind).?;
         for (mods.toTtyColor()) |color| {
             try colors.setColor(writer, color);
         }
@@ -7198,7 +7198,7 @@ pub fn parseExample(
             kl.loader.colors = .escape_codes;
 
             var buf = std.Io.Writer.Allocating.init(scratch.allocator());
-            try hb.frontend.Fmt.fmt(
+            try hb.Fmt.fmt(
                 fr.path,
                 fr.source,
                 scratch,

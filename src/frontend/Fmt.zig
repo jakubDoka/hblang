@@ -1,5 +1,5 @@
 const hb = @import("hbf");
-const Lexer = hb.frontend.Lexer.Prelexed;
+const Lexer = hb.Lexer.Prelexed;
 const std = @import("std");
 const utils = hb.utils;
 
@@ -108,7 +108,7 @@ pub fn minify(source: [:0]u8) usize {
     var prevNeedsNewline = false;
 
     while (true) {
-        var lexer = hb.frontend.Lexer.init(reader, 0);
+        var lexer = hb.Lexer.init(reader, 0);
         const token = lexer.next();
 
         switch (token.kind) {
@@ -185,7 +185,7 @@ pub fn fmt(
         error.WriteFailed => return error.WriteFailed,
         error.SyntaxError => {
             if (error_out) |o| {
-                hb.frontend.Codegen.reportLow(
+                hb.Codegen.reportLow(
                     path,
                     source,
                     self.error_pos,

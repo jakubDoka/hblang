@@ -4,7 +4,7 @@ cursor: u32,
 const std = @import("std");
 const hb = @import("hbf");
 const utils = hb.utils;
-const File = hb.frontend.DeclIndex.File;
+const File = hb.DeclIndex.File;
 
 const Lexer = @This();
 pub const Pos = u32;
