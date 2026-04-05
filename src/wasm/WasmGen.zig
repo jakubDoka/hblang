@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const root = @import("hb");
-const graph = root.backend.graph;
-const Mach = root.backend.Machine;
-const Regalloc = root.backend.Regalloc;
+const root = @import("hbb");
+const graph = root.graph;
+const Mach = root.Machine;
+const Regalloc = root.Regalloc;
 const utils = root.utils;
 const object = root.wasm.object;
 const matcher = @import("wasm.WasmGen");

@@ -1,8 +1,8 @@
 const std = @import("std");
 const graph = @import("graph.zig");
-const Machine = root.backend.Machine;
+const Machine = root.Machine;
 const utils = graph.utils;
-const root = @import("hb");
+const root = @import("hbb");
 
 pub const Error = union(enum) {
     ReturningStack: struct {

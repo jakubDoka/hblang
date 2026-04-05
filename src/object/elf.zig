@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Object = @This();
-const root = @import("hb");
+const root = @import("hbb");
 const dwarf = root.dwarf;
 const utils = root.utils;
 const Arch = root.object.Arch;
@@ -208,7 +208,7 @@ fn find_section_header(sctions: []align(1) const SectionHeader, shstr_table: []c
     } else unreachable;
 }
 
-pub fn read(bytes: []const u8, gpa: std.mem.Allocator) anyerror!root.backend.Machine.Data {
+pub fn read(bytes: []const u8, gpa: std.mem.Allocator) anyerror!root.Machine.Data {
     const header: FileHeader = @bitCast(bytes[0..@sizeOf(FileHeader)].*);
     const sctions: []align(1) const SectionHeader = @ptrCast(bytes[header.shoff..][0 .. header.shnum * header.shentsize]);
     const shstr_table: []const u8 = bytes[sctions[@intFromEnum(header.shstrndx)].sh_offset..][0..sctions[@intFromEnum(header.shstrndx)].sh_size];
@@ -227,7 +227,7 @@ pub fn read(bytes: []const u8, gpa: std.mem.Allocator) anyerror!root.backend.Mac
     else
         &.{};
 
-    var data = root.backend.Machine.Data{};
+    var data = root.Machine.Data{};
 
     try data.relocs.ensureTotalCapacity(gpa, text_rela.len);
 
@@ -286,7 +286,7 @@ pub fn read(bytes: []const u8, gpa: std.mem.Allocator) anyerror!root.backend.Mac
     return data;
 }
 
-pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: *std.Io.Writer) anyerror!void {
+pub fn flush(self: root.Machine.Data, arch: Arch, writer: *std.Io.Writer) anyerror!void {
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -325,7 +325,7 @@ pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: *std.Io.Writer
     const projection = tmp.arena.alloc(u32, self.syms.items.len);
     for (0..self.syms.items.len) |i| projection[i] = @intCast(i);
     std.sort.pdq(u32, projection, self.syms.items, struct {
-        fn lessThen(syms: []root.backend.Machine.Data.Sym, lhs: u32, rhs: u32) bool {
+        fn lessThen(syms: []root.Machine.Data.Sym, lhs: u32, rhs: u32) bool {
             return syms[lhs].kind != .invalid and (syms[rhs].kind == .invalid or
                 @intFromEnum(syms[lhs].linkage) < @intFromEnum(syms[rhs].linkage));
         }

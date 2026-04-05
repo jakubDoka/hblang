@@ -2,10 +2,9 @@ source: [:0]const u8,
 cursor: u32,
 
 const std = @import("std");
-const hb = @import("hb");
+const hb = @import("hbf");
 const utils = hb.utils;
 const File = hb.frontend.DeclIndex.File;
-//const Types = @import("Types.zig");
 
 const Lexer = @This();
 pub const Pos = u32;

@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Object = @This();
-const root = @import("hb");
+const root = @import("hbb");
 const dwarf = root.dwarf;
 const utils = root.utils;
 const Arch = root.object.Arch;

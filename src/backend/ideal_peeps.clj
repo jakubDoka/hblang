@@ -50,7 +50,7 @@
   (CInt (:value rhs && {rhs > 0 and std.math.isPowerOfTwo(rhs)}
     @ rhs_pow = {std.math.log2_int(u64, @bitCast(rhs))}))
   (:op op @ rop rhs_val = {switch (op) {
-    .udiv => .{ hb.backend.graph.BinOp.ushr, rhs_pow },
+    .udiv => .{ hb.graph.BinOp.ushr, rhs_pow },
     .sdiv => .{ .sshr, rhs_pow },
     .umod, .smod => .{ .band, rhs - 1 },
     .imul => .{ .ishl, rhs_pow },

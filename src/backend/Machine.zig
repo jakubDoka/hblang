@@ -6,7 +6,7 @@ const Builder = @import("Builder.zig");
 const Regalloc = @import("Regalloc.zig");
 const graph = @import("graph.zig");
 const static_anal = @import("static_anal.zig");
-const root = @import("hb");
+const root = @import("hbb");
 const lane = root.utils.lane;
 
 pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.Child(@TypeOf(self.items)) {
@@ -1238,7 +1238,7 @@ pub const OptOptions = struct {
             var mach_waste: usize = 0;
             var gcm_waste: usize = 0;
             var total_waste: usize = 0;
-            var regalloc = root.backend.Regalloc{};
+            var regalloc = root.Regalloc{};
             const reg_alloc_results = tmp.arena.alloc(
                 []Backend.Set.Reg,
                 bout.inline_funcs.items.len,
@@ -1372,7 +1372,7 @@ pub const EmitOptions = struct {
             switch (self) {
                 .opts => |pts| {
                     if (pts.shouldDefer(id, Backend, func, backend)) return null;
-                    return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
+                    return root.Regalloc.rallocIgnoreStats(Backend, func);
                 },
                 .allocs => |pts| return @ptrCast(pts),
             }

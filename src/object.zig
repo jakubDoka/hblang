@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Object = @This();
-const root = @import("hb");
+const root = @import("hbb");
 const dwarf = root.dwarf;
 const utils = root.utils;
 
@@ -34,7 +34,6 @@ pub const coff = struct {
         _reserved: u16 = 0, // ignored in .obj
     };
 
-    // 📦 Section Header
     pub const SectionHeader = extern struct {
         Name: [8]u8,
         VirtualSize: u32 = 0, // ignored

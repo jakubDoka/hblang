@@ -21,9 +21,9 @@ pub fn main() !void {
     var writer = out.writer(&buffer);
 
     try writer.interface.writeAll(
-        \\const hb = @import("hb");
+        \\const hb = @import("hbb");
         \\const std = @import("std");
-        \\const Graph = hb.backend.graph.Func;
+        \\const Graph = hb.graph.Func;
         \\
         \\
         \\pub fn idealize(

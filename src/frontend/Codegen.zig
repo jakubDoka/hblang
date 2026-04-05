@@ -1,5 +1,5 @@
 const std = @import("std");
-const hb = @import("hb");
+const hb = @import("hbf");
 const utils = hb.utils;
 const Lexer = hb.frontend.Lexer.Prelexed;
 const BBuilder = hb.backend.Builder;

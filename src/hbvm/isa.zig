@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("hb");
+const root = @import("hbb");
 const utils = root.utils;
 
 pub const Reg = enum(u8) {

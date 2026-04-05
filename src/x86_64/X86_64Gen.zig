@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const matcher = @import("x86_64.X86_64Gen");
-const root = @import("hb");
-const graph = root.backend.graph;
-const Mach = root.backend.Machine;
-const Regalloc = root.backend.Regalloc;
+const root = @import("hbb");
+const graph = root.graph;
+const Mach = root.Machine;
+const Regalloc = root.Regalloc;
 const utils = root.utils;
 const object = root.object;
 const dwarf = root.dwarf;
@@ -65,7 +65,7 @@ const CtxF64 = struct {
     }
 };
 
-pub const syscall = root.backend.Machine.max_func;
+pub const syscall = root.Machine.max_func;
 const max_instruction_size = 15;
 
 pub const Reg = enum(u8) {

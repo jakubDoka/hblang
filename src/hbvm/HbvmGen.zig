@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const matcher = @import("hbvm.HbvmGen");
-const root = @import("hb");
-const graph = root.backend.graph;
-const Mach = root.backend.Machine;
-const Regalloc = root.backend.Regalloc;
+const root = @import("hbb");
+const graph = root.graph;
+const Mach = root.Machine;
+const Regalloc = root.Regalloc;
 const ExecHeader = root.hbvm.object.ExecHeader;
 const utils = root.utils;
 const lane = root.utils.lane;
@@ -33,7 +33,7 @@ const Kind = Func.Kind;
 const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
 
-pub const eca = root.backend.Machine.max_func;
+pub const eca = root.Machine.max_func;
 pub const min_eca = eca - 5;
 pub const tmp_registers = 2;
 pub const max_alloc_regs = @intFromEnum(isa.Reg.stack_addr) - 1 - tmp_registers;

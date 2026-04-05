@@ -1,4 +1,4 @@
-const hb = @import("hb");
+const hb = @import("hbf");
 const Lexer = hb.frontend.Lexer.Prelexed;
 const std = @import("std");
 const utils = hb.utils;

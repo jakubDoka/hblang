@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("hb");
+const root = @import("hbf");
 const graph = root.backend.graph;
 const utils = root.utils;
 const Types = root.frontend.Types;

@@ -16,12 +16,14 @@ pub fn build(b: *std.Build) !void {
 
     const check_step = b.step("check", "type check");
 
-    const options = b.addOptions();
-    options.addOption(usize, "stack_size", stack_size);
-    options.addOption(bool, "dont_simulate", dont_simulate);
-    options.addOption(bool, "cleanup_x86_64", !dont_clean_up_x86_64);
-    options.addOption(usize, "report_trace_size", report_trace_size);
-    options.addOption(bool, "log_ct_exec", log_ct_exec);
+    const boptions = b.addOptions();
+    boptions.addOption(bool, "cleanup_x86_64", !dont_clean_up_x86_64);
+
+    const foptions = b.addOptions();
+    foptions.addOption(usize, "stack_size", stack_size);
+    foptions.addOption(bool, "dont_simulate", dont_simulate);
+    foptions.addOption(usize, "report_trace_size", report_trace_size);
+    foptions.addOption(bool, "log_ct_exec", log_ct_exec);
 
     const utils = b.dependency("utils", .{
         .target = target,
@@ -65,19 +67,35 @@ pub fn build(b: *std.Build) !void {
         break :zydis m;
     };
 
-    const hb = hb: {
-        const hb = b.addModule("hb", .{
+    const hbb = hbs: {
+        const hbb = b.addModule("hb", .{
+            .root_source_file = b.path("src/backend.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+
+        hbb.addOptions("options", boptions);
+        hbb.addImport("zydis", zydis);
+        hbb.addImport("hbb", hbb);
+        hbb.addImport("utils-lib", utils.module("utils"));
+
+        break :hbs hbb;
+    };
+
+    const hbf = hb: {
+        const hbf = b.addModule("hb", .{
             .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
         });
 
-        hb.addOptions("options", options);
-        hb.addImport("zydis", zydis);
-        hb.addImport("hb", hb);
-        hb.addImport("utils-lib", utils.module("utils"));
+        hbf.addOptions("options", foptions);
+        hbf.addImport("zydis", zydis);
+        hbf.addImport("hbf", hbf);
+        hbf.addImport("hbb", hbb);
+        hbf.addImport("utils-lib", utils.module("utils"));
 
-        break :hb hb;
+        break :hb hbf;
     };
 
     hbc: {
@@ -97,7 +115,7 @@ pub fn build(b: *std.Build) !void {
         b.installArtifact(exe);
 
         exe.root_module.addImport("zydis", zydis);
-        exe.root_module.addImport("hb", hb);
+        exe.root_module.addImport("hb", hbf);
 
         break :hbc;
     }
@@ -125,17 +143,6 @@ pub fn build(b: *std.Build) !void {
         "tf",
         "passed as a filter to tests",
     )) |f| &.{f} else &.{};
-
-    if (false) hb_test: {
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{
-            .root_module = hb,
-            .filters = test_filter,
-            .use_llvm = use_llvm,
-            .use_lld = use_lld,
-        })).step);
-
-        break :hb_test;
-    }
 
     rewrite_dsl_gen: {
         const gen = b.addExecutable(.{
@@ -170,9 +177,9 @@ pub fn build(b: *std.Build) !void {
             run_gen.addFileArg(b.path(file));
             const zig_file = try std.mem.replaceOwned(u8, b.allocator, file, ".clj", ".zig");
             const out = run_gen.addOutputFileArg(zig_file);
-            hb.addAnonymousImport(backend, .{
+            hbb.addAnonymousImport(backend, .{
                 .root_source_file = out,
-                .imports = &.{.{ .name = "hb", .module = hb }},
+                .imports = &.{.{ .name = "hbb", .module = hbb }},
             });
         }
 
@@ -189,7 +196,8 @@ pub fn build(b: *std.Build) !void {
             }),
         });
 
-        amalgamation.root_module.addImport("hb", hb);
+        amalgamation.root_module.addImport("hbb", hbb);
+        amalgamation.root_module.addImport("hbf", hbf);
 
         check_step.dependOn(&amalgamation.step);
 
@@ -232,7 +240,7 @@ pub fn build(b: *std.Build) !void {
                 .use_lld = use_lld,
             });
 
-            test_run.root_module.addImport("utils", hb);
+            test_run.root_module.addImport("utils", hbf);
             const run = b.addRunArtifact(test_run);
             run.has_side_effects = true;
             test_step.dependOn(&run.step);
@@ -274,7 +282,7 @@ pub fn build(b: *std.Build) !void {
             .use_lld = use_lld,
         });
 
-        test_run.root_module.addImport("utils", hb);
+        test_run.root_module.addImport("utils", hbf);
         const tr = b.addRunArtifact(test_run);
         tr.has_side_effects = true;
         test_step.dependOn(&tr.step);

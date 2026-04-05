@@ -1,6 +1,6 @@
 const std = @import("std");
-const root = @import("hb");
-const Mach = root.backend.Machine;
+const root = @import("hbb");
+const Mach = root.Machine;
 const utils = root.utils;
 
 const WasmGen = @import("WasmGen.zig");

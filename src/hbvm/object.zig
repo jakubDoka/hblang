@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("hb");
+const root = @import("hbb");
 const utils = root.utils;
 
 pub const ExecHeader = extern struct {
@@ -66,7 +66,7 @@ pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUn
     return symbols;
 }
 
-pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
+pub fn jitLink(self: root.Machine.Data, after: usize) void {
     for (self.relocs.items[after..]) |rel| {
         const target = &self.syms.items[@intFromEnum(rel.target)];
         if (target.kind == .invalid) {
@@ -82,7 +82,7 @@ pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
     }
 }
 
-pub fn flush(self: root.backend.Machine.Data, writer: *std.Io.Writer) anyerror!void {
+pub fn flush(self: root.Machine.Data, writer: *std.Io.Writer) anyerror!void {
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();
 
