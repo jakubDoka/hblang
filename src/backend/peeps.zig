@@ -488,6 +488,7 @@ pub fn Mixin(comptime Backend: type) type {
                         if (src.kind != .Local) {
                             break :forward;
                         }
+
                         if (src.inputs()[1].?.extra(.LocalAlloc).meta.kind != .variable) {
                             break :forward;
                         }
@@ -499,6 +500,7 @@ pub fn Mixin(comptime Backend: type) type {
                         if (src.inputs()[1].?.extra(.LocalAlloc).size != size) {
                             break :forward;
                         }
+
                         if (dst.kind == .Local and dst.inputs()[1].?.extra(.LocalAlloc).meta.kind == .parameter) {
                             break :forward;
                         }
