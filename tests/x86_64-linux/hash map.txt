@@ -148,8 +148,7 @@ hash map.HashMap[=uint, =uint].insert:
 	mov [rdx], rsi
 	mov rax, r11
 	mov [rdx+0x08], rax
-	mov byte ptr [rdx+0x10], 0x01
-	mov byte ptr [rdx+0x11], 0x00
+	mov word ptr [rdx+0x10], 0x01
 	mov rax, [rdi+0x10]
 	inc rax
 	mov [rdi+0x10], rax

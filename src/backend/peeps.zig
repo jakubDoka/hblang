@@ -732,7 +732,7 @@ pub fn Mixin(comptime Backend: type) type {
                     }
                 }
 
-                const base, _ = node.base().knownOffset();
+                const base, const offset = node.base().knownOffset();
 
                 if (base.kind == .Local and
                     base.inputs()[1].?.extra(.LocalAlloc).meta.kind == .variable)
@@ -770,6 +770,84 @@ pub fn Mixin(comptime Backend: type) type {
                     );
                     work.add(st);
                     return st;
+                }
+
+                coalesce: {
+                    const max_store_size = 8;
+                    var agg_size: u64 = 0;
+                    var cursor = node;
+                    var prev_offset: i64 = offset + node.value().?.data_type.size();
+                    var prev_base = base;
+                    var value: i64 = 0;
+
+                    while (true) {
+                        if (cursor.kind != .Store) break;
+
+                        const val = cursor.value().?;
+                        if (val.kind != .CInt) break;
+
+                        if (agg_size + val.data_type.size() > max_store_size) break;
+
+                        const cb, const co = cursor.base().knownOffset();
+
+                        if (cb != base) {
+                            break;
+                        }
+
+                        if (co > prev_offset) {
+                            break;
+                        }
+                        if (co != prev_offset - val.data_type.size()) {
+                            break;
+                        }
+
+                        if (val.data_type.size() == max_store_size) {
+                            break :coalesce;
+                        }
+
+                        agg_size += val.data_type.size();
+                        prev_offset = co;
+                        prev_base = cursor.base();
+
+                        // TODO: this does not respect endianness, brah
+                        value <<= @intCast(val.data_type.size() * 8);
+                        value |= cursor.value().?.extra(.CInt).value;
+
+                        cursor = cursor.mem();
+                    }
+
+                    if (cursor == node or cursor == node.mem()) break :coalesce;
+
+                    var base_alignment: u64 = 0;
+                    for (base.outputs()) |o| {
+                        if (o.get().kind == .BinOp) {
+                            for (o.get().outputs()) |oo| {
+                                base_alignment = @max(
+                                    base_alignment,
+                                    (oo.get().subclass(graph.MemOp) orelse continue).ext.alignment,
+                                );
+                            }
+                        } else {
+                            base_alignment = (o.get().subclass(graph.MemOp) orelse continue).ext.alignment;
+                        }
+                    }
+
+                    std.debug.assert(base_alignment != 0);
+
+                    if (!std.math.isPowerOfTwo(agg_size)) break :coalesce;
+                    const load_dt = graph.DataType.memUnitForAlign(agg_size);
+
+                    const real_alignment = @min(base_alignment, @as(u64, 1) << @min(63, @ctz(prev_offset)));
+                    if (agg_size > real_alignment) break :coalesce;
+
+                    const value_imm = self.addIntImm(node.sloc, load_dt, value);
+                    return self.addNode(
+                        .Store,
+                        node.sloc,
+                        .top,
+                        &.{ inps[0], cursor, prev_base, value_imm },
+                        .{ .base = .{ .alignment = real_alignment } },
+                    );
                 }
             }
 

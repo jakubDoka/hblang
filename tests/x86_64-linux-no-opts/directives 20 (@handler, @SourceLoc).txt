@@ -1,14 +1,10 @@
 directives 20 (@handler, @SourceLoc).main:
 	sub rsp, 0x18
-	mov byte ptr [rsp+0x14], 0x00
+	mov byte ptr [rsp+0x10], 0x00
 	mov qword ptr [rsp+0x08], 0x01
-	lea rax, [rsp+0x14]
+	lea rax, [rsp+0x10]
 	mov [rsp], rax
-	mov byte ptr [rsp+0x10], 0x01
-	mov byte ptr [rsp+0x11], 0x02
-	mov byte ptr [rsp+0x12], 0x03
-	mov byte ptr [rsp+0x13], 0x04
-	mov edi, [rsp+0x10]
+	mov rdi, 0x4030201
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	xor rsi, rsi
 	mov rdi, [rsp]

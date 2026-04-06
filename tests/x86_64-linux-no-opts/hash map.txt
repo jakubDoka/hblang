@@ -61,8 +61,7 @@ hash map.HashMap[=uint, =uint].insert:
 	mov [rdx], rax
 	mov rax, r12
 	mov [rdx+0x08], rax
-	mov byte ptr [rdx+0x10], 0x01
-	mov byte ptr [rdx+0x11], 0x00
+	mov word ptr [rdx+0x10], 0x01
 	mov rax, rbx
 	mov rcx, [rax+0x10]
 	inc rcx

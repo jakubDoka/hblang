@@ -1,0 +1,13 @@
+main:
+	sub rsp, 0x18
+	lea rdi, [rsp]
+	call :foo
+	mov rax, [rsp]
+	add rsp, 0x18
+	ret
+foo:
+	mov qword ptr [rdi], 0x00
+	mov rax, 0x200000001
+	mov [rdi+0x08], rax
+	ret
+foo:

@@ -1,15 +1,13 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (result i32)))
+  (type (;1;) (func (result i64 i64)))
   (func $main (type 0) (result i64)
-    call $struct_capture_eca_mismatch_1.cp_=1__=0_
-    i32.const 255
-    i32.and
-    i64.extend_i32_u
+    i64.const 0
     return
     unreachable)
-  (func $struct_capture_eca_mismatch_1.cp_=1__=0_ (type 1) (result i32)
-    i32.const 256
+  (func $foo (type 1) (result i64 i64)
+    i64.const 0
+    i64.const 8589934593
     return
     unreachable)
   (table (;0;) 0 funcref)
@@ -18,5 +16,6 @@
   (export "__stack_pointer" (global 0))
   (export "memory" (memory 0))
   (export "main" (func $main))
+  (export "foo" (func $foo))
   (elem (;0;) (i32.const 0) func)
   (data (;0;) (i32.const 131072) ""))

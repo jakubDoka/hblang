@@ -2,6 +2,27 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### store coalescing 1
+```hb
+Stru := struct {
+    .a: uint;
+    .b: u32;
+    .c: u32;
+}
+
+main := fn(): uint {
+    if !@target("x86_64-linux") return 0
+
+    return foo().a
+}
+
+foo := fn(): Stru @import("foo")
+
+@export("foo", fn(): Stru {
+    return Stru.(0, 1, 2)
+})
+```
+
 #### store memcpy forwarding
 ```hb
 main := fn(): uint {

@@ -11,10 +11,8 @@ float load and store 1.fun:
 main:
 	sub rsp, 0x18
 	movss xmm1, dword ptr [0x0000000000000008] ; f32s
-	movss xmm2, dword ptr [0x0000000000000008] ; f32s
-	movss xmm0, dword ptr [0x0000000000000008] ; f32s
-	movss [rsp], xmm0
-	movss [rsp+0x04], xmm2
+	mov rax, 0x400000003F800000
+	mov [rsp], rax
 	movss [rsp+0x08], xmm1
 	movsd xmm0, qword ptr [rsp]
 	call :float load and store 1.fun

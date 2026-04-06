@@ -1,7 +1,6 @@
 main:
 	sub rsp, 0x10
-	mov byte ptr [rsp], 0x61
-	mov byte ptr [rsp+0x01], 0x62
+	mov word ptr [rsp], 0x6261
 	mov byte ptr [rsp+0x02], 0x63
 	lea rdx, [0x0000000000000007] ; main.abc
 	cmp rdx, rdx

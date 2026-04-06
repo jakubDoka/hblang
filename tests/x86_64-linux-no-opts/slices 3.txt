@@ -32,12 +32,11 @@ slices 3.reverse:
 	ret
 main:
 	sub rsp, 0x28
-	mov byte ptr [rsp+0x20], 0x01
-	mov byte ptr [rsp+0x21], 0x02
+	mov word ptr [rsp+0x20], 0x201
 	mov byte ptr [rsp+0x22], 0x03
+	lea rsi, [rsp]
 	xor rdx, rdx
 	lea rdi, [rsp]
-	lea rsi, [rsp]
 	call :slices 3.reverse
 	lea rsi, [rsp+0x20]
 	lea rdi, [rsp+0x10]

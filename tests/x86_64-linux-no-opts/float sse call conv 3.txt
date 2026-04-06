@@ -13,14 +13,10 @@ float sse call conv 3.fun:
 	ret
 main:
 	sub rsp, 0x18
-	movss xmm0, dword ptr [0x0000000000000008] ; f32s
-	movss [rsp], xmm0
-	movss xmm2, dword ptr [0x0000000000000008] ; f32s
-	movss xmm1, dword ptr [0x0000000000000008] ; f32s
-	movss xmm0, dword ptr [0x0000000000000008] ; f32s
-	movss [rsp+0x04], xmm0
-	movss [rsp+0x08], xmm2
-	movss [rsp+0x0C], xmm1
+	mov rax, 0x400000003F800000
+	mov [rsp], rax
+	mov rax, 0x4080000040400000
+	mov [rsp+0x08], rax
 	movsd xmm0, qword ptr [rsp]
 	movsd xmm1, qword ptr [rsp+0x08]
 	call :float sse call conv 3.fun

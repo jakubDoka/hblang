@@ -7,10 +7,8 @@ float sse call conv 1.fun:
 	ret
 main:
 	sub rsp, 0x08
-	movss xmm0, dword ptr [0x0000000000000008] ; f32s
-	movss [rsp], xmm0
-	movss xmm0, dword ptr [0x0000000000000008] ; f32s
-	movss [rsp+0x04], xmm0
+	mov rax, 0x400000003F800000
+	mov [rsp], rax
 	movsd xmm0, qword ptr [rsp]
 	call :float sse call conv 1.fun
 	movss xmm1, dword ptr [0x0000000000000008] ; f32s

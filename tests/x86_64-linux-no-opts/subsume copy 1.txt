@@ -1,7 +1,6 @@
 main:
 	sub rsp, 0x10
-	mov byte ptr [rsp], 0x01
-	mov byte ptr [rsp+0x01], 0x02
+	mov word ptr [rsp], 0x201
 	mov byte ptr [rsp+0x02], 0x03
 	mov rcx, 0x30000
 	mov ax, [rsp]
