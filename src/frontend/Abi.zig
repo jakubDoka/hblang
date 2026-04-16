@@ -44,7 +44,7 @@ pub fn isMultivalue(_: Abi, self: Spec) bool {
 
 pub fn tryCategorizeReg(self: Abi, ty: Id, types: *Types) ?graph.DataType {
     var buf = Buf{};
-    const params = categorize(self, ty, types, &buf) orelse unreachable;
+    const params = categorize(self, ty, types, &buf) orelse return null;
     if (params.len != 1) {
         std.debug.assert(params.len == 0);
         return null;

@@ -13,8 +13,7 @@ const HbvmGen = hb.hbvm.HbvmGen;
 const isa = hb.hbvm.isa;
 
 arena: utils.Arena,
-tmp: utils.Arena,
-tmp_depth: usize = 0,
+free_tmps: std.SinglyLinkedList = .{},
 
 // TDOD: remove indexes that are actually not used
 structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .empty,
@@ -193,21 +192,6 @@ pub const ComptimeValue = extern union {
 
     pub fn fmt(self: ComptimeValue, types: *Types, ty: Id) CFmt {
         return .{ .types = types, .ty = ty, .self = self };
-    }
-};
-
-pub const TmpCheckpoint = struct {
-    types: *Types,
-
-    pub fn allocator(self: *TmpCheckpoint) std.mem.Allocator {
-        return self.types.tmp.allocator();
-    }
-
-    pub fn deinit(self: *TmpCheckpoint) void {
-        self.types.tmp_depth -= 1;
-        if (self.types.tmp_depth == 0) {
-            self.types.tmp.reset();
-        }
     }
 };
 
@@ -1386,8 +1370,11 @@ pub const Enum = struct {
             _ = lex.slit(.@"enum");
 
             if (lex.eatMatch(.@"(")) tag: {
+                const tmp = types.tmpCheckpoint();
+                defer tmp.deinit();
+
                 var gen: Codegen = undefined;
-                gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, types.tmp.allocator());
+                gen.init(types, .nany(types.enums.ptrToIndex(self)), .never, tmp.allocator());
 
                 const vl = gen.typ(&lex) catch break :tag;
                 layout.spec = vl.stackSpec(types);
@@ -1771,14 +1758,15 @@ pub const Global = struct {
 };
 
 pub fn init(
+    self: *Types,
     files: []File,
     loader: *Loader,
     target: Machine.SupportedTarget,
     backend: *Machine,
     arena: utils.Arena,
     gpa: std.mem.Allocator,
-) Types {
-    var self = Types{
+) void {
+    self.* = Types{
         .files = files,
         .roots = undefined,
         .line_indexes = undefined,
@@ -1791,15 +1779,12 @@ pub fn init(
         .abi = .{ .cc = target.toCallConv(), .spec = target.toSpec() },
         .backend = backend,
         .target = @tagName(target),
-        .tmp = undefined,
         .arena = arena,
         .builtins = undefined,
         .handler_signatures = undefined,
     };
 
     self.roots = self.arena.alloc(StructId, files.len);
-
-    self.tmp = self.arena.subslice(1024 * 1024 * 16);
 
     // NOTE: god for now, will be configured later
     self.ct_backend.mach.out.code = .initBuffer(self.arena.subslice(1024 * 1024 * 16).asSlice());
@@ -1861,7 +1846,7 @@ pub fn init(
         };
 
         var gen: Codegen = undefined;
-        gen.init(&self, .nany(builtins.getScope(&self)), .never, tmp.allocator());
+        gen.init(self, .nany(builtins.getScope(self)), .never, tmp.allocator());
         _ = gen.bl.begin(.systemv, undefined);
 
         var value = gen.lookupIdent(gen.scope, "Type").?;
@@ -1884,15 +1869,13 @@ pub fn init(
 
         const @"^u8" = self.pointerTo(.u8);
         self.handler_signatures = .init(.{
-            .slice_ioob = fns.fnty(&self, &.{ source_loc, .uint, .uint, .uint }, .never),
-            .null_unwrap = fns.fnty(&self, &.{source_loc}, .never),
-            .memcpy = fns.fnty(&self, &.{ @"^u8", @"^u8", .uint }, .void),
+            .slice_ioob = fns.fnty(self, &.{ source_loc, .uint, .uint, .uint }, .never),
+            .null_unwrap = fns.fnty(self, &.{source_loc}, .never),
+            .memcpy = fns.fnty(self, &.{ @"^u8", @"^u8", .uint }, .void),
             .entry = .invalid,
-            .for_loop_length_mismatch = fns.fnty(&self, &.{source_loc}, .never),
+            .for_loop_length_mismatch = fns.fnty(self, &.{source_loc}, .never),
         });
     }
-
-    return self;
 }
 
 pub fn deinit(self: *Types) void {
@@ -1960,9 +1943,30 @@ pub fn allocator(self: *Types) std.mem.Allocator {
     return self.ct_backend.gpa;
 }
 
-pub fn tmpCheckpoint(self: *Types) TmpCheckpoint {
-    self.tmp_depth += 1;
-    return .{ .types = self };
+pub const TmpCheckpoint = struct {
+    types: *Types,
+    node: std.SinglyLinkedList.Node = .{},
+    scratch: std.heap.ArenaAllocator,
+
+    pub fn allocator(self: *TmpCheckpoint) std.mem.Allocator {
+        return self.scratch.allocator();
+    }
+
+    pub fn deinit(self: *TmpCheckpoint) void {
+        std.debug.assert(self.scratch.reset(.retain_capacity));
+        self.types.free_tmps.prepend(&self.node);
+    }
+};
+
+pub fn tmpCheckpoint(self: *Types) *TmpCheckpoint {
+    if (self.free_tmps.popFirst()) |node| {
+        return @fieldParentPtr("node", node);
+    }
+
+    return self.arena.spill(TmpCheckpoint{
+        .types = self,
+        .scratch = .init(self.arena.allocator()),
+    });
 }
 
 pub fn pointerTo(self: *Types, ty: Id) Id {

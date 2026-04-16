@@ -353,7 +353,8 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory, Sy
 
     const bckend = opts.target.toMachine(opts.check, &type_system_memory, opts.gpa);
 
-    var types = hb.Types.init(
+    var types: hb.Types = undefined;
+    types.init(
         asts,
         &loader.loader,
         opts.target,

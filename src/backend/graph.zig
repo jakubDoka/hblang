@@ -2637,7 +2637,7 @@ pub fn Func(comptime Backend: type) type {
                 .data_type = ty,
             };
 
-            if (node.id > 10000) unreachable;
+            //if (node.id > 10000) unreachable;
 
             self.node_count += 1;
 

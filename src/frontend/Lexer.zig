@@ -181,6 +181,7 @@ pub const Lexeme = enum(u16) {
     @"@splat",
     @"@count_trailing_zeros",
     @"@bitmask",
+    @"@set_loop_fuel",
 
     const data = @typeInfo(Lexeme).@"enum";
 

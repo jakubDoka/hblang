@@ -31,6 +31,7 @@ ret_ty: Types.Id,
 ret_ref: ?*BNode = null,
 bl: BBuilder,
 target: Types.Target = .runtime,
+loop_fuel: usize = 300,
 
 pub const undeclared_prefix: u8 = 0;
 
@@ -1773,6 +1774,8 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
         .@"{" => {
             var reached_end = true;
 
+            const prev_loop_fuel = self.loop_fuel;
+            defer self.loop_fuel = prev_loop_fuel;
             const scope_frame = self.vars.len;
             const defer_frame = self.defers.items.len;
             defer self.popScope(scope_frame);
@@ -2011,7 +2014,7 @@ pub fn unitExpr(self: *Codegen, tok: Lexer.Token, ctx: Ctx, lex: *Lexer) UnitErr
             var end = checkpoint;
             const prev_erred = self.types.errored;
 
-            var fuel: usize = 300;
+            var fuel: usize = self.loop_fuel;
 
             while (fuel > 0 and (tok.kind == .@"$loop" or try self.peval(
                 tok.idx,
@@ -2658,6 +2661,11 @@ pub fn directive(
     const slc = self.sloc(pos);
 
     const value: Value = d: switch (d) {
+        .set_loop_fuel => {
+            const fuel = try self.expr(.{ .ty = .u32 }, lex);
+            self.loop_fuel = @intCast(try self.peval(lex.cursor, fuel, i64));
+            break :d .voidv;
+        },
         .Type => {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -6344,7 +6352,10 @@ pub fn defineVariable(self: *Codegen, name: Lexer.Token) usize {
                 .pos = @intCast(@intFromEnum(name.idx)),
             },
         },
-    }) catch unreachable;
+    }) catch {
+        self.report(name.idx, "out of memory", .{}) catch {};
+        unreachable;
+    };
     return self.vars.len - 1;
 }
 
@@ -6931,7 +6942,8 @@ pub fn runTestForTarget(
     const backend = target.toMachine(exp.should_error or static_anal_only, scratch, gpa);
     defer backend.deinit();
 
-    var types = Types.init(asts, &kl.loader, target, backend, scratch.*, gpa);
+    var types: Types = undefined;
+    types.init(asts, &kl.loader, target, backend, scratch.*, gpa);
     defer types.deinit();
 
     try collectExports(&types);

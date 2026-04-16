@@ -2,6 +2,103 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### piano fuckery 1
+```hb
+expectations := .{
+    return_value: 21,
+}
+
+Natural := fn($c: type): type return struct {
+    suc := Natural(@CurrentScope())
+    pre := c
+
+    erm := fn($n: @Any()): @TypeOf(n) return n
+    $fold := fn($base: @Any(), $step: @Any()): @TypeOf(erm) return fn($n: type): @TypeOf(base) {
+        acc := base
+        @set_loop_fuel(1000)
+        $while n != zero {
+            acc = step(acc)
+            n = n.pre
+        }
+        return acc
+    }
+
+    add := fold(@CurrentScope(), fn($x: type): type return x.suc)
+    sub := fold(@CurrentScope(), fn($x: type): type return x.pre)
+
+    mul := fold(zero, fn($x: type): type return x.add(@CurrentScope()))
+
+    fact := fn(): type {
+        $base := struct {
+            p := zero.suc
+            c := @CurrentScope()
+        }
+        return fold(base, fn($x: @Any()): @Any() return struct {
+            p := x.p.mul(x.c)
+            c := x.c.pre
+        })(@CurrentScope()).p
+    }
+
+    to_uint := fn(): uint {
+        return fold(0, fn($x: uint): uint return x + 1)(@CurrentScope())
+    }
+}
+
+zero := Natural(never)
+
+fib := fn($x: type): type {
+    $a := zero
+    $b := zero.suc
+
+    $while x != zero {
+        $t := a.add(b)
+        a = b
+        b = t
+        x = x.pre
+    }
+
+    return a
+}
+
+one := zero.suc
+two := one.suc
+four := two.add(two)
+
+main := fn(): uint {
+    // can only calculate up to fib(13) before compiler crash, not sure why
+    return @eval(fib(four.mul(two)).to_uint())
+}
+```
+
+#### store coalescing 2
+```hb
+Stru := struct {
+    .a: uint;
+    .b: u8;
+    .c: u8;
+    .d: u8;
+    .e: u8;
+    .f: u8;
+    .g: u8;
+    .h: u8;
+    .i: u8;
+    .j: u8;
+}
+
+main := fn(): uint {
+    if !@target("x86_64-linux") return 0
+
+    return foo().a
+}
+
+// TODO: this is stupid, make a noinline flag
+foo := fn(): Stru @import("foo")
+
+@export("foo", fn(): Stru {
+    return Stru.(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+})
+```
+
 #### store coalescing 1
 ```hb
 Stru := struct {

@@ -818,6 +818,11 @@ pub fn Mixin(comptime Backend: type) type {
 
                     if (cursor == node or cursor == node.mem()) break :coalesce;
 
+                    // NOTE: reverting to the last power of two will not work
+                    // because we are going backwards, so in the end we will
+                    // end up misaligned
+                    if (!std.math.isPowerOfTwo(agg_size)) break :coalesce;
+
                     var base_alignment: u64 = 0;
                     for (base.outputs()) |o| {
                         if (o.get().kind == .BinOp) {
@@ -834,7 +839,6 @@ pub fn Mixin(comptime Backend: type) type {
 
                     std.debug.assert(base_alignment != 0);
 
-                    if (!std.math.isPowerOfTwo(agg_size)) break :coalesce;
                     const load_dt = graph.DataType.memUnitForAlign(agg_size);
 
                     const real_alignment = @min(base_alignment, @as(u64, 1) << @min(63, @ctz(prev_offset)));

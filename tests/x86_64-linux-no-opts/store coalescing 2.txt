@@ -1,0 +1,14 @@
+main:
+	sub rsp, 0x18
+	lea rdi, [rsp]
+	call :foo
+	mov rax, [rsp]
+	add rsp, 0x18
+	ret
+foo:
+	mov qword ptr [rdi], 0x00
+	mov rax, 0x807060504030201
+	mov [rdi+0x08], rax
+	mov byte ptr [rdi+0x10], 0x09
+	ret
+foo:
